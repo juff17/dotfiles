@@ -1,6 +1,6 @@
 htop
 hwloc
-batcat (or bat)
+bat
 vim
 curl
 duperemove
@@ -25,13 +25,13 @@ build-essential
 cmake
 pkg-config
 g++
-docker-ce
 libpq-dev
 flameshot
 gimp
 gimp-help-en
 filelight
 ripgrep
-tldr
-direnv
 fzf
+fastfetch
+fonts-jetbrains-mono
+dolphin
