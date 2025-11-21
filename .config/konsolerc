@@ -1,0 +1,16 @@
+[Desktop Entry]
+DefaultProfile=default.profile
+
+[General]
+ConfigVersion=1
+
+[MainWindow]
+MenuBar=Enabled
+State[$d]
+
+[UiSettings]
+ColorScheme=
+
+[Konsole]
+AutoDetectURLs=true
+OpenLinksByClicking=true
