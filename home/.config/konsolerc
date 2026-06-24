@@ -5,12 +5,8 @@ DefaultProfile=default.profile
 ConfigVersion=1
 
 [MainWindow]
-MenuBar=Enabled
+MenuBar=Disabled
 State[$d]
 
 [UiSettings]
 ColorScheme=
-
-[Konsole]
-AutoDetectURLs=true
-OpenLinksByClicking=true

@@ -1,2 +1,8 @@
-[DoNotDisturb]
-NotificationSoundsMuted=true
+[Applications][code]
+Seen=true
+
+[Applications][cursor]
+Seen=true
+
+[Applications][discord]
+Seen=true
