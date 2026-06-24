@@ -1,0 +1,429 @@
+#!/usr/bin/env python3
+"""cg — context groups for Claude Code.
+
+A context group is a named set of directories. Configure once, then:
+  * `cg <name>`        launch a Claude session with every dir preloaded (--add-dir)
+  * `/cg <name>`       (slash command) live-switch the group inside a running session
+
+Config lives at ~/.context-groups/groups.json and is the single source of truth.
+No third-party dependencies.
+"""
+
+import json
+import os
+import shutil
+import sys
+
+HOME = os.path.expanduser("~")
+CONFIG_DIR = os.path.join(HOME, ".context-groups")
+CONFIG_PATH = os.path.join(CONFIG_DIR, "groups.json")
+CLAUDE_JSON = os.path.join(HOME, ".claude.json")  # Claude Code's per-project trust state
+
+# subcommands that are NOT group names (anything else after `cg` is treated as `cg launch <name>`)
+SUBCOMMANDS = {
+    "create", "rm", "remove", "rename", "add", "list", "ls", "show",
+    "apply", "active", "init", "help",
+}
+
+# Names that can't be groups: every subcommand (else `cg <name>` is shadowed) plus the
+# flag aliases. Anything starting with "-" is rejected too (it'd parse as a flag).
+RESERVED = SUBCOMMANDS | {"-a", "--active", "-h", "--help"}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# helpers
+# ──────────────────────────────────────────────────────────────────────────────
+def die(msg, code=1):
+    print(f"cg: {msg}", file=sys.stderr)
+    sys.exit(code)
+
+
+def warn(msg):
+    print(f"cg: warning: {msg}", file=sys.stderr)
+
+
+def validate_name(name):
+    """Reject group names that collide with subcommands/flags (or start with '-')."""
+    if name.startswith("-"):
+        die(f"group name can't start with '-': {name!r}")
+    if name in RESERVED:
+        die(f"'{name}' is a reserved word, not allowed as a group name")
+
+
+def load_config():
+    if not os.path.exists(CONFIG_PATH):
+        return {"groups": {}}
+    try:
+        with open(CONFIG_PATH) as f:
+            data = json.load(f)
+    except (json.JSONDecodeError, OSError) as e:
+        die(f"could not read config {CONFIG_PATH}: {e}")
+    data.setdefault("groups", {})
+    return data
+
+
+def save_config(data):
+    os.makedirs(CONFIG_DIR, exist_ok=True)
+    tmp = CONFIG_PATH + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(data, f, indent=2)
+        f.write("\n")
+    os.replace(tmp, CONFIG_PATH)
+
+
+def abspath(p):
+    return os.path.abspath(os.path.expanduser(p))
+
+
+def get_group(data, name):
+    g = data["groups"].get(name)
+    if g is None:
+        avail = ", ".join(sorted(data["groups"])) or "(none)"
+        die(f"no group named '{name}'. Available: {avail}")
+    return g
+
+
+def resolve_dirs(group, warn_missing=True):
+    """Return the group's absolute dirs; warn about any that don't exist."""
+    dirs = group.get("dirs", [])
+    if warn_missing:
+        for d in dirs:
+            if not os.path.isdir(d):
+                warn(f"directory does not exist: {d}")
+    return dirs
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# settings.local.json bootstrap / write (for the in-session /cg switch)
+# ──────────────────────────────────────────────────────────────────────────────
+def local_settings_path(project_dir):
+    return os.path.join(project_dir, ".claude", "settings.local.json")
+
+
+def ensure_settings_file(project_dir):
+    """Create a minimal .claude/settings.local.json if absent. Idempotent.
+
+    The settings watcher only watches dirs that had a settings file when the
+    session started, so this must run BEFORE launching for live-switch to work.
+    Returns True if it created the file.
+    """
+    path = local_settings_path(project_dir)
+    if os.path.exists(path):
+        return False
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as f:
+        json.dump({"permissions": {"additionalDirectories": []}}, f, indent=2)
+        f.write("\n")
+    return True
+
+
+def write_additional_dirs(project_dir, dirs):
+    """Set permissions.additionalDirectories in the project's settings.local.json,
+    preserving every other key. Returns the resolved settings path."""
+    path = local_settings_path(project_dir)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    settings = {}
+    if os.path.exists(path):
+        try:
+            with open(path) as f:
+                settings = json.load(f)
+        except (json.JSONDecodeError, OSError) as e:
+            die(f"could not read {path}: {e}")
+    perms = settings.setdefault("permissions", {})
+    perms["additionalDirectories"] = list(dirs)
+    tmp = path + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(settings, f, indent=2)
+        f.write("\n")
+    os.replace(tmp, path)
+    return path
+
+
+def trust_dirs(dirs):
+    """Pre-accept Claude Code's folder-trust dialog for each dir by setting
+    `hasTrustDialogAccepted: true` in ~/.claude.json. This is what stops the
+    "Do you trust the files in this folder?" prompt on first launch in a repo.
+    Preserves all other state; atomic write. Returns the count newly trusted.
+    Safe pre-launch (Claude isn't running yet for these dirs)."""
+    try:
+        with open(CLAUDE_JSON) as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        data = {}
+    except (json.JSONDecodeError, OSError) as e:
+        warn(f"could not read {CLAUDE_JSON} to set trust: {e}")
+        return 0
+    projects = data.setdefault("projects", {})
+    changed = 0
+    for d in dirs:
+        entry = projects.setdefault(d, {})
+        if not entry.get("hasTrustDialogAccepted"):
+            entry["hasTrustDialogAccepted"] = True
+            changed += 1
+    if changed:
+        tmp = CLAUDE_JSON + ".cg.tmp"
+        try:
+            with open(tmp, "w") as f:
+                json.dump(data, f, indent=2)
+            os.replace(tmp, CLAUDE_JSON)
+        except OSError as e:
+            warn(f"could not write trust state to {CLAUDE_JSON}: {e}")
+            return 0
+    return changed
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# commands
+# ──────────────────────────────────────────────────────────────────────────────
+def cmd_create(args):
+    if not args:
+        die("usage: cg create <name> [dir ...]")
+    name = args[0]
+    validate_name(name)
+    dirs = [abspath(d) for d in args[1:]] or [os.getcwd()]
+    data = load_config()
+    if name in data["groups"]:
+        die(f"group '{name}' already exists (use `cg add` to extend it)")
+    data["groups"][name] = {"description": "", "dirs": dirs}
+    save_config(data)
+    print(f"created group '{name}' with {len(dirs)} dir(s):")
+    for d in dirs:
+        print(f"  {d}")
+
+
+def cmd_add(args):
+    if len(args) < 2:
+        die("usage: cg add <name> <dir> [dir ...]")
+    name, new = args[0], [abspath(d) for d in args[1:]]
+    data = load_config()
+    g = get_group(data, name)
+    dirs = g.setdefault("dirs", [])
+    added = [d for d in new if d not in dirs]
+    dirs.extend(added)
+    save_config(data)
+    print(f"added {len(added)} dir(s) to '{name}' (now {len(dirs)} total)")
+
+
+def cmd_remove(args):
+    if len(args) < 2:
+        die("usage: cg remove <name> <dir> [dir ...]")
+    name, drop = args[0], {abspath(d) for d in args[1:]}
+    data = load_config()
+    g = get_group(data, name)
+    before = g.get("dirs", [])
+    g["dirs"] = [d for d in before if d not in drop]
+    save_config(data)
+    print(f"removed {len(before) - len(g['dirs'])} dir(s) from '{name}'")
+
+
+def cmd_rm(args):
+    if not args:
+        die("usage: cg rm <name>")
+    name = args[0]
+    data = load_config()
+    get_group(data, name)
+    del data["groups"][name]
+    save_config(data)
+    print(f"deleted group '{name}'")
+
+
+def cmd_rename(args):
+    if len(args) != 2:
+        die("usage: cg rename <old> <new>")
+    old, new = args
+    validate_name(new)
+    data = load_config()
+    g = get_group(data, old)
+    if new in data["groups"]:
+        die(f"group '{new}' already exists")
+    data["groups"][new] = g
+    del data["groups"][old]
+    save_config(data)
+    print(f"renamed '{old}' -> '{new}'")
+
+
+def cmd_list(_args):
+    data = load_config()
+    groups = data["groups"]
+    if not groups:
+        print("no groups yet. Create one with: cg create <name> [dir ...]")
+        return
+    width = max(len(n) for n in groups)
+    for name in sorted(groups):
+        g = groups[name]
+        desc = g.get("description") or ""
+        n = len(g.get("dirs", []))
+        line = f"  {name:<{width}}  {n} dir(s)"
+        if desc:
+            line += f"  — {desc}"
+        print(line)
+
+
+def cmd_show(args):
+    if not args:
+        die("usage: cg show <name>")
+    data = load_config()
+    g = get_group(data, args[0])
+    desc = g.get("description")
+    if desc:
+        print(f"# {args[0]} — {desc}")
+    else:
+        print(f"# {args[0]}")
+    for d in g.get("dirs", []):
+        mark = "" if os.path.isdir(d) else "  (missing!)"
+        print(f"  {d}{mark}")
+
+
+def cmd_init(args):
+    """Bootstrap settings + pre-trust repos. With no args, covers every directory across
+    all groups (the common case); pass explicit dirs to limit it to those."""
+    data = load_config()
+    if args:
+        targets = [abspath(d) for d in args]
+    else:
+        targets = sorted({d for g in data["groups"].values() for d in g.get("dirs", [])})
+    existing = [d for d in targets if os.path.isdir(d)]
+    for d in targets:
+        if not os.path.isdir(d):
+            warn(f"skipping non-existent dir: {d}")
+            continue
+        if ensure_settings_file(d):
+            print(f"  bootstrapped {local_settings_path(d)}")
+    trusted = trust_dirs(existing)  # pre-accept the folder-trust dialog
+    print(f"init: ensured settings file in {len(existing)} dir(s); "
+          f"pre-trusted {trusted} new repo(s)")
+
+
+def cmd_apply(args):
+    """Write the group's dirs into <cwd>/.claude/settings.local.json so the running
+    session's settings watcher live-adds them. Used by the /cg slash command.
+
+    Also the single entry point /cg routes through, so it accepts no-arg / --active and
+    delegates to `cg active` — this keeps the slash command a single `cg ...` call (no
+    shell control flow, which Claude Code's Bash(cg:*) permission matcher rejects)."""
+    args = [a for a in args if a]  # drop the empty arg from `cg apply ""`
+    if not args or args[0] in ("--active", "-a", "active"):
+        cmd_active([])
+        return
+    data = load_config()
+    g = get_group(data, args[0])
+    dirs = resolve_dirs(g)
+    path = write_additional_dirs(os.getcwd(), dirs)
+    print(f"applied group '{args[0]}' -> {path}")
+    for d in dirs:
+        print(f"  + {d}")
+
+
+def cmd_active(_args):
+    """Show the directories in the current session's active workspace: the launch dir
+    (primary) plus whatever cg recorded in <cwd>/.claude/settings.local.json. Names the
+    matching group if the set lines up exactly with one."""
+    cwd = os.getcwd()
+    extra = []
+    path = local_settings_path(cwd)
+    if os.path.exists(path):
+        try:
+            with open(path) as f:
+                extra = (json.load(f).get("permissions", {})
+                         .get("additionalDirectories", []) or [])
+        except (json.JSONDecodeError, OSError):
+            pass
+    active = [cwd] + [d for d in extra if os.path.abspath(d) != os.path.abspath(cwd)]
+
+    data = load_config()
+    aset = {os.path.abspath(d) for d in active}
+    match = next((n for n, g in data["groups"].items()
+                  if {os.path.abspath(x) for x in g.get("dirs", [])} == aset), None)
+
+    print(f"active workspace: {match}" if match
+          else "active workspace (no exact group match)")
+    print(f"  {cwd}   (primary)")
+    for d in active[1:]:
+        mark = "" if os.path.isdir(d) else "  (missing!)"
+        print(f"  {d}{mark}")
+    if len(active) == 1:
+        print("  (no additional repos)")
+
+
+def cmd_launch(args):
+    if not args:
+        die("usage: cg <name> [-- extra claude args]")
+    name = args[0]
+    passthrough = args[1:]
+    if passthrough and passthrough[0] == "--":  # allow `cg <name> -- <claude args>`
+        passthrough = passthrough[1:]
+    data = load_config()
+    g = get_group(data, name)
+    dirs = resolve_dirs(g)
+    if not dirs:
+        die(f"group '{name}' has no directories")
+    claude = shutil.which("claude")
+    if not claude:
+        die("`claude` not found on PATH")
+    # Launch *inside* the group's first dir so Claude's primary working directory is a
+    # member of the group — not whatever dir you happened to run `cg` from. The rest are
+    # added with --add-dir (Claude includes the cwd automatically).
+    root, extra = dirs[0], dirs[1:]
+    if os.path.isdir(root):
+        os.chdir(root)
+    else:
+        warn(f"group root missing, launching from current dir: {root}")
+        extra = dirs  # can't cd into it, so add them all explicitly
+    # Record the added dirs in the launch dir's settings.local.json. This both
+    # bootstraps the file (so the in-session /cg switch + watcher work) and gives
+    # `cg active` an accurate picture of the current workspace.
+    write_additional_dirs(os.getcwd(), extra)
+    # pre-accept the folder-trust dialog for every dir we're about to open, so the
+    # session starts without a "Do you trust the files in this folder?" prompt.
+    trust_dirs([d for d in dirs if os.path.isdir(d)])
+    cmd = [claude]
+    for d in extra:
+        cmd += ["--add-dir", d]
+    cmd += passthrough
+    print(f"cg: launching '{name}' in {os.getcwd()} "
+          f"(+{len(extra)} added dir(s))", file=sys.stderr)
+    os.execvp(claude, cmd)  # replace this process with claude
+
+
+def cmd_help(_args):
+    print(__doc__.strip())
+    print("""
+Commands:
+  cg <name>                 launch Claude preloaded with group <name>
+  cg create <name> [dir..]  create a group (defaults to current dir)
+  cg add <name> <dir..>     add directories to a group
+  cg remove <name> <dir..>  remove directories from a group
+  cg rm <name>              delete a group
+  cg rename <old> <new>     rename a group
+  cg list                   list all groups
+  cg show <name>            show a group's directories
+  cg apply <name>           live-switch group in a running session (used by /cg)
+  cg active   (--active|-a)  show the active workspace (current dir + added repos)
+  cg init [dir..]           bootstrap settings + pre-trust repos (default: all groups)
+""".rstrip())
+
+
+DISPATCH = {
+    "create": cmd_create, "add": cmd_add, "remove": cmd_remove,
+    "rm": cmd_rm, "rename": cmd_rename, "list": cmd_list, "ls": cmd_list,
+    "show": cmd_show, "apply": cmd_apply, "active": cmd_active,
+    "init": cmd_init, "help": cmd_help,
+}
+
+
+def main(argv):
+    if not argv or argv[0] in ("-h", "--help"):
+        cmd_help([])
+        return
+    first = argv[0]
+    if first in ("--active", "-a"):     # `cg --active` alias for `cg active`
+        cmd_active(argv[1:])
+    elif first in SUBCOMMANDS:
+        DISPATCH[first](argv[1:])
+    else:
+        # `cg <name>` shorthand for `cg launch <name>`
+        cmd_launch(argv)
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])
