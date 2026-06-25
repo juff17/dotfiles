@@ -6,3 +6,6 @@ Seen=true
 
 [Applications][discord]
 Seen=true
+
+[DoNotDisturb]
+NotificationSoundsMuted=false
