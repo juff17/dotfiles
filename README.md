@@ -36,7 +36,16 @@ and re-running `./install.sh --links`.
 - `settings.json` — Opus, `cleanupPeriodDays` 90, and the SessionStart hook below.
 - `hooks/gitignore-worktrees.sh` (SessionStart) — appends `.claude/worktrees/` + orchestration artifacts
   to each repo's `.git/info/exclude` (local, untracked, idempotent) so they never leak into a diff.
-- `agents/`, `commands/`, `skills/` — kept as placeholders (the `.gitkeep` files are not symlinked).
+- `agents/`, `commands/` — kept as placeholders (the `.gitkeep` files are not symlinked).
+- `skills/standup-prep/` — the personal daily standup-prep skill (see below).
+
+## standup-prep skill
+Prepares your personal daily standup update (*Yesterday / Today / Blockers*) from your own JIRA
+activity (read-only) and your public Slack messages, presented in chat — never posted. Optionally run
+on weekday mornings by a Claude cloud routine (`/schedule`). Portable: the logic is company-agnostic and
+your identity + board status names live in a gitignored `config.yaml`. Set up in three steps (connect
+Atlassian + Slack MCPs, fill config, run). See
+[`home/.claude/skills/standup-prep/README.md`](./home/.claude/skills/standup-prep/README.md).
 
 ## context_groups
 `cg` manages named sets of directories ("context groups") for Claude Code sessions. Installs the CLI to
