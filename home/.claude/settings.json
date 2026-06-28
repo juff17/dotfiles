@@ -22,6 +22,10 @@
     ],
     "defaultMode": "acceptEdits"
   },
+  "statusLine": {
+    "type": "command",
+    "command": "bash $HOME/.claude/statusline-command.sh"
+  },
   "model": "opus[1m]",
   "cleanupPeriodDays": 90,
   "enabledPlugins": {
