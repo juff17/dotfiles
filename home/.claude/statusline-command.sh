@@ -31,9 +31,9 @@ fi
 # --- ANSI palette ---
 RESET='\e[0m'
 DIM='\e[90m'        # gray  — separator and <10% ctx
-YELLOW='\e[33m'
-ORANGE='\e[38;5;208m'
-RED='\e[31m'
+YELLOW='\e[38;2;255;255;0m'   # #FFFF00
+ORANGE='\e[38;2;255;165;0m'   # #FFA500
+RED='\e[38;2;255;0;0m'        # #FF0000
 CYAN='\e[36m'
 GREEN='\e[32m'
 
