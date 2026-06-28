@@ -7,3 +7,8 @@
 
 home/.claude/skills/standup-prep/config.yaml
 home/.claude/skills/slack-digest/config.yaml
+
+# python runtime artifacts (skills are folder-symlinked into ~/.claude, so these
+# get created inside the repo when a skill's scripts run)
+__pycache__/
+*.pyc
