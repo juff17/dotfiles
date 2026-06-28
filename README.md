@@ -39,6 +39,23 @@ and re-running `./install.sh --links`.
 - `agents/`, `commands/` — kept as placeholders (the `.gitkeep` files are not symlinked).
 - `skills/standup-prep/` — the personal daily standup-prep skill (see below).
 
+### Plugins
+`settings.json` carries the plugin config, but **plugin files are machine-local** (cached under
+`~/.claude/plugins/`, not version-controlled). So on a new machine the config alone does not install
+anything — `enabledPlugins` only *activates* plugins that are already on disk. Run these once per
+machine to install them:
+
+```
+/plugin install skill-creator@claude-plugins-official
+/plugin install pr-review-toolkit@claude-plugins-official
+/plugin install ponytail@ponytail
+```
+
+- `claude-plugins-official` is a built-in marketplace — no registration needed.
+- `ponytail@ponytail` comes from the `ponytail` marketplace, which **is** registered in
+  `extraKnownMarketplaces` (so its `/plugin install` resolves without a separate `marketplace add`).
+- After installing, `enabledPlugins` in `settings.json` keeps all three enabled automatically.
+
 ## standup-prep skill
 Prepares your personal daily standup update (*Yesterday / Today / Blockers*) from your own JIRA
 activity (read-only) and your public Slack messages, presented in chat — never posted. Optionally run
