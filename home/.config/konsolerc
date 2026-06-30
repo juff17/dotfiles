@@ -6,7 +6,6 @@ ConfigVersion=1
 
 [MainWindow]
 MenuBar=Disabled
-State[$d]
 
 [UiSettings]
 ColorScheme=
