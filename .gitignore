@@ -12,3 +12,9 @@ home/.claude/skills/slack-digest/config.yaml
 # get created inside the repo when a skill's scripts run)
 __pycache__/
 *.pyc
+
+# KDE runtime state (config files are live-symlinked into ~/.config, so KDE
+# rewrites them mid-session — these hold only per-machine/runtime state, not
+# portable config: notification "Seen" flags, panel geometry, migration lists)
+home/.config/plasmanotifyrc
+home/.config/plasmashellrc
