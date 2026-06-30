@@ -26,4 +26,7 @@ home/.config/flameshotrc
 home/.config/powermanagementprofilesrc
 home/.config/plasma-localerc
 home/.config/yakuakerc
+
+# Kate editor — not used on this setup, don't track its config
 home/.config/katevirc
+home/.config/kate/
