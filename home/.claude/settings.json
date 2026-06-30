@@ -22,7 +22,7 @@
     "ask": [
       "Bash(rm:*)"
     ],
-    "defaultMode": "acceptEdits"
+    "defaultMode": "auto"
   },
   "statusLine": {
     "type": "command",
