@@ -18,3 +18,4 @@ __pycache__/
 # portable config: notification "Seen" flags, panel geometry, migration lists)
 home/.config/plasmanotifyrc
 home/.config/plasmashellrc
+home/.config/flameshotrc
