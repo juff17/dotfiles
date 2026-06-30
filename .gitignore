@@ -15,7 +15,15 @@ __pycache__/
 
 # KDE runtime state (config files are live-symlinked into ~/.config, so KDE
 # rewrites them mid-session — these hold only per-machine/runtime state, not
-# portable config: notification "Seen" flags, panel geometry, migration lists)
+# portable config: notification "Seen" flags, panel geometry, migration lists,
+# recent-file paths)
 home/.config/plasmanotifyrc
 home/.config/plasmashellrc
 home/.config/flameshotrc
+
+# KDE files with no actual customization (only defaults / migration markers /
+# first-run flags) — nothing worth versioning
+home/.config/powermanagementprofilesrc
+home/.config/plasma-localerc
+home/.config/yakuakerc
+home/.config/katevirc
