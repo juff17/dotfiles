@@ -37,20 +37,36 @@ python3 <this-skill-dir>/scripts/scan.py <branch|full> --out <your-tmp-dir>/comm
 - `branch` (default) — only comments on lines changed on the current branch; the right scope for a pre-PR check.
 - `full` — the whole repo.
 
-It writes `<out>.json` (findings split into `leaks` / `reviews` / `denseFiles`) and
-prints a `FLAGGED: N` total. That JSON is your working data for steps 2–4.
+It writes `<out>.json` (`leaks` / `reviews` / `denseFiles`) and prints a
+`FLAGGED: N` total. The scanner is an **extractor, not a judge**: it does NOT
+pre-filter narration. It emits **every** line comment as a `reviews` entry, each
+tagged with a confidence `hint` and an `overlap` score:
 
-### 2. Present the findings (depends on the count)
+- `hint: high` — the word-overlap / verb heuristics fired; likely a
+  code-restating comment and your first place to look.
+- `hint: low` — everything else; surfaced so nothing is silently dropped, but
+  most will be legitimate keeps.
 
-- **`FLAGGED: 0`** → tell the user it's clean. Done.
-- **Fewer than 20** → list them directly in chat. Lead with the high-confidence
-  leaks, then the review candidates. For each review item, show the comment, the
-  code line above it, and your keep/cut call (judged per "Applying judgment" below).
-  Only list real findings — drop anything you judge legitimate, don't pad the list.
-  The `.json` already carries each code line, so you rarely need to reopen files.
-- **20 or more** → don't dump them. Say how many there are and summarize from the
-  JSON: the dominant patterns, the worst offenders, and any narration-dense files.
-  Offer the inline detail if they want a subset (e.g. "just the leaks").
+Leaks are still high-confidence. The WHAT-vs-WHY call in steps 2–4 is the
+judgment the scanner deliberately leaves to you. That JSON is your working data.
+
+### 2. Present the findings
+
+`reviews` is the full line-comment inventory, so it's normally large — never dump
+it. Work by confidence:
+
+- **Leaks + `hint: high`** are the likely cuts and what you present. If their
+  combined count is small (< ~20), list them inline: comment, the code line above
+  it, and your keep/cut call (per "Applying judgment" below). Only list real
+  findings — drop anything you judge legitimate, don't pad. The `.json` carries
+  each code line, so you rarely need to reopen files. If it's larger, don't dump:
+  summarize the dominant patterns, worst-offender files, and dense files, and
+  offer inline detail for a subset (e.g. "just the leaks").
+- **`hint: low`** is the long tail — comments the heuristics didn't flag,
+  surfaced only so the LLM (you) can catch semantic restatement the regex can't
+  model. Don't list it in chat; note the count and that most are expected keeps.
+  Judge it during cleanup, not in a pre-triage.
+- **No leaks and no `hint: high`** → tell the user it's clean. Done.
 
 ### 3. Offer to clean up
 
@@ -72,7 +88,10 @@ removes the noise — **never touch the surrounding code**:
 
 If the user scoped it ("just the leaks", "leave the ticket refs"), honor that.
 When done, re-run the scanner to confirm and report a short summary of what you
-changed (files touched, comments removed/rewritten/kept).
+changed (files touched, comments removed/rewritten/kept). Expect the re-scan to
+still list `hint: low` entries — those are the comments you judged legitimate and
+kept, not a failure. Confirm success by `leaks: 0` and the `hint: high` count
+dropping to just the ones you deliberately kept, not by `FLAGGED: 0`.
 
 ## Applying judgment to review candidates
 

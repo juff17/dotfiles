@@ -7,7 +7,12 @@ Scans a git repo's source comments for two things:
      work, with no business in source: "AC#4", "confirm against APP-1234",
      "Step 1:", "you may want to ...", "in real implementation...".
   2. Low-value NARRATION    — comments that restate what the next line of
-     code already says, instead of explaining why.
+     code already says, instead of explaining why. The scanner does NOT gate on
+     narration heuristics: EVERY line comment is emitted as a review candidate
+     for LLM WHAT-vs-WHY judgment. The word-overlap / verb heuristics survive
+     only as a confidence hint (`hint`: high|low, plus `overlap`) so a large
+     sweep can be prioritised. Doc-comments/blocks (JSDoc, docstrings) still get
+     a pass — only line comments are emitted for narration review.
 
 Languages: JS/TS(X), CSS/SCSS/Sass/Less, PHP, Python, Go, Shell, Terraform/HCL,
 YAML. A single
@@ -16,9 +21,11 @@ string state, so `//` or `#` inside a string is never mistaken for a comment.
 (One accepted gap: `//` inside a JS regex literal — rare.)
 
 The script does the deterministic work and writes the findings to disk as JSON.
-It is intentionally CONSERVATIVE about
-"high-confidence": anything needing WHAT-vs-WHY judgment is emitted as a "review"
-candidate WITH the line of code it sits above.
+Its job is EXTRACTION and SCOPING, not judgment: it reliably finds every comment
+(tracking string state across 8+ languages), pairs each with the next line of
+code, and scopes to the branch diff — then hands the full set to the LLM. Leaks
+are still emitted high-confidence; every line comment is emitted as a "review"
+candidate WITH the line of code it sits above and a confidence hint.
 
 Usage:
   python3 scan.py <branch|full> [repoRoot] [--out <basePath>]
@@ -145,11 +152,17 @@ LEAK_PHRASING = re.compile(
     r"see ticket|todo per|will be done in|cleanup in|remove in|implements?\b.*\b(ticket|story|ac\b)|fixes \w+-\d)\b",
     re.I)
 
+# Verb-led narration. The verb may be followed by a determiner ("Get the user")
+# or, far more commonly in imperative comments, straight by its object
+# ("Get SSE statistics", "Return 503", "Add user info") — so the determiner is
+# OPTIONAL. Anchored to the comment start; used only as a confidence hint now.
 NARRATION_VERBS = re.compile(
     r"^(defines?|creates?|sets?|gets?|stores?|updates?|checks?|returns?|initializ(e|es)|handles?|maps?|filters?|"
     r"loops?|iterates?|builds?|adds?|removes?|renders?|declares?|calls?|converts?|parses?|extracts?|fetch(es)?|"
     r"loads?|saves?|generates?|validates?|formats?|comput(e|es)|calculat(e|es)|finds?|grabs?|setups?|cleans?|"
-    r"clears?|resets?|toggles?|wraps?|pushes?|appends?|assigns?)\s+(the|a|an|this|that|it|if|whether|all|each|our|its|to|into|from)\b",
+    r"clears?|resets?|toggles?|wraps?|pushes?|appends?|assigns?|sends?|configures?|registers?|starts?|stops?|"
+    r"closes?|opens?|applies|ensures?|skips?|marks?|tracks?|emits?)"
+    r"\s+((the|a|an|this|that|it|if|whether|all|each|our|its|to|into|from)\s+)?\w",
     re.I)
 
 THIS_NARRATION = re.compile(
@@ -443,19 +456,36 @@ def classify(comment, it, sequential_context=False):
     if re.search(r"^\s*\d+\.\s", it) and not re.search(r"^\s*step", it, re.I):
         findings.append({"signal": 'numbered-step prefix "N."', "tier": "review"})
 
-    # Narration is a smell for line comments only; doc-comments/blocks get a pass.
+    # Narration review is a line-comment concern only; doc-comments/blocks get a
+    # pass. The gate is RETIRED: every line comment with real words is emitted as
+    # a review candidate for the LLM to judge. The heuristics no longer decide
+    # what is emitted — they only set a confidence `hint` (and feed dense-file
+    # stats). Empty markers and decorative dividers (no significant words) are
+    # skipped, and a comment already flagged by a stronger signal (leak, ticket,
+    # link, numbered-step) isn't double-flagged with the low-confidence catch-all.
     if comment["kind"] == "line":
         cw = words(it)
-        code_words = set(words(comment.get("nextCode") or ""))
-        overlap = (sum(1 for w in cw if w in code_words) / len(cw)) if cw else 0
-        redundant = 2 <= len(cw) <= 8 and overlap >= 0.6
-        if redundant or NARRATION_VERBS.search(it) or THIS_NARRATION.search(it):
-            findings.append({
-                "signal": ("restates the code (%d%% word overlap with next line)" % int(overlap * 100 + 0.5)
-                           if redundant else "narrates what the next line does"),
-                "tier": "review",
-                "narration": True,
-            })
+        if cw:
+            code_words = set(words(comment.get("nextCode") or ""))
+            overlap = (sum(1 for w in cw if w in code_words) / len(cw)) if cw else 0
+            restates = 2 <= len(cw) <= 8 and overlap >= 0.6
+            narrates = bool(NARRATION_VERBS.search(it)) or bool(THIS_NARRATION.search(it))
+            high_conf = restates or narrates
+            if high_conf:
+                signal = ("restates the code (%d%% word overlap with next line)" % int(overlap * 100 + 0.5)
+                          if restates else "narrates what the next line does")
+            elif not findings:
+                signal = "line comment — LLM review (%d%% overlap)" % int(overlap * 100 + 0.5)
+            else:
+                signal = None
+            if signal:
+                findings.append({
+                    "signal": signal,
+                    "tier": "review",
+                    "narration": high_conf,
+                    "overlap": round(overlap, 2),
+                    "hint": "high" if high_conf else "low",
+                })
 
     return findings
 
@@ -463,7 +493,7 @@ def classify(comment, it, sequential_context=False):
 def _make_record(rel, comment, finding):
     text = comment["text"]
     text = (text[:220] + " …") if len(text) > 220 else text
-    return {
+    rec = {
         "file": rel,
         "line": comment["startLine"],
         "kind": comment["kind"],
@@ -471,6 +501,10 @@ def _make_record(rel, comment, finding):
         "comment": text.replace("\n", "\\n"),
         "nextCode": comment["nextCode"] if finding["tier"] == "review" else None,
     }
+    if "hint" in finding:
+        rec["hint"] = finding["hint"]
+        rec["overlap"] = finding["overlap"]
+    return rec
 
 
 def scan_one_file(rel, comments, added_lines):
@@ -535,13 +569,16 @@ def scan_repo(repo_root, mode):
             per_file[rel] = stat
 
     dense = _dense_files(per_file)
+    review_high = sum(1 for r in reviews if r.get("hint") == "high")
+    review_low = sum(1 for r in reviews if r.get("hint") == "low")
     payload = {
         "mode": mode,
         "repo": repo_root,
         "base": base_label,
         "filesScanned": scanned,
         "totals": {"flagged": len(leaks) + len(reviews), "leaks": len(leaks),
-                   "review": len(reviews), "denseFiles": len(dense)},
+                   "review": len(reviews), "reviewHigh": review_high,
+                   "reviewLow": review_low, "denseFiles": len(dense)},
         "leaks": leaks,
         "reviews": reviews,
         "denseFiles": dense,
@@ -568,8 +605,9 @@ def print_summary(payload, lang_counts, json_path):
         print("  comparing against: %s" % payload["base"])
     print("  files scanned: %d  [%s]" % (payload["filesScanned"], langs))
     print()
-    print("  FLAGGED: %d   (leaks: %d, review: %d, dense files: %d)"
-          % (totals["flagged"], totals["leaks"], totals["review"], totals["denseFiles"]))
+    print("  FLAGGED: %d   (leaks: %d, review: %d [hint high: %d, low: %d], dense files: %d)"
+          % (totals["flagged"], totals["leaks"], totals["review"],
+             totals.get("reviewHigh", 0), totals.get("reviewLow", 0), totals["denseFiles"]))
     print()
     print("  data (json): %s" % json_path)
     print()
