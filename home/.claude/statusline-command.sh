@@ -1,12 +1,17 @@
 #!/bin/bash
 # Claude Code status line
-# Shows: repo, branch, context usage (color-coded)
+# Shows: repo, folder, branch, model (gray), context usage (color-coded)
 
 input=$(cat)
 
 # --- Extract values from JSON ---
 cwd=$(echo "$input"      | jq -r '.workspace.current_dir // .cwd // empty')
 used_pct=$(echo "$input" | jq -r '.context_window.used_percentage // empty')
+model=$(echo "$input"    | jq -r '.model.display_name // empty')
+
+# --- Current folder (basename of cwd) ---
+folder=""
+[ -n "$cwd" ] && folder=$(basename "$cwd")
 
 # --- Repo (owner/name from git remote, else toplevel dir basename) ---
 repo=""
@@ -47,16 +52,28 @@ sep() {
     fi
 }
 
-# --- Repo ---
+# --- Repo (with current folder shown alongside it) ---
 if [ -n "$repo" ]; then
     sep
     printf "${CYAN}%s${RESET}" "$repo"
+    if [ -n "$folder" ]; then
+        printf "${DIM} 📁 %s${RESET}" "$folder"
+    fi
+elif [ -n "$folder" ]; then
+    sep
+    printf "${DIM}📁 %s${RESET}" "$folder"
 fi
 
 # --- Branch ---
 if [ -n "$branch" ]; then
     sep
     printf "${GREEN}🌿 %s${RESET}" "$branch"
+fi
+
+# --- Model (gray) ---
+if [ -n "$model" ]; then
+    sep
+    printf "${DIM}%s${RESET}" "$model"
 fi
 
 # --- Context window (color by used %) ---
