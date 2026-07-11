@@ -5,3 +5,10 @@ Thumbs.db
 # Editor cruft
 *.swp
 *~
+
+# Python cruft
+__pycache__/
+*.pyc
+
+# Per-machine skill configs — never commit; copy from config.example.yaml
+**/config.yaml
