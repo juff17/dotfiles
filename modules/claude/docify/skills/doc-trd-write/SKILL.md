@@ -1,5 +1,5 @@
 ---
-name: trd-write
+name: doc-trd-write
 description: >
   Create and update a Technical Requirements Document (TRD) — the epic-level
   technical plan for how a PRD gets built: an overview of why, then the

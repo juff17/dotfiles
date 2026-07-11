@@ -1,5 +1,5 @@
 ---
-name: ticket-write
+name: doc-ticket-write
 description: >
   Create and update engineering tickets — a user story, then requirements, then
   acceptance criteria, written for the engineer who'll build it. Use when the

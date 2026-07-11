@@ -1,6 +1,6 @@
 # Update flow
 
-Playbook for `/system-overview update [<path>]` — and for any invocation that Routing resolves to `update` (i.e. `docs/system-overview/` already exists). Refreshes the existing wiki **in place**, like a careful human editor bringing stale docs up to date: re-read the code, find what materially changed, and touch only those parts.
+Playbook for `/doc-system-overview update [<path>]` — and for any invocation that Routing resolves to `update` (i.e. `docs/system-overview/` already exists). Refreshes the existing wiki **in place**, like a careful human editor bringing stale docs up to date: re-read the code, find what materially changed, and touch only those parts.
 
 The shared context — operating principles, target-directory resolution, output templates, link-prefix math — lives in [../SKILL.md](../SKILL.md). This file is the update-specific workflow only. It reuses the same investigator briefings in `../agents/` and the same detection / diagram / example references as create; the only thing that changes is that every phase works as a **diff against the existing wiki**.
 

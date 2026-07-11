@@ -1,6 +1,6 @@
 ---
-name: system-overview
-description: Generates a high-level system overview wiki for a codebase — repo purpose, core frameworks/packages, architecture (with mermaid), endpoints with shared response patterns and Swagger pointers, database layout, LLM flow if present, external service dependencies, and notable workflows worth deeper investigation. Invoke ONLY when the user explicitly runs the /system-overview slash command. Do NOT invoke for general "explain this code", "what does this repo do", or other walkthrough phrasings — only when the user types /system-overview.
+name: doc-system-overview
+description: Generates a high-level system overview wiki for a codebase — repo purpose, core frameworks/packages, architecture (with mermaid), endpoints with shared response patterns and Swagger pointers, database layout, LLM flow if present, external service dependencies, and notable workflows worth deeper investigation. Invoke ONLY when the user explicitly runs the /doc-system-overview slash command. Do NOT invoke for general "explain this code", "what does this repo do", or other walkthrough phrasings — only when the user types /doc-system-overview.
 ---
 
 # System overview
@@ -9,13 +9,13 @@ Produces a high-level system overview wiki for a codebase. The output is written
 
 ## Supported harnesses
 
-Runs on both **Claude Code** and **Cursor** (2.4+). Both surface the skill via `/system-overview` and both ship a built-in `Explore` subagent. The only harness-specific bits inside this skill are:
+Runs on both **Claude Code** and **Cursor** (2.4+). Both surface the skill via `/doc-system-overview` and both ship a built-in `Explore` subagent. The only harness-specific bits inside this skill are:
 - The subagent-dispatch tool — Claude Code's `Agent` vs Cursor's `Task` (both invoked the same way).
 - The on-disk install path — when a subcommand workflow needs to invoke a script, resolve any of `~/.claude/skills/`, `~/.cursor/skills/`, `.cursor/skills/`, `.claude/skills/`.
 
 ## When to use
 
-Only when the user explicitly invokes `/system-overview`. Do not trigger on phrases like "explain this codebase" or "what does this repo do" — those are different requests.
+Only when the user explicitly invokes `/doc-system-overview`. Do not trigger on phrases like "explain this codebase" or "what does this repo do" — those are different requests.
 
 ## What this skill is (and isn't)
 
@@ -54,10 +54,10 @@ Whatever the keyword, resolve the target directory next, then follow **Routing**
 
 Decide which directory you're documenting from the user's invocation. The path argument (if present) is the last positional argument; the keyword (if present) precedes it. Resolving the path is all this step does — it does **not** pick create vs update (that's Routing, next).
 
-- `/system-overview` → the current working directory.
-- `/system-overview <path>` → resolve `<path>` as below (legacy syntax — `<path>` is the target).
-- `/system-overview create` / `/system-overview update` → the current working directory.
-- `/system-overview create <path>` / `/system-overview update <path>` → resolve `<path>` as below.
+- `/doc-system-overview` → the current working directory.
+- `/doc-system-overview <path>` → resolve `<path>` as below (legacy syntax — `<path>` is the target).
+- `/doc-system-overview create` / `/doc-system-overview update` → the current working directory.
+- `/doc-system-overview create <path>` / `/doc-system-overview update <path>` → resolve `<path>` as below.
 
 To resolve `<path>`: accept a repo name (resolved relative to cwd), an absolute path, or a `~`-prefixed path. If it doesn't resolve to an existing directory, stop and ask the user.
 
@@ -68,7 +68,7 @@ The resolved path is the **target directory**. Every subagent's scope is rooted 
 After resolving the target directory, determine the route **only** by running `scripts/route.sh` against it. Do **not** decide from the user's keyword, by inspecting the directory yourself, or by inference — the `SL_SYSTEM_OVERVIEW_ROUTE=` line is the sole authority.
 
 ```sh
-SKILL_DIR="$(ls -d ~/.claude/skills/system-overview ~/.cursor/skills/system-overview .cursor/skills/system-overview .claude/skills/system-overview 2>/dev/null | head -n1)"
+SKILL_DIR="$(ls -d ~/.claude/skills/doc-system-overview ~/.cursor/skills/doc-system-overview .cursor/skills/doc-system-overview .claude/skills/doc-system-overview 2>/dev/null | head -n1)"
 bash "$SKILL_DIR/scripts/route.sh" <resolved-target-dir>
 ```
 
