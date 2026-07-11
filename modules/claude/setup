@@ -1,0 +1,135 @@
+#!/usr/bin/env bash
+# jstack setup — install agent tooling (skills, commands, agents) into whatever
+# coding agents live on this machine.
+#
+# Idempotent: safe to re-run. This is also the update path — `git pull && ./setup`.
+# Because installs are symlinks (on Unix), edits in this repo are live without
+# re-running. Re-run only after adding/removing tools or on a fresh machine.
+#
+# Usage:
+#   ./setup                       install every bundle into every detected agent
+#   ./setup --host claude         install only into Claude Code
+#   ./setup --bundle docify       install only the docify bundle
+#   ./setup --dry-run             show what would happen, change nothing
+#   ./setup --uninstall           remove everything jstack installed
+#   ./setup --copy                copy instead of symlink (force, any platform)
+set -euo pipefail
+
+JSTACK_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=lib/link.sh
+source "$JSTACK_DIR/lib/link.sh"
+# shellcheck source=lib/targets.sh
+source "$JSTACK_DIR/lib/targets.sh"
+
+TYPES="skills commands agents"
+
+HOST="auto"
+BUNDLE="all"
+DRY_RUN=0
+UNINSTALL=0
+
+usage() { sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; }
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --host)      [ $# -ge 2 ] || { echo "Missing value for --host" >&2; exit 1; }; HOST="$2"; shift 2 ;;
+    --bundle)    [ $# -ge 2 ] || { echo "Missing value for --bundle" >&2; exit 1; }; BUNDLE="$2"; shift 2 ;;
+    --copy)      export JSTACK_FORCE_COPY=1; shift ;;
+    --dry-run)   DRY_RUN=1; shift ;;
+    --uninstall) UNINSTALL=1; shift ;;
+    -h|--help)   usage; exit 0 ;;
+    *) echo "Unknown flag: $1" >&2; usage; exit 1 ;;
+  esac
+done
+
+# ─── Resolve vendors ──────────────────────────────────────────
+if [ "$HOST" = "auto" ]; then
+  VENDORS="$(jstack_detect)"
+  [ -n "$VENDORS" ] || { echo "No supported agent CLIs detected (${JSTACK_VENDORS}). Use --host to force one." >&2; exit 1; }
+else
+  jstack_is_vendor "$HOST" || { echo "Unknown --host '$HOST' (expected: ${JSTACK_VENDORS} or auto)" >&2; exit 1; }
+  VENDORS="$HOST"
+fi
+
+# ─── Resolve bundles ──────────────────────────────────────────
+# A bundle is any top-level dir holding a skills/, commands/, or agents/ subdir.
+is_bundle_dir() { [ -d "$1/skills" ] || [ -d "$1/commands" ] || [ -d "$1/agents" ]; }
+
+if [ "$BUNDLE" = "all" ]; then
+  BUNDLES=""
+  for d in "$JSTACK_DIR"/*/; do
+    name="$(basename "$d")"
+    is_bundle_dir "$d" && BUNDLES="$BUNDLES $name"
+  done
+  BUNDLES="$(echo "$BUNDLES" | xargs)"
+else
+  is_bundle_dir "$JSTACK_DIR/$BUNDLE" || { echo "No such bundle: $BUNDLE" >&2; exit 1; }
+  BUNDLES="$BUNDLE"
+fi
+
+# ─── Install one item, honoring --dry-run / --uninstall ───────
+do_item() {
+  local src="$1" dst="$2" label="$3"
+  if [ "$UNINSTALL" -eq 1 ]; then
+    if [ -e "$dst" ] || [ -L "$dst" ]; then
+      [ "$DRY_RUN" -eq 1 ] && echo "  would remove  $label" || { rm -rf "$dst"; echo "  removed  $label"; }
+    fi
+    return 0
+  fi
+  if [ "$DRY_RUN" -eq 1 ]; then
+    echo "  would link  $label"
+  else
+    _link_or_copy "$src" "$dst"
+    echo "  linked  $label"
+  fi
+}
+
+# ─── Install one (vendor, bundle, type) ───────────────────────
+install_type() {
+  local vendor="$1" bundle="$2" type="$3"
+  local srcroot="$JSTACK_DIR/$bundle/$type"
+  [ -d "$srcroot" ] || return 0
+
+  local destroot; destroot="$(jstack_target "$vendor" "$type")"
+  [ -n "$destroot" ] || return 0   # vendor has no home for this type — skip
+
+  case "$type" in
+    skills)   # each skill is a directory (SKILL.md + friends); install flat
+      for item in "$srcroot"/*/; do
+        [ -d "$item" ] || continue
+        local name; name="$(basename "$item")"
+        do_item "$item" "$destroot/$name" "$vendor:$bundle skill/$name"
+      done ;;
+    agents)   # each agent is a single .md; install flat
+      for item in "$srcroot"/*.md; do
+        [ -e "$item" ] || continue
+        local name; name="$(basename "$item")"
+        do_item "$item" "$destroot/$name" "$vendor:$bundle agent/$name"
+      done ;;
+    commands) # each command is a single .md; namespaced by bundle -> /bundle:name
+      for item in "$srcroot"/*.md; do
+        [ -e "$item" ] || continue
+        local name; name="$(basename "$item")"
+        do_item "$item" "$destroot/$bundle/$name" "$vendor:$bundle command/$bundle:${name%.md}"
+      done ;;
+  esac
+}
+
+# ─── Main ─────────────────────────────────────────────────────
+[ "$UNINSTALL" -eq 1 ] && echo "Uninstalling jstack" || echo "Installing jstack from $JSTACK_DIR"
+echo "  vendors: $VENDORS"
+echo "  bundles: $BUNDLES"
+[ "$DRY_RUN" -eq 1 ] && echo "  (dry run — no changes)"
+echo
+
+for vendor in $VENDORS; do
+  echo "▸ $vendor"
+  for bundle in $BUNDLES; do
+    for type in $TYPES; do
+      install_type "$vendor" "$bundle" "$type"
+    done
+  done
+done
+
+echo
+echo "Done."
