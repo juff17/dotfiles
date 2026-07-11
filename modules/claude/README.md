@@ -15,12 +15,14 @@ jstack/
   lib/
     link.sh             # symlink-or-copy helper
     targets.sh          # the only vendor-specific file: vendor -> install dirs
-  general/              # a bundle
+  general/              # a bundle — anatomy of one:
     skills/    <name>/SKILL.md
     commands/  <name>.md
     agents/    <name>.md
   docify/               # a bundle (document-writing skills)
   review/               # a bundle
+  daily-prep/           # a bundle (slack digest, standup prep)
+  short_circuits/       # a bundle (sc-* short-circuit guidance prompts)
 ```
 
 A **bundle** is just a folder that groups related tools. It is a
