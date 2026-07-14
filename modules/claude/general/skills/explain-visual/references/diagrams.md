@@ -1,54 +1,87 @@
 # Diagram recipes
 
-Pick **one** primary diagram. Two only if the change genuinely has two faces
-(e.g. a data-model change *and* a new request flow). Never more than two.
+**Everything is mermaid.** The doc is read in VS Code's markdown preview, which renders
+```mermaid fences natively. Never hand-draw ASCII box art — it is not a fallback, it is
+not an option, and a mangled ASCII sketch is exactly the wall of characters this skill
+exists to prevent.
 
-The examples below are deliberately drawn from **different, unrelated domains** —
-they teach the *shape*, not the subject. Never copy an example's nouns into your
-output. Every box, arrow, and number must come from the code in front of you.
+The examples below are deliberately drawn from **different, unrelated domains** — they
+teach the *shape*, not the subject. Never copy an example's nouns into your output.
+Every node, arrow, and number must come from the code in front of you.
 
-Universal markers — always include the legend line:
+## Marking the change
 
+Put the marker **in the node label**, and caption the diagram with the legend:
+
+```mermaid
+flowchart TD
+  A[queue] --> B["dedupe *"]
+  B --> C["worker ~"]
 ```
-* new    ~ changed    x removed
-```
+`* new  ~ changed  x removed`
 
 ---
 
 ## Choosing
 
-| The change is about... | Draw a... |
-|---|---|
-| A request/job moving through layers | **Pipeline** |
-| Two+ services/actors talking over time | **Sequence** |
-| Something that has modes (draft/live/archived) | **State machine** |
-| Tables, records, relationships | **Entity map** |
-| Same input, different output than before | **Before / after** |
-| A formula, a threshold, a number that moves | **Number line / curve** |
-| Where a thing lives now vs before | **Placement** |
+| The change is about... | Draw a... | Mermaid |
+|---|---|---|
+| Which systems this touches at all (≥3 systems) | **System map** | `flowchart TD` |
+| A request/job moving through layers | **Pipeline** | `flowchart TD` |
+| Two+ services/actors talking over time | **Sequence** | `sequenceDiagram` |
+| Something with modes (draft/live/archived) | **State machine** | `stateDiagram-v2` |
+| Tables, records, relationships | **Entity map** | `erDiagram` |
+| A quantity that moved (latency, retries, cost) | **Chart** | `xychart-beta` |
+| Same input, different output than before | **Before/after** | markdown table |
+
+`flowchart TD` (top-down) by default. `LR` becomes an unreadable ribbon past ~5 nodes.
 
 ---
 
-## Pipeline (most common)
+## System map — the entry point for multi-system changes
 
-Data or control flowing through stages. *Example domain: file upload.*
+**Lead with this whenever the change touches 3+ systems.** It is the reader's index:
+here is the whole board, here is the part that moved. Keep it dumb and small — no
+detail, just which boxes are involved and which ones this change lit up.
 
+```mermaid
+flowchart TD
+  subgraph Touched by this change
+    API["Checkout API ~"]
+    Q["Refund queue *"]
+    LEDGER["Ledger ~"]
+  end
+  subgraph Unchanged
+    AUTH[Auth]
+    MAIL[Mailer]
+    DB[(Postgres)]
+  end
+  API --> Q --> LEDGER --> DB
+  API --> AUTH
+  Q --> MAIL
 ```
-  POST /upload           UploadHandler         Scanner            S3
-      │                       │                   │                │
-      ├── multipart ─────────▶│                   │                │
-      │                       ├── reject >50MB * ─┤                │
-      │                       ├── virus scan * ──▶│                │
-      │                       │◀── clean ─────────┤                │
-      │                       ├── strip EXIF ~ ───┤                │
-      │                       └── put(key) ───────────────────────▶│
-      ▼
-   201 {url, scanId *}
+`* new  ~ changed`
 
-  * new    ~ changed
+Then one diagram per flow below it. The map tells them where each flow lives.
+
+---
+
+## Pipeline
+
+Data or control moving through stages. *Example domain: file upload.*
+
+```mermaid
+flowchart TD
+  U["POST /upload"] --> H[UploadHandler]
+  H -->|"reject >50MB *"| REJ["413"]
+  H -->|"12MB pdf"| SCAN["Virus scanner *"]
+  SCAN -->|clean| STRIP["Strip EXIF ~"]
+  STRIP --> S3[("S3")]
+  S3 --> RES["201 {url, scanId *}"]
 ```
+`* new  ~ changed`
 
-Keep boxes to ≤6. Annotate the arrow with *what travels*, not the method name.
+Keep it to ≤8 nodes. Label arrows with *what travels*, not the method name.
 
 ---
 
@@ -56,21 +89,24 @@ Keep boxes to ≤6. Annotate the arrow with *what travels*, not the method name.
 
 When ordering and round-trips are the point. *Example domain: OAuth login.*
 
+```mermaid
+sequenceDiagram
+  participant B as Browser
+  participant A as App
+  participant S as AuthServer
+  B->>A: click login
+  A-->>B: redirect
+  B->>S: authorize
+  S-->>B: code
+  B->>A: code
+  A->>S: exchange
+  S-->>A: token + claims
+  A->>A: upsert user *
+  A-->>B: session cookie
 ```
-  Browser        App          AuthServer      UserDB
-    │             │                │             │
-    │─ click ────▶│                │             │
-    │◀─ redirect ─│                │             │
-    │──────── authorize ──────────▶│             │
-    │◀─────── code ────────────────│             │
-    │─ code ─────▶│                │             │
-    │             │─ exchange ────▶│             │
-    │             │◀─ token+claims │             │
-    │             │─ upsert user * ─────────────▶│
-    │◀─ session ──│                │             │
-```
+`* new`
 
-The win here is showing **what round-trip was added or removed**.
+The win is showing **which round-trip was added or removed**.
 
 ---
 
@@ -78,25 +114,20 @@ The win here is showing **what round-trip was added or removed**.
 
 Anything with a status column. *Example domain: a subscription.*
 
+```mermaid
+stateDiagram-v2
+  [*] --> TRIAL: signup
+  TRIAL --> ACTIVE: card added
+  ACTIVE --> PAST_DUE: payment fails *
+  PAST_DUE --> SUSPENDED: 3 retries fail *
+  PAST_DUE --> ACTIVE: card fixed *
+  SUSPENDED --> CANCELED: 30d grace *
+  ACTIVE --> CANCELED: cancel
+  CANCELED --> [*]
 ```
-                  ┌──────────┐
-       ┌─────────▶│  TRIAL   │
-       │          └────┬─────┘
-       │               │ card added
-   signup              ▼
-       │          ┌──────────┐   payment fails   ┌───────────┐
-       │          │  ACTIVE  │──────────────────▶│ PAST_DUE *│
-       │          └────┬─────┘                   └─────┬─────┘
-       │               │ cancel                        │ 3 retries fail *
-       │               ▼                               ▼
-       │          ┌──────────┐                   ┌───────────┐
-       └─────────▶│ CANCELED │◀──────────────────│ SUSPENDED*│
-                  └──────────┘   30d grace *     └───────────┘
+`* new`
 
-  * new
-```
-
-Always draw the **old** paths too — the reader needs to see what got bolted on.
+Always draw the **old** states too — the reader needs to see what got bolted on.
 
 ---
 
@@ -104,86 +135,72 @@ Always draw the **old** paths too — the reader needs to see what got bolted on
 
 Schema / model changes. *Example domain: a helpdesk.*
 
+```mermaid
+erDiagram
+  ORG ||--o{ USER : has
+  USER ||--o{ TICKET : opens
+  QUEUE ||--o{ TICKET : holds
+  TICKET ||--o{ ATTACHMENT : "has *"
+  USER ||--o{ APIKEY : "has *"
+  ATTACHMENT {
+    string url "new *"
+    datetime scannedAt "new *"
+  }
+  APIKEY {
+    string scope
+    datetime revokedAt
+  }
 ```
-  Org ──1:N──▶ User ──1:N──▶ Ticket ──N:1──▶ Queue
-                │              │
-                │              └──1:N──▶ Attachment *
-                │                         ├ url *
-                │                         └ scannedAt *
-                └──1:N──▶ ApiKey *
-                          ├ scope
-                          └ revokedAt      (LegacyToken x — dropped)
-```
-
-Show dropped tables/columns with `x`. That's usually the thing they missed.
+`* new` — mention dropped tables/columns in a caption bullet; `erDiagram` can't show them.
 
 ---
 
-## Before / after
+## Chart — a quantity that moved
 
-The strongest shape when behaviour changed but structure didn't.
-*Example domain: a search endpoint.*
+For thresholds, latencies, retry counts, costs. *Example domain: retry backoff.*
 
+```mermaid
+xychart-beta
+  title "Seconds waited before retry N"
+  x-axis "attempt" [1, 2, 3, 4, 5]
+  y-axis "seconds" 0 --> 16
+  bar [1, 1, 1, 1, 1]
+  bar [1, 2, 4, 8, 16]
 ```
-  BEFORE                          AFTER
-  ──────                          ─────
-  LIKE '%term%' scan      →       inverted index lookup
-  O(n) over 2M rows       →       O(log n)
-  900ms p95               →       ~12ms p95
-  no typo tolerance       →       fuzzy match, edit distance 2 *
-```
+- Series 1 = old `fixed(1s)` — 5s total, all five hammer at once.
+- Series 2 = new `exp(2^n) *` — 31s total. **Callers must raise their timeout.**
 
-Two columns, same rows. The reader's eye does the diffing for you.
+Charts need a caption naming the series; `xychart-beta` has no legend. Anchor the old
+value and the new value, and say what it costs.
 
 ---
 
-## Number line / curve
+## Before / after — a markdown table, not a diagram
 
-For formulas, thresholds, tuning constants. *Example domain: retry backoff.*
+When behaviour changed but structure didn't. *Example domain: a search endpoint.*
 
-```
-  wait before retry N, by strategy
+| | Before | After |
+|---|---|---|
+| Lookup | `LIKE '%term%'` scan | inverted index |
+| Cost | O(n) over 2M rows | O(log n) |
+| p95 | 900ms | ~12ms |
+| Typos | no tolerance | fuzzy, edit distance 2 `*` |
 
-   fixed(1s)      █ █ █ █ █             total 5s, all 5 hit at once
-   exp(2^n) *     █ ██ ████ ████████    total 31s, spread out *
-
-   attempt        1  2   3    4     5
-                  ──────────────────▶ time
-
-   old: gave up after 5 retries / 5s
-   new: gives up after 5 retries / 31s *   ← callers must raise their timeout
-```
-
-Bars beat numbers. Anchor the old value and the new value, and say what it costs.
-
----
-
-## Placement
-
-Where code/config/infra moved. *Example domain: extracting a service.*
-
-```
-   before                    after
-   ┌─────────────┐           ┌─────────────┐
-   │  monolith   │           │  monolith   │
-   │  ├ web      │           │  ├ web      │
-   │  └ imaging ~│  ──────▶  │  └ (calls) ─┼──┐
-   └─────────────┘           └─────────────┘  │
-                                              ▼
-                                       ┌──────────────┐
-                                       │ imaging svc *│
-                                       └──────────────┘
-```
+Same rows, two columns. The reader's eye does the diffing. This is the one "diagram"
+that isn't mermaid — a table renders natively and beats a drawing here.
 
 ---
 
 ## Craft notes
 
-- **Box-drawing chars** (`│ ─ ┌ ┐ └ ┘ ▶ ▼`) not ASCII pipes — they line up.
-- **Align columns.** A crooked diagram is worse than no diagram.
+- **Quote every label with spaces or punctuation** — `B["retry (2^n) *"]`. Unquoted
+  parens, colons, and `>` are the usual parse break. You cannot see the render; don't
+  get clever.
+- **≤15 nodes per diagram.** More than that and you're drawing the codebase, not the change.
+- **One diagram, one idea.** If you're tempted to add a subgraph to squeeze in another
+  flow, that flow deserves its own diagram.
 - **Label arrows with data**, not function names: `12MB pdf` > `handleUpload()`.
-- **Keep it under ~20 lines.** Bigger than that, split or zoom out.
-- **The diagram must carry the change.** If you could draw the same picture before
-  and after the commit, you drew the wrong thing.
-- **Real names, real numbers.** Pull them from the diff. A diagram of `ServiceA →
-  ServiceB` is a diagram of nothing.
+- **The diagram must carry the change.** If you could draw the same picture before and
+  after the commit, you drew the wrong thing.
+- **Real names, real numbers**, pulled from the diff. `ServiceA → ServiceB` is a diagram
+  of nothing.
