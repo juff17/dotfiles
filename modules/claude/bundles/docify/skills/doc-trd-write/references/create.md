@@ -20,7 +20,11 @@ it from scratch.
    spec where they carry real information. Stay high-level: what stages we go
    through, not how the code will look. One TRD per epic; if the request is
    really several epics, say so rather than forcing them into one document.
-4. **Publish the TRD** into the doc store — see [`publish.md`](publish.md): detect
+4. **Strip the conversation.** Read the draft as an engineer who never saw the
+   prompt — see [`../SKILL.md`](../SKILL.md). Cut framing like "as requested" or
+   "as we discussed", and replace any placeholder or throwaway term the user
+   used to point you at the work with what the domain and the code call it.
+5. **Publish the TRD** into the doc store — see [`publish.md`](publish.md): detect
    the provider, resolve the space and parent, then create the page with the
    drafted body.
-5. **Report back** the created page's title and link.
+6. **Report back** the created page's title and link.

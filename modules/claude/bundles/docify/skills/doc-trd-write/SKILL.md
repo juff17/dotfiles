@@ -52,6 +52,23 @@ You Can:
 
 Do not simply restate the PRD or user prompt, you need to reframe the relevant parts from a technical perspective. The technical explanations should capture what it is we are building and how we are building it, engineers reading the TRD should be able to understand without relying on the PRD.
 
+## Leave the conversation out
+
+The TRD is read by engineers who were never in the conversation that produced
+it, often months later. Nothing in it should read as the second half of a
+dialogue — no "as requested", "as we discussed", "you mentioned", "per the
+thread above", and no requirement phrased as an answer to something the user
+said.
+
+That extends past the obvious phrases. Language the user reached for while
+steering you toward the work — a rough analogy, a placeholder name, a throwaway
+example, a term used only to point you at something — is not project
+vocabulary. Use what the domain and the existing code already call the thing.
+
+The document explains the system on its own terms: what we're building, how it
+behaves, and why the plan is shaped this way. If a sentence only makes sense to
+someone who read the prompt, rewrite it.
+
 ## Show Before Telling
 Use diagrams first, words second. For API contracts, database schema, and complex flows use diagrams, tables and other visuals. For complex flows and processes consider adding additional details in text that cannot be easily inferred from the visuals. For API contracts and database schema, refer to them by name in future descriptions (e.g. `POST /v1/payments/<uuid>`).
 
