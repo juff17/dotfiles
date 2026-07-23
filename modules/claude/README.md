@@ -22,7 +22,7 @@ jstack/
   docify/               # a bundle (document-writing skills)
   review/               # a bundle
   daily-prep/           # a bundle (slack digest, standup prep)
-  short_circuits/       # a bundle (sc-* short-circuit guidance prompts)
+  shortcuts/            # a bundle (short-circuit guidance prompts)
 ```
 
 A **bundle** is just a folder that groups related tools. It is a
