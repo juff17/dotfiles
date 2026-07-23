@@ -9,7 +9,9 @@ update/change it. The ticket already exists, so tread carefully.
 2. **If the ticket is blank/empty**, switch to
    [`create.md`](create.md).
 3. **Change only what needs changing.** Leave the rest exactly as written — a
-   minimal, intentional edit, not a rewrite.
+   minimal, intentional edit, not a rewrite. Anything you add meets the same
+   self-contained bar as a new ticket (see [`../SKILL.md`](../SKILL.md)); leave
+   existing text that falls short of it alone unless the user asks.
 4. **Propagate consequences.** A change rarely stays in one section: if the
    story or requirements shift, revisit the acceptance criteria so they stay
    consistent, and don't leave stale sections behind.

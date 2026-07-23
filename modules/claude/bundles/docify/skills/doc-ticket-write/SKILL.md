@@ -37,7 +37,7 @@ As a <role>, I want <capability>, so that <benefit>.
 ## Requirements
 
 - <what needs to be true; scope, constraints, technical context>
-- <dependencies, links to the epic/feature, TRD, or designs (if any)>
+- <durable external links (designs, published specs) — no local files, no ticket keys>
 
 ## Acceptance Criteria
 
@@ -83,17 +83,20 @@ thing — and no more:
 - **Constraints** — hard requirements the solution must satisfy (performance
   budgets, auth rules, data formats, backward compatibility).
 - **Context** — the background an engineer needs: which system, why now, what's
-  changed. Link the epic/feature, TRD, designs, or related tickets rather than
-  re-explaining them.
-- **Dependencies** — anything that must land first, or that this blocks.
+  changed. Carry the facts they need into the ticket itself; link out only to
+  something durable and reachable, like a design file or a published spec.
+- **Dependencies** — anything that must land first, or that this blocks. These
+  belong in the tracker's link fields rather than the body (see below), and if
+  there's no real ticket to point at, leave the dependency out.
 
 Say *what* must be true and *why*, plus any hard constraints — but stop short of
 dictating *how*. Spelling out every implementation detail turns the ticket into
 a contract and throws away the judgement of the person building it. Give enough
 that they could size the work before starting; if they couldn't, it's either
 under-specified or too big — add detail or split it. And if there's a genuine
-open question or blocker that you can't resolve, surface it to the user (ask
-them directly) do not paper over it or silently spin it off into another ticket.
+open question or blocker that you can't resolve, surface it to the user — ask
+them directly. Don't paper over it, don't write it into the ticket, and don't
+silently spin it off into another one.
 
 The *how* you leave open is the code-level implementation — which classes,
 functions, and data structures the engineer chooses. That's different from a
@@ -121,6 +124,41 @@ should be able to check it and get the same yes/no.
 
 Cover the important edge cases and failure paths, not just the happy path — but
 don't pad the list; keep it to what actually gates "done".
+
+## The Self-Contained Bar
+
+A ticket is read later, by someone who wasn't there, with two things in front of
+them: the tracker and the repo. Anything outside those two is invisible to them,
+and anything that can shift underneath them is worse than absent — it points
+somewhere confidently wrong. Before handing a ticket off, strip:
+
+- **Anything that lives outside the repo and the tracker** — a document on your
+  disk, scratch notes, a local draft. The reader can't open it, however useful
+  it was to you. Pull the facts the engineer actually needs into the
+  requirements and let the ticket carry them itself. Naming files *in the repo*
+  is fine; those travel with the code.
+- **The conversation that produced it** — steering language, phrasing that
+  answers something the user said, anything that treats this ticket as a reply.
+  The engineer reading it was never in that conversation, so nothing should read
+  as the second half of a dialogue. How the work was described to you is not
+  ticket content.
+- **Other tickets** — no tracker key anywhere in the body: not as context, not
+  as a "see also", not as a dependency. A key in prose is a dead end the moment
+  that ticket is closed, split, or superseded, and it makes this ticket
+  unreadable without opening another. Express every relationship through the
+  tracker's own link fields, where it stays live. If there's no real ticket to
+  point at, leave the relationship out rather than writing a stand-in for one.
+- **Names the thing doesn't own** — identifiers that come from where something
+  sits in an order rather than belonging to it permanently: numbering that
+  reflects what landed first, "step 2", a pointer to a position in a list. The
+  test is whether something arriving later could reassign the name. If it could,
+  the ticket will eventually point confidently at the wrong thing — so describe
+  what the thing *is* instead, and the sentence survives.
+- **Status** — anything true this week and wrong later: what the work is waiting
+  on, who picked it up, where it sits in the process. The body is the one part
+  of a ticket nobody goes back to refresh, so status belongs in the tracker's
+  fields and comments, where it's expected to change. A standing constraint is
+  not status — that's a requirement, and it stays.
 
 ## The INVEST bar
 
@@ -184,7 +222,8 @@ twice or chase malformed ones by hand.
 - Every rejected record goes to the dead-letter table tagged with the gate that
   failed — nothing is dropped silently.
 - Must process a 500-invoice batch within 30 seconds.
-- Consumes the vendor feed from ING-88 and writes to the existing accounts-payable queue.
+- Consumes the normalized vendor feed and writes to the existing
+  accounts-payable queue.
 
 ## Acceptance Criteria
 

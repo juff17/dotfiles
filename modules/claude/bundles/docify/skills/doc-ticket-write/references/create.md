@@ -9,8 +9,12 @@ scratch.
    something critical is missing; don't invent scope.
 2. **Draft the ticket** — user story → requirements → acceptance criteria. One
    ticket per unit of work; if the request is really several units, draft
-   several.
-3. **Publish each ticket** into the tracker — see [`publish.md`](publish.md):
+   several — each standing on its own, with no cross-references between them.
+3. **Strip what won't survive.** Check the draft against the self-contained bar
+   in [`../SKILL.md`](../SKILL.md): nothing the reader can't reach, no
+   conversational framing, no ticket keys, no names that can be reassigned, no
+   status.
+4. **Publish each ticket** into the tracker — see [`publish.md`](publish.md):
    detect the provider, resolve the project, and create the issue with the
    drafted body.
-4. **Report back** each created ticket's key and link.
+5. **Report back** each created ticket's key and link.
