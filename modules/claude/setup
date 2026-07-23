@@ -16,6 +16,7 @@
 set -euo pipefail
 
 JSTACK_DIR="$(cd "$(dirname "$0")" && pwd)"
+BUNDLES_DIR="$JSTACK_DIR/bundles"
 # shellcheck source=lib/link.sh
 source "$JSTACK_DIR/lib/link.sh"
 # shellcheck source=lib/targets.sh
@@ -52,18 +53,18 @@ else
 fi
 
 # ─── Resolve bundles ──────────────────────────────────────────
-# A bundle is any top-level dir holding a skills/, commands/, or agents/ subdir.
+# A bundle is any dir under bundles/ holding a skills/, commands/, or agents/ subdir.
 is_bundle_dir() { [ -d "$1/skills" ] || [ -d "$1/commands" ] || [ -d "$1/agents" ]; }
 
 if [ "$BUNDLE" = "all" ]; then
   BUNDLES=""
-  for d in "$JSTACK_DIR"/*/; do
+  for d in "$BUNDLES_DIR"/*/; do
     name="$(basename "$d")"
     is_bundle_dir "$d" && BUNDLES="$BUNDLES $name"
   done
   BUNDLES="$(echo "$BUNDLES" | xargs)"
 else
-  is_bundle_dir "$JSTACK_DIR/$BUNDLE" || { echo "No such bundle: $BUNDLE" >&2; exit 1; }
+  is_bundle_dir "$BUNDLES_DIR/$BUNDLE" || { echo "No such bundle: $BUNDLE" >&2; exit 1; }
   BUNDLES="$BUNDLE"
 fi
 
@@ -87,7 +88,7 @@ do_item() {
 # ─── Install one (vendor, bundle, type) ───────────────────────
 install_type() {
   local vendor="$1" bundle="$2" type="$3"
-  local srcroot="$JSTACK_DIR/$bundle/$type"
+  local srcroot="$BUNDLES_DIR/$bundle/$type"
   [ -d "$srcroot" ] || return 0
 
   local destroot; destroot="$(jstack_target "$vendor" "$type")"
