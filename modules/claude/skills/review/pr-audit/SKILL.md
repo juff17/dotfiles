@@ -1,5 +1,5 @@
 ---
-name: pr-walkthrough-audit
+name: pr-audit
 argument-hint: "[base-branch] [--entry <name>] [--state] [--tour]"
 description: >-
   Walk through the code a PR adds or changes, starting from each entry point it
@@ -11,7 +11,7 @@ description: >-
 license: MIT
 ---
 
-# pr-walkthrough-audit
+# pr-audit
 
 Reviews a PR by **walking it the way it runs**. For each entry point the PR
 touches, follow the code path in execution order and, at every step that can
