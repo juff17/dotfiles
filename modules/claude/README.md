@@ -1,7 +1,7 @@
 # jstack
 
 Personal home for coding-agent tooling — skills, slash commands, and subagents —
-organized into **bundles** and installed onto any machine with one command.
+organized by **category** and installed onto any machine with one command.
 
 The point: on a new PC, `git clone` this repo and run `./setup`. Your agent
 tools land in the right place for whichever agent(s) you have installed. No
@@ -15,28 +15,29 @@ jstack/
   lib/
     link.sh             # symlink-or-copy helper
     targets.sh          # the only vendor-specific file: vendor -> install dirs
-  general/              # a bundle — anatomy of one:
-    skills/    <name>/SKILL.md
-    commands/  <name>.md
-    agents/    <name>.md
-  docify/               # a bundle (document-writing skills)
-  review/               # a bundle
-  daily-prep/           # a bundle (slack digest, standup prep)
-  shortcuts/            # a bundle (short-circuit guidance prompts)
+  skills/
+    <category>/<name>/SKILL.md
+  commands/
+    <category>/<name>.md
+  agents/
+    <category>/<name>.md
 ```
 
-A **bundle** is just a folder that groups related tools. It is a
-source-organization and install-selection concept only — at install time
-everything flattens into the agent's own directories, so **tool names must be
-globally unique across bundles.** (Commands are the exception: they are
-namespaced by bundle, so `docify/commands/foo.md` installs as `/docify:foo`.)
+Tools are grouped by type first, then by **category**: `docify` (document
+writing), `review`, `daily-prep` (slack digest, standup prep), `general`, and
+`shortcuts` (short-circuit guidance prompts). A category is a
+source-organization and install-selection concept only — at install time skills
+and agents flatten into the agent's own directories, so **their names must be
+globally unique across categories.** Commands are the exception: they are
+namespaced by category, so `commands/shortcuts/discuss.md` installs as
+`/shortcuts:discuss`.
 
 ## Install
 
 ```sh
-./setup                   # every bundle into every detected agent
+./setup                   # every category into every detected agent
 ./setup --host claude     # only Claude Code
-./setup --bundle docify   # only the docify bundle
+./setup --category docify # only the docify category
 ./setup --dry-run         # show what would happen, change nothing
 ./setup --uninstall       # remove everything jstack installed
 ./setup --copy            # copy instead of symlink (Windows / forced)
@@ -68,9 +69,9 @@ by editing `lib/targets.sh` — nothing else changes.
 
 ## Adding a tool
 
-1. Drop it in the right bundle: `general/skills/my-skill/SKILL.md`, or
-   `general/commands/my-cmd.md`, or `general/agents/my-agent.md`.
+1. Drop it under its type and category: `skills/general/my-skill/SKILL.md`,
+   `commands/general/my-cmd.md`, or `agents/general/my-agent.md`.
 2. `./setup` (or `./setup --dry-run` first).
 
-Need a new bundle? Make a folder with a `skills/`, `commands/`, or `agents/`
-subdir — `setup` discovers it automatically.
+Need a new category? Make a folder under `skills/`, `commands/`, or `agents/` —
+`setup` discovers it automatically.

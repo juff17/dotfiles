@@ -1,3 +1,0 @@
----
-name: scaffold-llm-app
----

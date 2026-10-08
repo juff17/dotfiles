@@ -1,3 +1,0 @@
----
-name: scaffold-cpp-project
----

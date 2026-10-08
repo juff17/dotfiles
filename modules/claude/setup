@@ -7,16 +7,15 @@
 # re-running. Re-run only after adding/removing tools or on a fresh machine.
 #
 # Usage:
-#   ./setup                       install every bundle into every detected agent
+#   ./setup                       install every category into every detected agent
 #   ./setup --host claude         install only into Claude Code
-#   ./setup --bundle docify       install only the docify bundle
+#   ./setup --category docify     install only the docify category
 #   ./setup --dry-run             show what would happen, change nothing
 #   ./setup --uninstall           remove everything jstack installed
 #   ./setup --copy                copy instead of symlink (force, any platform)
 set -euo pipefail
 
 JSTACK_DIR="$(cd "$(dirname "$0")" && pwd)"
-BUNDLES_DIR="$JSTACK_DIR/bundles"
 # shellcheck source=lib/link.sh
 source "$JSTACK_DIR/lib/link.sh"
 # shellcheck source=lib/targets.sh
@@ -25,7 +24,7 @@ source "$JSTACK_DIR/lib/targets.sh"
 TYPES="skills commands agents"
 
 HOST="auto"
-BUNDLE="all"
+CATEGORY="all"
 DRY_RUN=0
 UNINSTALL=0
 
@@ -34,7 +33,7 @@ usage() { sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; }
 while [ $# -gt 0 ]; do
   case "$1" in
     --host)      [ $# -ge 2 ] || { echo "Missing value for --host" >&2; exit 1; }; HOST="$2"; shift 2 ;;
-    --bundle)    [ $# -ge 2 ] || { echo "Missing value for --bundle" >&2; exit 1; }; BUNDLE="$2"; shift 2 ;;
+    --category)  [ $# -ge 2 ] || { echo "Missing value for --category" >&2; exit 1; }; CATEGORY="$2"; shift 2 ;;
     --copy)      export JSTACK_FORCE_COPY=1; shift ;;
     --dry-run)   DRY_RUN=1; shift ;;
     --uninstall) UNINSTALL=1; shift ;;
@@ -52,20 +51,21 @@ else
   VENDORS="$HOST"
 fi
 
-# ─── Resolve bundles ──────────────────────────────────────────
-# A bundle is any dir under bundles/ holding a skills/, commands/, or agents/ subdir.
-is_bundle_dir() { [ -d "$1/skills" ] || [ -d "$1/commands" ] || [ -d "$1/agents" ]; }
+# ─── Resolve categories ───────────────────────────────────────
+# A category is any subdir of skills/, commands/, or agents/.
+ALL_CATEGORIES="$(
+  for type in $TYPES; do
+    for d in "$JSTACK_DIR/$type"/*/; do [ -d "$d" ] && basename "$d"; done
+  done | sort -u | xargs
+)"
 
-if [ "$BUNDLE" = "all" ]; then
-  BUNDLES=""
-  for d in "$BUNDLES_DIR"/*/; do
-    name="$(basename "$d")"
-    is_bundle_dir "$d" && BUNDLES="$BUNDLES $name"
-  done
-  BUNDLES="$(echo "$BUNDLES" | xargs)"
+if [ "$CATEGORY" = "all" ]; then
+  CATEGORIES="$ALL_CATEGORIES"
 else
-  is_bundle_dir "$BUNDLES_DIR/$BUNDLE" || { echo "No such bundle: $BUNDLE" >&2; exit 1; }
-  BUNDLES="$BUNDLE"
+  case " $ALL_CATEGORIES " in
+    *" $CATEGORY "*) CATEGORIES="$CATEGORY" ;;
+    *) echo "No such category: $CATEGORY (have: $ALL_CATEGORIES)" >&2; exit 1 ;;
+  esac
 fi
 
 # ─── Install one item, honoring --dry-run / --uninstall ───────
@@ -85,10 +85,10 @@ do_item() {
   fi
 }
 
-# ─── Install one (vendor, bundle, type) ───────────────────────
+# ─── Install one (vendor, category, type) ─────────────────────
 install_type() {
-  local vendor="$1" bundle="$2" type="$3"
-  local srcroot="$BUNDLES_DIR/$bundle/$type"
+  local vendor="$1" category="$2" type="$3"
+  local srcroot="$JSTACK_DIR/$type/$category"
   [ -d "$srcroot" ] || return 0
 
   local destroot; destroot="$(jstack_target "$vendor" "$type")"
@@ -99,19 +99,19 @@ install_type() {
       for item in "$srcroot"/*/; do
         [ -d "$item" ] || continue
         local name; name="$(basename "$item")"
-        do_item "$item" "$destroot/$name" "$vendor:$bundle skill/$name"
+        do_item "$item" "$destroot/$name" "$vendor:$category skill/$name"
       done ;;
     agents)   # each agent is a single .md; install flat
       for item in "$srcroot"/*.md; do
         [ -e "$item" ] || continue
         local name; name="$(basename "$item")"
-        do_item "$item" "$destroot/$name" "$vendor:$bundle agent/$name"
+        do_item "$item" "$destroot/$name" "$vendor:$category agent/$name"
       done ;;
-    commands) # each command is a single .md; namespaced by bundle -> /bundle:name
+    commands) # each command is a single .md; namespaced by category -> /category:name
       for item in "$srcroot"/*.md; do
         [ -e "$item" ] || continue
         local name; name="$(basename "$item")"
-        do_item "$item" "$destroot/$bundle/$name" "$vendor:$bundle command/$bundle:${name%.md}"
+        do_item "$item" "$destroot/$category/$name" "$vendor:$category command/$category:${name%.md}"
       done ;;
   esac
 }
@@ -119,15 +119,15 @@ install_type() {
 # ─── Main ─────────────────────────────────────────────────────
 [ "$UNINSTALL" -eq 1 ] && echo "Uninstalling jstack" || echo "Installing jstack from $JSTACK_DIR"
 echo "  vendors: $VENDORS"
-echo "  bundles: $BUNDLES"
+echo "  categories: $CATEGORIES"
 [ "$DRY_RUN" -eq 1 ] && echo "  (dry run — no changes)"
 echo
 
 for vendor in $VENDORS; do
   echo "▸ $vendor"
-  for bundle in $BUNDLES; do
+  for category in $CATEGORIES; do
     for type in $TYPES; do
-      install_type "$vendor" "$bundle" "$type"
+      install_type "$vendor" "$category" "$type"
     done
   done
 done
