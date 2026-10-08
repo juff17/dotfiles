@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Create the docs/system-overview/ folder for the doc-system-overview skill.
+# Create the docs/system-overview/ folder for the system-overview skill.
 #
 # Ensures <target-dir>/docs/system-overview/ exists and prints its absolute path
 # to stdout. The main agent captures this and writes its markdown into it.
@@ -13,10 +13,10 @@
 #     bash <skill-dir>/scripts/create.sh <target-dir>
 #
 #     Where <skill-dir> is one of:
-#       ~/.claude/skills/doc-system-overview     (Claude Code, global)
-#       ~/.cursor/skills/doc-system-overview     (Cursor, global)
-#       .cursor/skills/doc-system-overview       (Cursor, project)
-#       .claude/skills/doc-system-overview       (Claude Code, project)
+#       ~/.claude/skills/system-overview     (Claude Code, global)
+#       ~/.cursor/skills/system-overview     (Cursor, global)
+#       .cursor/skills/system-overview       (Cursor, project)
+#       .claude/skills/system-overview       (Claude Code, project)
 
 set -euo pipefail
 

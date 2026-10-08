@@ -1,5 +1,5 @@
 ---
-name: doc-readme-write
+name: readme-write
 description: >
   Create and update a project's README. Use when the user wants to write
   a readme, improve or restructure an existing one, or document a new project.

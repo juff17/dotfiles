@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Decide whether doc-system-overview should CREATE or UPDATE for a target directory.
+# Decide whether system-overview should CREATE or UPDATE for a target directory.
 #
 # Routing is decided solely by whether <target-dir>/docs/system-overview/ already exists:
 #     exists  -> update

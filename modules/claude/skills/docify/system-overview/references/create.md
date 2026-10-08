@@ -1,6 +1,6 @@
 # Create flow
 
-Playbook for `/doc-system-overview create [<path>]` (and the bare/path-only invocations, which fall through to this flow for backward compatibility). Produces a fresh `docs/system-overview/` folder under the target directory.
+Playbook for `/system-overview create [<path>]` (and the bare/path-only invocations, which fall through to this flow for backward compatibility). Produces a fresh `docs/system-overview/` folder under the target directory.
 
 The shared context — operating principles, target-directory resolution, output templates — lives in [../SKILL.md](../SKILL.md). This file is the create-specific workflow only.
 
@@ -72,7 +72,7 @@ When all subagents return:
 4. **Refine the architecture diagram.** Now that the agents have surfaced the actual layers, data flow, and external touchpoints, draw the diagram. Apply the multi-diagram rule from [diagrams.md](diagrams.md): if it's getting bloated (>~12 nodes or >3 layers), split into a simplified high-level + one or more focused breakdowns of the most important subsystem.
 5. **Create the docs folder.** Run the create script via Bash. The skill may be installed under Claude Code or Cursor (global or project) — resolve its location, then call `scripts/create.sh`:
    ```sh
-   SKILL_DIR="$(ls -d ~/.claude/skills/doc-system-overview ~/.cursor/skills/doc-system-overview .cursor/skills/doc-system-overview .claude/skills/doc-system-overview 2>/dev/null | head -n1)"
+   SKILL_DIR="$(ls -d ~/.claude/skills/system-overview ~/.cursor/skills/system-overview .cursor/skills/system-overview .claude/skills/system-overview 2>/dev/null | head -n1)"
    bash "$SKILL_DIR/scripts/create.sh" <target-dir>
    ```
    It ensures `<target-dir>/docs/system-overview/` exists (idempotent — re-running over an existing folder is fine) and prints the absolute folder path to stdout. Capture that path. The folder is intentionally a tracked location; no `.gitignore` change is needed and none is made.
