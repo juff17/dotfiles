@@ -112,8 +112,8 @@ Follow the output section of [`references/report-format.md`](references/report-f
 
 - In chat: a short summary, then the top findings ranked by consequence, then
   open questions.
-- Write the full step-by-step report to a Markdown file in your scratchpad and
-  give the path.
+- Write the full step-by-step report to `.claude/docs/audits/` and give the
+  path.
 - If every step is `HANDLED` or `DEGRADED-OK`, say so in one line.
 
 ### 5. Tour (optional)

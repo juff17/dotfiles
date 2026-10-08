@@ -28,13 +28,13 @@ doc is too big: split it by flow, one tour per flow.
 
 Write `.tours/<slug>.tour`, the same `<slug>` as the doc. CodeTour finds tours
 in `.tours/` automatically. If the repo doesn't track `.tours/`, say so; the
-tour then stays local, like `.claude/explained/`.
+tour then stays local, like `.claude/docs/explained/`.
 
 ```json
 {
   "$schema": "https://aka.ms/codetour-schema",
   "title": "Poll resolution change",
-  "description": "Walks the two flows this commit changes. Doc: .claude/explained/poll-resolve-commit.md",
+  "description": "Walks the two flows this commit changes. Doc: .claude/docs/explained/poll-resolve-commit.md",
   "ref": "<commit hash the doc was written against>",
   "steps": []
 }

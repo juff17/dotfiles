@@ -72,7 +72,7 @@ link. A bare `path:line` in backticks is clickable in the Claude Code *terminal*
 - **Link text** = `filename:line`. Short. This is all the reader sees.
 - **Href** = path from the **workspace root**, with a leading `/`, plus `#L<line>`.
   VS Code resolves `/` against the repo root, so no `../../` chains from
-  `.claude/explained/`. Line ranges: `#L120-L160`.
+  `.claude/docs/explained/`. Line ranges: `#L120-L160`.
 - The long path lives in the href, where the preview hides it. **This is what keeps
   refs from becoming clutter** — a 60-char monorepo path renders as 24 visible chars.
 
@@ -298,14 +298,14 @@ own. Hiding a landmine to keep the tone light is the worst thing you can do to t
 ## Output & rendering
 
 **The doc is a file, not a chat message.** Write the seven sections to
-`.claude/explained/<slug>.md` (create the folder if it doesn't exist — it lives in
+`.claude/docs/explained/<slug>.md` (create the folder if it doesn't exist — it lives in
 whatever repo you're working in). `<slug>` names the thing explained:
 `auth-refresh-commit`, `pr-482`, `wallet-ts`.
 
 Then open it:
 
 ```bash
-code -r .claude/explained/<slug>.md
+code -r .claude/docs/explained/<slug>.md
 ```
 
 Tell the reader to hit **`Ctrl+Shift+V`** (`Cmd+Shift+V` on macOS) for the preview —

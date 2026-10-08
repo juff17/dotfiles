@@ -64,7 +64,7 @@ Keep chat short. The full detail goes in the file.
 
 ### Full report file
 
-Write to `<scratchpad>/pr-walkthrough-audit-<name>.md`, where `<name>` is the
+Write to `.claude/docs/audits/pr-audit-<name>.md`, where `<name>` is the
 branch, or the short HEAD hash when auditing the default branch. Use a path the
 user gives instead, if any.
 
