@@ -6,7 +6,7 @@
 # placeholder handles, names, and channels below with your real ones.
 
 # Time window to cover. `previous_business_day` means: on Mon, cover Fri+weekend.
-lookback: previous_business_day   # options: previous_business_day | yesterday | since_last_run
+lookback: previous_business_day   # options: previous_business_day | yesterday
 timezone: America/New_York        # IANA tz; defines day boundaries
 
 # ---------------------------------------------------------------------------
@@ -62,16 +62,8 @@ noise:
   thread_lookback_days: 30      # scan this far back to catch threads still active today
 
 # ---------------------------------------------------------------------------
-# DELIVERY
+# OUTPUT — the digest is presented in the chat. The audience (Engineering,
+# Product, Sales, Operations, …) and any topics to focus on come from the prompt;
+# with neither, the digest is a general cross-functional overview.
 # ---------------------------------------------------------------------------
-delivery:
-  target: slack_canvas                  # slack_canvas | markdown_file | slack_message | email
-  canvas_channel: "#your-digest-channel"  # channel whose canvas we publish to
-  canvas_title: "Daily Digest — {date}" # used as the H1 heading in the canvas
-  # Each run OVERWRITES the channel canvas with that day's digest (replace whole
-  # canvas). One standing canvas per channel; yesterday's content is erased.
-
-# Who reads it. Passed to every summarizer subagent — STEERS WHAT IS COLLECTED, not
-# just terseness/framing. Sales, Product, Engineering, and Operations care about
-# different things, so set this to the real audience. Assume high context, low time.
-audience: "staff+ engineers, EMs, principal/distinguished, directors, CTO"
+title: "Daily Digest — {date}"   # used as the H1 heading

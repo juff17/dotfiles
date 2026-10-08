@@ -1,7 +1,8 @@
 # Digest format
 
-The final canvas document the assembler writes to `digest.md`. Audience: whoever is
-defined in `config.yaml` (`audience`) — assume high context, low time. This is a
+The final digest the assembler presents in the chat. Audience: whoever the user named
+when invoking the skill, or a general cross-functional reader if they named no one —
+assume high context, low time. This is a
 **narrative** digest: a short org-wide synthesis up top, then one prose section per
 group. It should read in ~5 minutes and tell the reader the *direction* of each
 team, not just a list of items.
@@ -70,7 +71,7 @@ The bad version is just the Overview re-typed — it drags technical specifics d
 the bullets and adds nothing. Write the good kind.
 
 ## Rules
-- **H1** is `delivery.canvas_title` with the date substituted.
+- **H1** is the config `title` with the date substituted.
 - **Across the Organization** comes first and is synthesis, not a list — draw it from each
   group's `headline`. State the through-line: what's converging, what direction the
   org is heading. Keep it to 3–5 sentences.
@@ -94,11 +95,11 @@ the bullets and adds nothing. Write the good kind.
   may appear in both, but the Summary must add synthesis, never re-list bullet by
   bullet. Do not repeat the same item across two different groups.
 - **Be selective in the Overview.** Aim for ~5–7 bullets per group — only what a busy
-  staff+/director reader would act on or change a plan over. Drop internal
+  reader in the audience would act on or change a plan over. Drop internal
   implementation choices with no cross-team or customer impact; "it's a decision" does
   not by itself earn a bullet. The summarizer ranks these, but hold the line at assembly.
 - **Link every Overview bullet** to its permalink as `[thread](<link>)`. The Summary
   is clean prose — keep links in the Overview, not inline in the paragraph.
 - **Omit empty sections** entirely — never write "none" or an empty header. If a
   group has no reportable activity, omit the whole group section.
-- Markdown only (Slack canvas renders markdown). No HTML.
+- Markdown only (it renders in the chat). No HTML.
