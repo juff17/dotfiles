@@ -106,10 +106,28 @@ If you find yourself writing a file without one of these, stop and add it before
 ## Core frameworks & packages
 <short bulleted list — non-exhaustive, just the core ones>
 
+## Common commands
+<Only commands the repo actually defines (manifest scripts, Makefile targets, task runners, documented in README). Compact table: Task | Command. Typical rows: install, run locally, test, lint, migrate, build. Omit a row the repo has no command for; omit the section if none exist.>
+
+| Task | Command |
+|---|---|
+| Run locally | `npm run dev` |
+| Test | `npm test` |
+| Migrate | `npm run db:migrate` |
+
 ## Architecture
 <simplified high-level mermaid flowchart>
 <2-4 sentences explaining it>
 <if complex: a second focused mermaid breaking down the most important subsystem>
+
+## Where to look
+<Table that maps the change a new dev is likely to make to the file or folder where they start. 5-10 rows, picked for this repo (e.g. no "edit a prompt" row without an LLM). Each "Look at" cell is a link using the `../../` prefix, plus a few words when the path alone doesn't say enough. Link to a section file instead when it covers the topic better.>
+
+| I want to… | Look at |
+|---|---|
+| Add an endpoint | [src/routes/](../../src/routes/) (one file per resource, registered in [src/app.ts](../../src/app.ts)) |
+| Change a table | [prisma/schema.prisma](../../prisma/schema.prisma), then `npm run db:migrate` |
+| Change how search results are ranked | [src/search/ranker.ts](../../src/search/ranker.ts); see [Worth knowing about](notable.md) |
 
 ## Infrastructure
 <2-3 sentences max — runtime, where deployed if obvious from configs; flag for follow-up if user wants depth>

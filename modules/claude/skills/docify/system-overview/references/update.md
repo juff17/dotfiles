@@ -25,7 +25,9 @@ Read everything under `SL_SYSTEM_OVERVIEW_DOCS_DIR` and hold it as the authorita
 1. **`README.md`** in full. Capture, verbatim:
    - the Overview paragraph,
    - the Core frameworks & packages list,
+   - the Common commands table,
    - the Architecture mermaid block(s),
+   - the Where to look table,
    - the Infrastructure prose,
    - the External services list,
    - the Diagrams section (each diagram's link, name, one-line description),
@@ -54,7 +56,9 @@ But the output is not fresh prose — it's a **diff** that produces the investig
 - **Still-present documented module** → a `domain-investigator` in delta mode whose baseline is **only the `notable.md` entries whose file link points inside that module's path**. Partition `notable.md` by path-prefix so each domain investigator sees and tags only its own entries — never another module's.
 - **Documented module gone** (directory deleted/renamed, confirmed by absence of the path) → its notable entries go to the removal worklist.
 
-**Top-level fields** (Overview / Core frameworks / External services / Infrastructure — the ones the main agent owns, not an investigator). Re-derive each from the same sources, diff against the Phase 0 baseline, and tag per field: `UNCHANGED` / `CHANGED` (with what) / added items / removed items. If a re-derived value is semantically equivalent to the baseline, **keep the baseline wording** — especially the Overview paragraph: rewrite it only if the repo's purpose, role, or position materially changed.
+**Top-level fields** (Overview / Core frameworks / Common commands / External services / Infrastructure — the ones the main agent owns, not an investigator).
+
+**Where to look** is also main-agent owned. Check each row's path still exists and still holds that code. A row whose path was moved gets its link fixed; a row whose subsystem is gone is removed. Add a row only for a newly-appeared subsystem (new signal or new complex module). If the baseline wiki has no Where to look or Common commands section (written before these existed), add it as a new section. Re-derive each from the same sources, diff against the Phase 0 baseline, and tag per field: `UNCHANGED` / `CHANGED` (with what) / added items / removed items. If a re-derived value is semantically equivalent to the baseline, **keep the baseline wording** — especially the Overview paragraph: rewrite it only if the repo's purpose, role, or position materially changed.
 
 **Roster rule:** Phase 1 decides *which* investigators run and with *what* baseline; it must **never** downgrade a still-present subsystem to "skip." Every still-present subsystem is fully re-investigated. The changes that matter most — a response-shape change, a new column's meaning, a reworked ranking algorithm — are invisible to this top-level sweep and only surface when the investigator re-reads the code.
 
@@ -111,7 +115,7 @@ Apply only the tagged deltas. The no-reword guardrail at the top of this file go
 | `UNCHANGED` items | **no operation at all** — the absence of a write is the strongest guarantee |
 | A whole **new** section file (newly-appeared signal) | **Write** the new file (back-link `[← back to overview](README.md)` as the literal first line) + **Edit** README's `## Index` to add its bullet in canonical order (Endpoints, Database, LLM flow, Async messaging, Worth knowing about) |
 | A whole **removed** section file (disappeared signal, positive absence) | `rm` the file + **Edit** README's `## Index` to drop its bullet + prune any diagrams that cross-referenced it (below) |
-| README top-level lists (Core frameworks, External services) | **Edit** — add / remove only the changed bullets; never re-emit the list |
+| README top-level lists (Core frameworks, External services) and tables (Common commands, Where to look) | **Edit** — add / remove / fix only the changed bullets or rows; never re-emit the list |
 | README Overview / Infrastructure prose | **Edit only if Phase 1 tagged it `CHANGED`**; otherwise leave it |
 | Architecture mermaid | **Edit-replace the block only if architecture *materially* changed** — a participant / layer / external touchpoint added or removed, or a top-level data-flow edge changed direction / existence. A renamed helper, a new endpoint inside an existing layer, or "I'd lay it out differently" are **not** material. When in doubt, leave it alone. |
 | A single diagram file (`NEW` or redraw) | **Write** (overwrite by name) — a diagram file is a generated artifact with no hand-authored prose to preserve |

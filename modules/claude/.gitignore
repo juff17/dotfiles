@@ -12,3 +12,6 @@ __pycache__/
 
 # Per-machine skill configs — never commit; copy from config.example.yaml
 **/config.yaml
+
+# Per-machine record of what ./setup installed
+.installed

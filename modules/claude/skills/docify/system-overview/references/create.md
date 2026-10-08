@@ -17,6 +17,7 @@ From this — without spawning anything yet — produce these pieces of the fina
 - **Overview** — one paragraph, no more. Purpose, core function, what it sits between.
 - **Core frameworks & packages** — short bulleted list. The libraries a new dev *must* know to navigate. Skim the manifest, then do a quick `grep` of imports to drop dead deps. Skip standard utility libs (lodash, dotenv, etc.) unless they're load-bearing.
 - **External services this repo depends on** — bulleted list, no per-service "why". Derive from SDK imports, env vars (`*_API_KEY`, `*_URL`), and config.
+- **Common commands** — from manifest scripts, `Makefile` targets, task runners, and commands the repo's own README documents. List only what exists; never invent a command.
 - **Module inventory** — list the top-level subsections (e.g., `api/`, `db/`, `services/orchestrator/`, `prompts/`). Note which look complex or core (you'll spawn `domain-investigator` instances for those in Phase 2).
 
 Then form **detection signals** for the deep-dive dispatch:
@@ -69,15 +70,16 @@ When all subagents return:
 1. **Assemble the primary outputs** into the template (see "Output template" in [../SKILL.md](../SKILL.md)). Drop sections whose signal was absent (no LLM section in a non-AI repo, etc.).
 2. **Roll up flagged conventions** from all agents. Apply the *most-of-the-time* rule: a convention surfaces only if multiple agents reported it or one agent saw it pervasively. If any agent flagged a convention as inconsistent, say so on that line. Don't catalog exceptions.
 3. **Roll up flagged notable workflows** + the `domain-investigator`'s primary list. De-duplicate. Order by how central they look.
-4. **Refine the architecture diagram.** Now that the agents have surfaced the actual layers, data flow, and external touchpoints, draw the diagram. Apply the multi-diagram rule from [diagrams.md](diagrams.md): if it's getting bloated (>~12 nodes or >3 layers), split into a simplified high-level + one or more focused breakdowns of the most important subsystem.
-5. **Create the docs folder.** Run the create script via Bash. The skill may be installed under Claude Code or Cursor (global or project) — resolve its location, then call `scripts/create.sh`:
+4. **Build the Where to look table** from the module inventory and the agents' outputs. Pick the 5-10 changes a new dev is most likely to make in this repo, and point each at the file or folder where that change starts. Every path must come from something you or an agent actually read.
+5. **Refine the architecture diagram.** Now that the agents have surfaced the actual layers, data flow, and external touchpoints, draw the diagram. Apply the multi-diagram rule from [diagrams.md](diagrams.md): if it's getting bloated (>~12 nodes or >3 layers), split into a simplified high-level + one or more focused breakdowns of the most important subsystem.
+6. **Create the docs folder.** Run the create script via Bash. The skill may be installed under Claude Code or Cursor (global or project) — resolve its location, then call `scripts/create.sh`:
    ```sh
    SKILL_DIR="$(ls -d ~/.claude/skills/system-overview ~/.cursor/skills/system-overview .cursor/skills/system-overview .claude/skills/system-overview 2>/dev/null | head -n1)"
    bash "$SKILL_DIR/scripts/create.sh" <target-dir>
    ```
    It ensures `<target-dir>/docs/system-overview/` exists (idempotent — re-running over an existing folder is fine) and prints the absolute folder path to stdout. Capture that path. The folder is intentionally a tracked location; no `.gitignore` change is needed and none is made.
-6. **Write the files.** Use the Write tool to create each markdown file inside the returned folder, following the "Output template" in [../SKILL.md](../SKILL.md). Skip files whose section was absent (no `llm.md` in a non-AI repo, etc.). Always write `README.md`. Order of operations:
+7. **Write the files.** Use the Write tool to create each markdown file inside the returned folder, following the "Output template" in [../SKILL.md](../SKILL.md). Skip files whose section was absent (no `llm.md` in a non-AI repo, etc.). Always write `README.md`. Order of operations:
    - **Diagrams first** (only if Phase 2.5 produced any). For each structured block the `diagram-investigator` returned, write the diagram file to `diagrams/sequence/<short-name>.md` or `diagrams/flowcharts/<short-name>.md` (subdirs auto-create). Use the "Diagram file template" in [../SKILL.md](../SKILL.md).
    - Then write `endpoints.md`, `database.md`, `llm.md`, `queues.md`, `notable.md`, splicing in cross-reference links to any diagrams that exist for the relevant notable endpoint or workflow.
    - Finally write `README.md`, including the `Diagrams` section if any diagrams were produced.
-7. **Report briefly in chat.** One or two sentences: where the folder is and which files were written (mention diagram count if non-zero). Do NOT dump the markdown into the chat — the output is on disk now.
+8. **Report briefly in chat.** One or two sentences: where the folder is and which files were written (mention diagram count if non-zero). Do NOT dump the markdown into the chat — the output is on disk now.

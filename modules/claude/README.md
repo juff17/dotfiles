@@ -41,7 +41,13 @@ namespaced by category, so `commands/shortcuts/discuss.md` installs as
 ./setup --dry-run         # show what would happen, change nothing
 ./setup --uninstall       # remove everything jstack installed
 ./setup --copy            # copy instead of symlink (Windows / forced)
+./setup --force           # also replace items jstack did not install
 ```
+
+Setup only replaces or removes what it installed (a symlink into this repo, or
+a copy recorded in the git-ignored `.installed` file). If something else
+already has a tool's name, setup skips it with a warning. Installs whose
+source was renamed or deleted are removed on each run.
 
 Installs are **symlinks** on macOS/Linux, so edits here are live and
 `git pull` updates every machine. Re-run `./setup` only after adding or

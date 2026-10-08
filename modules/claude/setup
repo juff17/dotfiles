@@ -13,6 +13,11 @@
 #   ./setup --dry-run             show what would happen, change nothing
 #   ./setup --uninstall           remove everything jstack installed
 #   ./setup --copy                copy instead of symlink (force, any platform)
+#   ./setup --force               also replace or remove items jstack did not install
+#
+# Setup only replaces or removes what it installed: a symlink into this repo,
+# or a copy listed in .installed. Anything else at a target path is skipped with
+# a warning. Links and copies whose source was renamed or deleted are removed.
 set -euo pipefail
 
 JSTACK_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -27,8 +32,13 @@ HOST="auto"
 CATEGORY="all"
 DRY_RUN=0
 UNINSTALL=0
+FORCE=0
+SKIPPED=0
+# One "src<TAB>dst" line per install. Symlinks identify themselves by target,
+# but copies can't, so this is how ownership of a copy is known.
+MANIFEST="$JSTACK_DIR/.installed"
 
-usage() { sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; }
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -37,6 +47,7 @@ while [ $# -gt 0 ]; do
     --copy)      export JSTACK_FORCE_COPY=1; shift ;;
     --dry-run)   DRY_RUN=1; shift ;;
     --uninstall) UNINSTALL=1; shift ;;
+    --force)     FORCE=1; shift ;;
     -h|--help)   usage; exit 0 ;;
     *) echo "Unknown flag: $1" >&2; usage; exit 1 ;;
   esac
@@ -55,7 +66,9 @@ fi
 # A category is any subdir of skills/, commands/, or agents/.
 ALL_CATEGORIES="$(
   for type in $TYPES; do
-    for d in "$JSTACK_DIR/$type"/*/; do [ -d "$d" ] && basename "$d"; done
+    # `if` rather than `&&`: a false test as the loop's last command fails the
+    # pipeline under pipefail, and set -e then exits with no message.
+    for d in "$JSTACK_DIR/$type"/*/; do if [ -d "$d" ]; then basename "$d"; fi; done
   done | sort -u | xargs
 )"
 
@@ -68,12 +81,43 @@ else
   esac
 fi
 
-# ─── Install one item, honoring --dry-run / --uninstall ───────
+# ─── Ownership ────────────────────────────────────────────────
+manifest_has() { [ -f "$MANIFEST" ] && awk -F'\t' -v d="$1" '$2 == d { found = 1 } END { exit !found }' "$MANIFEST"; }
+
+manifest_drop() {
+  [ -f "$MANIFEST" ] || return 0
+  awk -F'\t' -v d="$1" '$2 != d' "$MANIFEST" > "$MANIFEST.tmp" && mv "$MANIFEST.tmp" "$MANIFEST"
+}
+
+manifest_add() { manifest_drop "$2"; printf '%s\t%s\n' "$1" "$2" >> "$MANIFEST"; }
+
+# owned DST — true if jstack installed DST.
+owned() {
+  local dst="$1"
+  if [ -L "$dst" ]; then
+    case "$(readlink "$dst")" in "$JSTACK_DIR"/*) return 0 ;; esac
+  fi
+  manifest_has "$dst"
+}
+
+# ─── Install one item, honoring --dry-run / --uninstall / --force ─
 do_item() {
   local src="$1" dst="$2" label="$3"
+  local present=0
+  { [ -e "$dst" ] || [ -L "$dst" ]; } && present=1
+
+  if [ "$present" -eq 1 ] && [ "$FORCE" -eq 0 ] && ! owned "$dst"; then
+    echo "  skipped  $label  ($dst exists and was not installed by jstack)" >&2
+    SKIPPED=$((SKIPPED + 1))
+    return 0
+  fi
+
   if [ "$UNINSTALL" -eq 1 ]; then
-    if [ -e "$dst" ] || [ -L "$dst" ]; then
-      [ "$DRY_RUN" -eq 1 ] && echo "  would remove  $label" || { rm -rf "$dst"; echo "  removed  $label"; }
+    [ "$present" -eq 1 ] || return 0
+    if [ "$DRY_RUN" -eq 1 ]; then
+      echo "  would remove  $label"
+    else
+      rm -rf "$dst"; manifest_drop "$dst"; echo "  removed  $label"
     fi
     return 0
   fi
@@ -81,7 +125,50 @@ do_item() {
     echo "  would link  $label"
   else
     _link_or_copy "$src" "$dst"
+    manifest_add "$src" "$dst"
     echo "  linked  $label"
+  fi
+}
+
+# ─── Remove installs whose source no longer exists ────────────
+# Covers renamed or deleted tools. Symlinks are found by scanning the vendor's
+# dirs (this also catches links made before .installed existed); copies are
+# found through the manifest.
+prune_stale() {
+  local vendor="$1" type destroot link src dst
+  for type in $TYPES; do
+    destroot="$(jstack_target "$vendor" "$type")"
+    [ -n "$destroot" ] && [ -d "$destroot" ] || continue
+    # Depth 2 reaches namespaced commands (commands/<category>/<name>.md).
+    while IFS= read -r link; do
+      case "$(readlink "$link")" in "$JSTACK_DIR"/*) ;; *) continue ;; esac
+      [ -e "$link" ] && continue
+      remove_stale "$link"
+    done < <(find "$destroot" -mindepth 1 -maxdepth 2 -type l)
+  done
+  [ -f "$MANIFEST" ] || return 0
+  while IFS=$'\t' read -r src dst; do
+    [ -e "$src" ] && continue
+    # Symlinks were handled by the scan above.
+    [ -L "$dst" ] && continue
+    if ! [ -e "$dst" ]; then
+      [ "$DRY_RUN" -eq 1 ] || manifest_drop "$dst"
+      continue
+    fi
+    # Only this vendor's entries; the next vendor's pass handles its own.
+    for type in $TYPES; do
+      destroot="$(jstack_target "$vendor" "$type")"
+      case "$dst" in "$destroot"/*) [ -n "$destroot" ] && { remove_stale "$dst"; break; } ;; esac
+    done
+  done < <(cat "$MANIFEST")
+}
+
+remove_stale() {
+  local dst="$1"
+  if [ "$DRY_RUN" -eq 1 ]; then
+    echo "  would remove stale  $dst"
+  else
+    rm -rf "$dst"; manifest_drop "$dst"; echo "  removed stale  $dst"
   fi
 }
 
@@ -130,7 +217,13 @@ for vendor in $VENDORS; do
       install_type "$vendor" "$category" "$type"
     done
   done
+  prune_stale "$vendor"
 done
 
 echo
-echo "Done."
+if [ "$SKIPPED" -gt 0 ]; then
+  echo "Done, with $SKIPPED item(s) skipped because something not installed by jstack is in the way." >&2
+  echo "Move those aside, or re-run with --force to replace them." >&2
+else
+  echo "Done."
+fi
