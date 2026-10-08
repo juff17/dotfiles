@@ -1,27 +1,54 @@
-# Publishing a ticket
+# Writing a ticket out
 
-This file is the provider-agnostic mechanics of pushing
-a ticket into whatever tracker is connected — Jira, Linear, GitHub, Asana,
-Monday, ClickUp, Azure DevOps. The steps are the same everywhere; only the small
-**quirks table** at the bottom differs by provider.
+Authoring rules live in [`../SKILL.md`](../SKILL.md); this file is only about
+where the finished ticket lands.
 
-## Pick the provider
+## Pick the destination
 
-Detect it from the connected MCPs rather than asking by default:
+**The default is a Markdown file in the repo.** With no signal either way, write
+the file — don't detect MCPs, don't ask which tracker to use.
+
+Use a tracker only when the user asks for one: they name a provider ("put this
+in Jira"), say to file it in the tracker, or hand you an existing ticket key to
+update. Then follow [To a tracker](#to-a-tracker).
+
+## To a Markdown file
+
+1. **Path** — `.claude/docs/tickets/<slug>.md`, relative to the repo root,
+   where `<slug>` is the kebab-cased short description from the title:
+   `[payments-api] Add tax to checkout total` →
+   `.claude/docs/tickets/add-tax-to-checkout-total.md`. Create the directory if
+   it isn't there. If the repo already keeps tickets somewhere else, follow that
+   instead of this convention.
+2. **Body** — the title as an H1 (`# [<repo_name>] <short description>`),
+   then user story → requirements → acceptance criteria as plain Markdown.
+3. **One file per ticket**, even when a request produced several.
+4. **Never clobber.** If the path already exists, read it before writing. Same
+   ticket → that's an update, switch to [`update.md`](update.md). Different
+   ticket → pick a distinct slug.
+5. **Relationships still stay out of the body.** A file has no link fields, so
+   there's nowhere live to put a dependency — tell the user about it rather than
+   writing a ticket key or a path to a sibling ticket into the prose.
+6. **Report** each file path.
+
+## To a tracker
+
+### Pick the provider
+
+If the user named one, use it. Otherwise detect it from the connected MCPs:
 
 - **Discover** which tracker tools are connected — try `ToolSearch` for
   `"create issue"`, `"create task"`, `"create work item"`.
 - **One clear match** (only one tracker connected) → use it, no question.
 - **Several connected** (e.g. Jira *and* Linear) → ask which one, **once per
   session**, and reuse that choice for every ticket after.
-- **None connected** → tell the user and offer the Markdown fallback:
+- **None connected** → say so and write the Markdown file instead:
   > I don't see an issue-tracker MCP (Jira, Linear, GitHub…) connected, so I
-  > can't file this ticket directly. I can write it as a Markdown file instead —
-  > want that, or would you rather connect one first?
+  > can't file this directly — I've written it to
+  > `.claude/docs/tickets/<slug>.md` instead. Connect a tracker and I can file
+  > it properly.
 
-Skip detection only if the user already named a provider.
-
-## Create a ticket
+### Create a ticket
 
 1. **Discover the tools by capability, not by name.** Tool names vary by server
    (`createJiraIssue`, `create_issue`, `issue_write`, `create_tasks`,
@@ -44,7 +71,7 @@ Skip detection only if the user already named a provider.
    rather than describing it in prose.
 6. **Report** each created ticket's key and link.
 
-## Update a ticket
+### Update a ticket
 
 1. **Fetch first** with the get tool — never overwrite blind. Read its current
    summary, type, and description before touching anything.
@@ -63,7 +90,7 @@ its publishing half.
 > **Relationship links are the exception** — they carry content the body is no
 > longer allowed to hold, so setting them is part of publishing.
 
-## Provider quirks
+### Provider quirks
 
 Everything above is shared. These are the only per-provider differences — add a
 row when you wire up a new tracker:

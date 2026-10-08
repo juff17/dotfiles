@@ -1,10 +1,12 @@
 # Updating a ticket
 
-Use this flow when the user gives an **existing ticket number** or asks to
-update/change it. The ticket already exists, so tread carefully.
+Use this flow when the user points at an **existing ticket** — a Markdown file,
+a ticket number, or an ask to update/change one. It already exists, so tread
+carefully.
 
-1. **Fetch the ticket first** — see [`publish.md`](publish.md) for the provider
-   mechanics — read its current contents before touching anything. Never
+1. **Read the ticket first** — a file under `.claude/docs/tickets/`, or the
+   tracker if that's where it lives; see [`publish.md`](publish.md) for the
+   mechanics of each. Read its current contents before touching anything. Never
    overwrite blind.
 2. **If the ticket is blank/empty**, switch to
    [`create.md`](create.md).
@@ -16,4 +18,5 @@ update/change it. The ticket already exists, so tread carefully.
    story or requirements shift, revisit the acceptance criteria so they stay
    consistent, and don't leave stale sections behind.
 5. **Tell the user exactly what you changed and why** — which sections, what
-   moved, and what you deliberately left alone. Report the ticket's link.
+   moved, and what you deliberately left alone. Report where it lives — the
+   file path, or the ticket link.

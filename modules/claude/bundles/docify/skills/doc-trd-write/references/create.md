@@ -24,7 +24,6 @@ it from scratch.
    prompt — see [`../SKILL.md`](../SKILL.md). Cut framing like "as requested" or
    "as we discussed", and replace any placeholder or throwaway term the user
    used to point you at the work with what the domain and the code call it.
-5. **Publish the TRD** into the doc store — see [`publish.md`](publish.md): detect
-   the provider, resolve the space and parent, then create the page with the
-   drafted body.
-6. **Report back** the created page's title and link.
+5. **Write the TRD out** — see [`publish.md`](publish.md): a Markdown file under
+   `.claude/docs/trds/` by default, or the doc store if the user asked for one.
+6. **Report back** where it landed — the file path, or the page title and link.

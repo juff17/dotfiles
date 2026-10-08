@@ -1,27 +1,54 @@
-# Publishing a TRD
+# Writing a TRD out
 
-This file is the provider-agnostic mechanics of getting
-the document into whatever doc store is connected — Confluence, Notion, Google
-Docs, Coda, and the like. The steps are the same everywhere; only the small
-**quirks table** at the bottom differs by provider.
+Authoring rules live in [`../SKILL.md`](../SKILL.md); this file is only about
+where the finished TRD lands.
 
-## Pick the provider
+## Pick the destination
 
-Detect it from the connected MCPs rather than asking by default:
+**The default is a Markdown file in the repo.** With no signal either way, write
+the file — don't detect MCPs, don't ask which doc store to use.
+
+Use a doc store only when the user asks for one: they name a provider ("put this
+in Confluence"), say to publish it, or hand you an existing page to revise. Then
+follow [To a doc store](#to-a-doc-store).
+
+## To a Markdown file
+
+1. **Path** — `.claude/docs/trds/<slug>.md`, relative to the repo root, where
+   `<slug>` is the kebab-cased epic name: `TRD: Vendor invoice ingestion` →
+   `.claude/docs/trds/vendor-invoice-ingestion.md`. Create the directory if it
+   isn't there. If the repo already keeps TRDs somewhere else, follow that
+   instead of this convention.
+2. **Body** — the title as an H1 (`# TRD: <epic name>`), then the epic overview
+   and the staged plan as plain Markdown.
+3. **One file per epic.** If the request is really several epics, say so rather
+   than forcing them into one file.
+4. **Never clobber.** If the path already exists, read it before writing. Same
+   epic → that's an update, switch to [`update.md`](update.md). Different epic →
+   pick a distinct slug.
+5. **Diagrams and specs** go in as fenced blocks — ` ```mermaid ` and
+   ` ```yaml ` for OpenAPI. Both render in a Markdown file, so nothing has to be
+   dropped or attached as an image here.
+6. **Report** the file path.
+
+## To a doc store
+
+### Pick the provider
+
+If the user named one, use it. Otherwise detect it from the connected MCPs:
 
 - **Discover** which doc-store tools are connected — try `ToolSearch` for
   `"create page"`, `"create document"`, `"create file"`.
 - **One clear match** (only one doc store connected) → use it, no question.
 - **Several connected** (e.g. Confluence *and* Notion) → ask which one, **once
   per session**, and reuse that choice.
-- **None connected** → tell the user and offer the Markdown fallback:
+- **None connected** → say so and write the Markdown file instead:
   > I don't see a doc-store MCP (Confluence, Notion, Google Docs…) connected, so
-  > I can't publish this TRD directly. I can write it as a Markdown file instead
-  > — want that, or would you rather connect one first?
+  > I can't publish this directly — I've written it to
+  > `.claude/docs/trds/<slug>.md` instead. Connect a doc store and I can publish
+  > it properly.
 
-Skip detection only if the user already named a provider.
-
-## Create a page
+### Create a page
 
 1. **Discover the tools by capability, not by name.** Tool names vary by server
    (`createConfluencePage`, `notion-create-pages`, `create_file`,
@@ -45,7 +72,7 @@ Skip detection only if the user already named a provider.
    plan calls for — surface it if the connected tool can't render one.
 5. **Report** the created page's title and link.
 
-## Update a page
+### Update a page
 
 1. **Fetch first** with the get tool — never overwrite blind. A TRD evolves stage
    by stage, so preserve completed-stage content unless the user is explicitly
@@ -59,7 +86,7 @@ Skip detection only if the user already named a provider.
 See [`update.md`](update.md) for the full cautious update flow; the above is just
 its publishing half.
 
-## Provider quirks
+### Provider quirks
 
 Everything above is shared. These are the only per-provider differences — add a
 row when you wire up a new store:

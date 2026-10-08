@@ -147,11 +147,16 @@ inventing a new one.
 ## Providers and Flows
 
 The *authoring rules* above define what a TRD should say, regardless of where it
-lives. Publishing is a separate step:
-[`references/publish.md`](references/publish.md) detects the connected doc-store
-MCP (Confluence, Notion, Google Docs, …), publishes the page there, and falls
-back to writing a Markdown file if none is connected. Follow it for the doc-store
-mechanics.
+lives. Where it lands is a separate step:
+[`references/publish.md`](references/publish.md) writes a Markdown file under
+`.claude/docs/trds/` by **default**, and publishes to a connected doc-store MCP
+(Confluence, Notion, Google Docs, …) only when the user asks for one. Follow it
+for the mechanics either way.
+
+Those files are agent working notes, not repo documentation — they sit beside
+the rest of `.claude/` rather than in a `docs/` tree a reader would browse. If
+the repo gitignores `.claude/`, say so when you write one: the TRD won't travel
+with the code, and a doc store is the better home for it.
 
 - **Creating** from scratch (no existing document, or the user asks to write or
   plan one): follow [`references/create.md`](references/create.md).

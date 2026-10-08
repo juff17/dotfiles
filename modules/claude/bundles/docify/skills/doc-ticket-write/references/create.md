@@ -14,7 +14,8 @@ scratch.
    in [`../SKILL.md`](../SKILL.md): nothing the reader can't reach, no
    conversational framing, no ticket keys, no names that can be reassigned, no
    status.
-4. **Publish each ticket** into the tracker — see [`publish.md`](publish.md):
-   detect the provider, resolve the project, and create the issue with the
-   drafted body.
-5. **Report back** each created ticket's key and link.
+4. **Write each ticket out** — see [`publish.md`](publish.md): a Markdown file
+   under `.claude/docs/tickets/` by default, or the tracker if the user asked
+   for one.
+5. **Report back** where each ticket landed — the file path, or the key and
+   link.

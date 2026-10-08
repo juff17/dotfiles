@@ -86,8 +86,10 @@ thing — and no more:
   changed. Carry the facts they need into the ticket itself; link out only to
   something durable and reachable, like a design file or a published spec.
 - **Dependencies** — anything that must land first, or that this blocks. These
-  belong in the tracker's link fields rather than the body (see below), and if
-  there's no real ticket to point at, leave the dependency out.
+  belong in the tracker's link fields rather than the body (see below) — and a
+  Markdown ticket has no such fields, so raise the dependency with the user
+  instead of writing it down. If there's no real ticket to point at, leave the
+  dependency out.
 
 Say *what* must be true and *why*, plus any hard constraints — but stop short of
 dictating *how*. Spelling out every implementation detail turns the ticket into
@@ -184,11 +186,16 @@ concise imperative summary.
 ## Providers and Flows
 
 The *authoring rules* above define what a ticket should say, regardless of where
-it's filed. Publishing is a separate step:
-[`references/publish.md`](references/publish.md) detects the connected
-issue-tracker MCP (Jira, Linear, GitHub, …), files the ticket there, and falls
-back to writing a Markdown file if none is connected. Follow it for the tracker
-mechanics.
+it's filed. Where it lands is a separate step:
+[`references/publish.md`](references/publish.md) writes a Markdown file under
+`.claude/docs/tickets/` by **default**, and files the ticket into a connected
+issue-tracker MCP (Jira, Linear, GitHub, …) only when the user asks for one.
+Follow it for the mechanics either way.
+
+Those files are agent working notes, not repo documentation — they sit beside
+the rest of `.claude/` rather than in a `docs/` tree a reader would browse. If
+the repo gitignores `.claude/`, say so when you write one: the ticket won't
+travel with the code, and the tracker is the better home for it.
 
 - **Creating** from scratch (no ticket number given, or the user asks to make or create
   one): follow [`references/create.md`](references/create.md).
