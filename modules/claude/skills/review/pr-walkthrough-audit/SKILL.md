@@ -119,12 +119,12 @@ Follow the output section of [`references/report-format.md`](references/report-f
 ### 5. Tour (optional)
 
 With `--tour`, or if the user asks after the report, turn the findings into a
-CodeTour file using the `code-tour` skill, one step per finding in execution
+CodeTour file using the `explain-code` skill (its `references/tour.md`), one step per finding in execution
 order, with `ref` set to the HEAD commit hash you recorded (a branch name moves
 as commits land). Write it to your scratchpad, not the repo, and offer to copy
 it into the repo's `.tours/`. The mapping is in
 [`references/report-format.md`](references/report-format.md). Validate it with
-the code-tour skill's `scripts/validate.py` before reporting the path.
+the explain-code skill's `scripts/validate.py` before reporting the path.
 
 ### 6. Offer fixes
 

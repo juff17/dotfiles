@@ -1,15 +1,27 @@
 ---
-name: explain-visual
+name: explain-code
 description: >
-  Explain code, a commit, a diff, or a PR to a visual learner — rendered diagrams
-  and short bullets instead of dense prose. Use whenever the user wants to
-  understand code they didn't write: "explain this commit", "explain the
-  changes", "walk me through this file", "what does this do", "help me
-  understand what you just wrote", "explain this PR".
+  Explain code, a commit, a diff, a PR, or a system to a visual learner in two
+  linked parts: a doc of rendered diagrams and short bullets, and a CodeTour
+  click-through that walks the same paths line by line in VS Code. Use whenever
+  the user wants to understand code they didn't write: "explain this commit",
+  "explain the changes", "walk me through this", "give me a tour", "what does
+  this do", "help me understand what you just wrote", "explain this PR".
 license: MIT
 ---
 
-# explain-visual — explain code to someone who thinks in pictures
+# explain-code: explain code to someone who thinks in pictures
+
+Two outputs from one read of the code:
+
+1. **The doc**: the shape. Diagrams and bullets, read in VS Code's markdown
+   preview. Everything below up to "Output & rendering" is about the doc.
+2. **The tour**: the path. A CodeTour file that steps through the doc's traces
+   at the real lines. Built from the finished doc; see
+   [`references/tour.md`](references/tour.md).
+
+Write the doc first, then the tour. Both by default; for a single function or a
+small diff, write the doc and offer the tour.
 
 The reader is a working engineer. They are **not** slow — they are *visual*, and
 they drown in walls of prose. They want the shape of the thing first, then the
@@ -278,9 +290,9 @@ own. Hiding a landmine to keep the tone light is the worst thing you can do to t
 
 | Change size | What to do |
 |---|---|
-| A function / small diff | One diagram, one trace, skip "The pieces". Keep it to a screen. |
+| A function / small diff | One diagram, one trace, skip "The pieces". Keep it to a screen. Offer the tour instead of writing it. |
 | A commit / feature | All seven sections. One diagram + trace per flow. Default mode. |
-| A multi-system epic | Lead with the **system map**, then a diagram + trace per flow (~8 max). Group "The pieces" by subsystem, not by file. |
+| A multi-system epic | Lead with the **system map**, then a diagram + trace per flow (~8 max). Group "The pieces" by subsystem, not by file. One tour per flow if a single tour would pass ~15 steps. |
 | More than ~8 flows | Map + the flow list, then **ask which to go deep on**. Never truncate silently. |
 
 ## Output & rendering
@@ -315,8 +327,14 @@ last step and it belongs to them.
 wrong mermaid shape — a moved quantity is an `xychart-beta`, a before/after is a
 markdown table (`references/diagrams.md`). Never reach for box art.
 
+Then build the tour from the doc ([`references/tour.md`](references/tour.md)),
+write it to `.tours/<slug>.tour`, and validate it with `scripts/validate.py`.
+Tell the reader to start it from the **CodeTour** panel in the Explorer sidebar
+(it needs the CodeTour extension, `vsls-contrib.codetour`).
+
 In chat, don't paste the doc. Give the TL;DR bullets and the ⚠️ lines from
-**Watch out** — what matters if they never open the file — then the path to it.
+**Watch out** — what matters if they never open the file — then the paths to the
+doc and the tour.
 
 ## Anti-patterns — what failure looks like
 
