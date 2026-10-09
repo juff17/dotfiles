@@ -18,3 +18,7 @@ __pycache__/
 
 # Type declarations Claude Code writes beside each loaded mod
 mods/**/.claude-plugin/types/
+
+.tours/
+
+.claude/docs/
