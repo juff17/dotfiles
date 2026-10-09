@@ -1,6 +1,7 @@
 # jstack
 
-Personal home for coding-agent tooling — skills, slash commands, and subagents —
+Personal home for coding-agent tooling — skills, slash commands, subagents, hooks,
+and Claude Code settings —
 organized by **category** and installed onto any machine with one command.
 
 The point: on a new PC, `git clone` this repo and run `./setup`. Your agent
@@ -21,11 +22,15 @@ jstack/
     <category>/<name>.md
   agents/
     <category>/<name>.md
+  hooks/
+    <category>/<name>.sh     # -> ~/.claude/hooks/<name>.sh
+  config/
+    <category>/<file>        # -> ~/.claude/<file> (settings.json, statusline)
 ```
 
 Tools are grouped by type first, then by **category**: `docify` (document
-writing), `review`, `daily-prep` (slack digest, standup prep), `general`, and
-`shortcuts` (short-circuit guidance prompts). A category is a
+writing), `review`, `daily-prep` (slack digest, standup prep), `general`,
+`shortcuts` (short-circuit guidance prompts), and `core` (settings and hooks). A category is a
 source-organization and install-selection concept only — at install time skills
 and agents flatten into the agent's own directories, so **their names must be
 globally unique across categories.** Commands are the exception: they are
@@ -61,6 +66,20 @@ git clone <jstack-remote> ~/projects/jstack
 ~/projects/jstack/setup
 ```
 
+## Claude Code settings and plugins
+
+`config/core/settings.json` installs as `~/.claude/settings.json` and registers
+the hooks in `hooks/core/` by their installed path (`$HOME/.claude/hooks/...`).
+Plugin files are machine-local (`~/.claude/plugins/`), so `enabledPlugins` only
+turns on plugins already installed. On a new machine, install them once:
+
+```
+/plugin install skill-creator@claude-plugins-official
+/plugin install pr-review-toolkit@claude-plugins-official
+/plugin install frontend-design@claude-plugins-official
+/plugin install playwright@claude-plugins-official
+```
+
 ## Vendor support
 
 | Type     | Claude | Codex | OpenCode |
@@ -68,6 +87,8 @@ git clone <jstack-remote> ~/projects/jstack
 | skills   |   ✅   |  ✅   |    ✅    |
 | commands |   ✅   |  —    |    —     |
 | agents   |   ✅   |  —    |    —     |
+| hooks    |   ✅   |  —    |    —     |
+| config   |   ✅   |  —    |    —     |
 
 Skills are the portable backbone. Commands and agents are Claude-first today;
 other vendors are wired for skills only and silently skip the rest. Add a vendor

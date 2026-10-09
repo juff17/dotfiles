@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# jstack setup — install agent tooling (skills, commands, agents) into whatever
-# coding agents live on this machine.
+# jstack setup — install agent tooling (skills, commands, agents, hooks, config)
+# into whatever coding agents live on this machine.
 #
 # Idempotent: safe to re-run. This is also the update path — `git pull && ./setup`.
 # Because installs are symlinks (on Unix), edits in this repo are live without
@@ -26,7 +26,7 @@ source "$JSTACK_DIR/lib/link.sh"
 # shellcheck source=lib/targets.sh
 source "$JSTACK_DIR/lib/targets.sh"
 
-TYPES="skills commands agents"
+TYPES="skills commands agents hooks config"
 
 HOST="auto"
 CATEGORY="all"
@@ -63,7 +63,7 @@ else
 fi
 
 # ─── Resolve categories ───────────────────────────────────────
-# A category is any subdir of skills/, commands/, or agents/.
+# A category is any subdir of a type folder (skills/, commands/, ...).
 ALL_CATEGORIES="$(
   for type in $TYPES; do
     # `if` rather than `&&`: a false test as the loop's last command fails the
@@ -199,6 +199,12 @@ install_type() {
         [ -e "$item" ] || continue
         local name; name="$(basename "$item")"
         do_item "$item" "$destroot/$category/$name" "$vendor:$category command/$category:${name%.md}"
+      done ;;
+    hooks|config) # each file installs flat, one link per file, so other files in the dir are untouched
+      for item in "$srcroot"/*; do
+        [ -f "$item" ] || continue
+        local name; name="$(basename "$item")"
+        do_item "$item" "$destroot/$name" "$vendor:$category ${type%s}/$name"
       done ;;
   esac
 }

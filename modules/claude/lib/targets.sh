@@ -24,6 +24,8 @@ jstack_target() {
         skills)   echo "$HOME/.claude/skills" ;;
         commands) echo "$HOME/.claude/commands" ;;
         agents)   echo "$HOME/.claude/agents" ;;
+        hooks)    echo "$HOME/.claude/hooks" ;;
+        config)   echo "$HOME/.claude" ;;   # settings.json, statusline script
       esac ;;
     codex)
       case "$type" in
