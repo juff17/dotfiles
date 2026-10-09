@@ -35,3 +35,10 @@ These rules apply to chat replies. The Language rules also apply to anything wri
 - Never add a Co-Authored-By line or any other attribution.
 - Keep commit messages to 10 words or fewer.
 - Each commit should hold one focused change: one user request or one ticket. If the user asks for several unrelated things in one message, make a separate commit for each.
+
+# Code comments
+
+- Comment only when the code can't explain itself. Most code needs no comment.
+- Explain why, not what. Skip anything a reader can see by reading the code.
+- Keep comments short. A comment should take less time to read than the code it describes.
+- Write comments that will still be true in 6 months. No notes about the current change, the task, the ticket, or what was just fixed.
