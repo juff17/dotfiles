@@ -18,7 +18,7 @@ Worktree: <absolute path to .claude/worktrees/<KEY>>
 Branch: <issue-type>/<KEY>
 Base: <base ref> <"(stacked on <blocker KEY>; its changes are already in your branch)" if stacked>
 
-Follow the phases of ~/.claude/commands/ticket-implement.md. Read it first.
+Follow the phases of ~/.claude/skills/ticket-implement/SKILL.md. Read it first.
 Apply it with these changes:
 
 - Phase 1: the ticket text is above. Fetch only the linked docs.

@@ -15,7 +15,7 @@ license: MIT
 # ticket-fleet
 
 Builds a set of tickets in parallel. Each ticket is implemented by a background
-subagent that follows the phases of the `ticket-implement` command, in its own
+subagent that follows the phases of the `ticket-implement` skill, in its own
 git worktree and branch. You (the main session) plan the run, start each wave,
 and report.
 
