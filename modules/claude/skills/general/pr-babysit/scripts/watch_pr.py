@@ -5,7 +5,7 @@ Polls through `gh api` / `glab api`, authenticated only by GITHUB_TOKEN (or
 GH_TOKEN) / GITLAB_TOKEN. What has been reported is kept in a cache file, so
 re-arming the watcher after a Monitor timeout never repeats an event.
 
-Events: [watch] [setup] [auth] [error] [push] [failed] [manual] [stuck]
+Events: [watch] [setup] [busy] [auth] [error] [push] [failed] [manual] [stuck]
         [pipeline] [behind] [conflict] [comment] [review] [merged] [closed]
 """
 
@@ -471,7 +471,7 @@ def main():
     path = state_path(forge, number)
     lock = None if args.once else take_lock(path)
     if not args.once and lock is None:
-        emit("setup", f"{args.url} is already being watched by another babysitter")
+        emit("busy", f"{args.url} is already being babysat by another session")
         sys.exit(2)
 
     try:

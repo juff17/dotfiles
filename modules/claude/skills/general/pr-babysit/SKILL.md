@@ -67,8 +67,11 @@ Monitor(
 )
 ```
 
-- The script takes a per-PR lock, so a second babysitter on the same PR exits
-  with `[setup] ... already being watched`. Tell the user and stop.
+- Only one babysitter runs per PR. The script holds a per-PR lock, and a
+  second start exits with `[busy] ... already being babysat`. On `[busy]`,
+  stop: create no worktree and do not re-arm. Run
+  `scripts/notify.sh "<repo> !<number>" "Already being babysat"` and tell the
+  user in one line that another session is already babysitting this PR.
 - It checks that the clone has a remote for the URL's repo. If not, `[setup]`
   says so: ask the user for the right clone.
 - The first event is `[watch] attached <url> ... branch <branch> -> <base>,
