@@ -10,6 +10,14 @@ title=$(jq -r '.title // "Claude Code"' <<<"$input")
 msg=$(jq -r '.message // "Needs your attention"' <<<"$input")
 project=$(basename "$(jq -r '.cwd // ""' <<<"$input")")
 
+# A background session also fires permission_prompt and idle_prompt, which
+# duplicate the agent view's own alert for the same event.
+if [[ $type == permission_prompt || $type == idle_prompt ]]; then
+  session=$(jq -r '.session_id // ""' <<<"$input")
+  claude agents --json --all 2>/dev/null | jq -e --arg s "$session" \
+    'any(.[]; .kind == "background" and .sessionId == $s)' >/dev/null && exit 0
+fi
+
 # agent_needs_input and agent_completed fire in the agent view process, so the
 # hook input does not identify the background session. Look it up instead: the
 # session whose name is in the message, else the only one in the matching state.
