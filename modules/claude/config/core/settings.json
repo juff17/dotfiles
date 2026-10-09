@@ -1,5 +1,9 @@
 {
   "cleanupPeriodDays": 90,
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  },
   "permissions": {
     "allow": [
       "Read",
@@ -22,10 +26,6 @@
     "defaultMode": "auto"
   },
   "model": "opus[1m]",
-  "attribution": {
-    "commit": "",
-    "pr": ""
-  },
   "hooks": {
     "SessionStart": [
       {
@@ -81,5 +81,6 @@
   },
   "effortLevel": "high",
   "tui": "fullscreen",
-  "skipWorkflowUsageWarning": true
+  "skipWorkflowUsageWarning": true,
+  "feedbackDrafts": "off"
 }
