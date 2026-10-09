@@ -94,11 +94,6 @@ class GitHub(Forge):
     def me(self):
         return self.api("user")["login"]
 
-    def find_number(self, branch):
-        owner = self.project.split("/")[0]
-        prs = self.api(f"{self.repo()}/pulls?state=open&head={owner}:{urllib.parse.quote(branch)}")
-        return prs[0]["number"] if prs else None
-
     def snapshot(self, number):
         pr = self.api(f"{self.repo()}/pulls/{number}")
         sha = pr["head"]["sha"]
@@ -109,6 +104,7 @@ class GitHub(Forge):
             "branch": pr["head"]["ref"],
             "base": pr["base"]["ref"],
             "sha": sha,
+            "fork": (pr["head"].get("repo") or {}).get("full_name") != pr["base"]["repo"]["full_name"],
             "checks": [],
             "comments": [],
             "reviews": [],
@@ -221,10 +217,6 @@ class GitLab(Forge):
     def me(self):
         return self.api("user")["username"]
 
-    def find_number(self, branch):
-        mrs = self.api(f"{self.proj()}/merge_requests?state=opened&source_branch={urllib.parse.quote(branch)}")
-        return mrs[0]["iid"] if mrs else None
-
     JOB_STATUS = {
         "running": "running",
         "success": "success",
@@ -246,6 +238,7 @@ class GitLab(Forge):
             "branch": mr["source_branch"],
             "base": mr["target_branch"],
             "sha": mr["sha"],
+            "fork": mr.get("source_project_id") != mr.get("target_project_id"),
             "checks": [],
             "comments": [],
             "reviews": [],
@@ -313,34 +306,49 @@ class GitLab(Forge):
 
 def parse_remote(url):
     m = re.match(r"^(?:\w+://)?(?:[^@/]+@)?([^/:]+)(?::\d+)?[:/](.+?)(?:\.git)?/?$", url.strip())
-    if not m:
-        raise SystemExit(f"cannot parse git remote {url!r}")
-    return m.group(1), m.group(2)
+    return (m.group(1), m.group(2)) if m else ("", "")
 
 
-def parse_target(target, cwd, forge_name):
-    """Return (forge, number or None, branch or None)."""
-    number, branch = None, None
-    if target and "://" in target:
-        u = urllib.parse.urlparse(target)
-        path = u.path.strip("/")
-        m = re.match(r"(.+?)/pull/(\d+)", path)
-        if m:
-            return GitHub(u.hostname, m.group(1)), int(m.group(2)), None
-        m = re.match(r"(.+?)/-/merge_requests/(\d+)", path)
-        if m:
-            return GitLab(u.hostname, m.group(1)), int(m.group(2)), None
-        raise SystemExit(f"not a PR or MR URL: {target}")
+def parse_url(url):
+    """Return (forge, number) for a PR or MR URL."""
+    u = urllib.parse.urlparse(url)
+    path = u.path.strip("/")
+    m = re.match(r"(.+?)/pull/(\d+)", path)
+    if m:
+        return GitHub(u.hostname, m.group(1)), int(m.group(2))
+    m = re.match(r"(.+?)/-/merge_requests/(\d+)", path)
+    if m:
+        return GitLab(u.hostname, m.group(1)), int(m.group(2))
+    emit("setup", f"not a PR or MR URL: {url}")
+    sys.exit(2)
 
-    remote = run(["git", "remote", "get-url", "origin"], cwd=cwd).strip()
-    host, project = parse_remote(remote)
-    if target:
-        number = int(target.lstrip("#!"))
-    else:
-        branch = run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=cwd).strip()
-    name = forge_name or ("github" if "github" in host else "gitlab")
-    cls = GitHub if name == "github" else GitLab
-    return cls(host, project), number, branch
+
+def find_remote(forge, cwd):
+    """Name of the remote in cwd that points at the PR's repo, or None."""
+    try:
+        out = run(["git", "remote", "-v"], cwd=cwd)
+    except (ApiError, AuthError, OSError):
+        return None
+    want = (forge.host.lower(), forge.project.lower())
+    for line in out.splitlines():
+        name, url = line.split()[:2]
+        host, project = parse_remote(url)
+        if (host.lower(), project.lower()) == want:
+            return name
+    return None
+
+
+def take_lock(path):
+    """Hold an exclusive lock for this PR for the life of the process."""
+    import fcntl
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    handle = open(path.with_suffix(".lock"), "w")
+    try:
+        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        return None
+    return handle
 
 
 def preflight(forge):
@@ -443,25 +451,31 @@ def report(snap, state, me, stuck_after):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("target", nargs="?", help="PR/MR URL or number (default: the current branch's)")
-    ap.add_argument("-C", dest="cwd", default=".", help="repo directory (default: .)")
-    ap.add_argument("--forge", choices=["github", "gitlab"], help="override host detection")
+    ap.add_argument("url", help="PR or MR URL")
+    ap.add_argument("-C", dest="cwd", default=".", help="local clone of the PR's repo (default: .)")
     ap.add_argument("--interval", type=int, default=60, help="seconds between polls (default 60)")
     ap.add_argument("--stuck-after", type=int, default=30,
-                    help="minutes a job may stay pending before [stuck] (default 30)")
-    ap.add_argument("--once", action="store_true", help="poll once, print events, do not save state")
+                    help="minutes a job may wait for a runner before [stuck] (default 30)")
+    ap.add_argument("--once", action="store_true",
+                    help="poll once and print events; no lock, state not saved")
     args = ap.parse_args()
 
-    forge, number, branch = parse_target(args.target, args.cwd, args.forge)
+    forge, number = parse_url(args.url)
+    remote = find_remote(forge, args.cwd)
+    if remote is None:
+        emit("setup", f"{os.path.abspath(args.cwd)} has no git remote for {forge.host}/{forge.project}. "
+                      "Run from a clone of that repo, or pass -C <path>.")
+        sys.exit(2)
     preflight(forge)
+
+    path = state_path(forge, number)
+    lock = None if args.once else take_lock(path)
+    if not args.once and lock is None:
+        emit("setup", f"{args.url} is already being watched by another babysitter")
+        sys.exit(2)
 
     try:
         me = forge.me()
-        if number is None:
-            number = forge.find_number(branch)
-            if number is None:
-                emit("setup", f"no open PR/MR for branch {branch} in {forge.project}")
-                sys.exit(2)
     except AuthError as e:
         emit("auth", f"{forge.cli} rejected the token: {e}")
         sys.exit(2)
@@ -469,7 +483,6 @@ def main():
         emit("setup", f"cannot reach {forge.host} through {forge.cli}: {e}")
         sys.exit(2)
 
-    path = state_path(forge, number)
     state = load_state(path)
     fresh = state is None
     if fresh:
@@ -485,8 +498,10 @@ def main():
                 state["comments"] = {c["id"] for c in snap["comments"]}
                 fresh = False
             if not attached:
+                fork = " (from a fork)" if snap["fork"] else ""
                 emit("watch", f"{'resumed' if state.get('sha') else 'attached'} {snap['url']} "
-                              f"\"{flat(snap['title'], 80)}\", branch {snap['branch']} -> {snap['base']}, "
+                              f"\"{flat(snap['title'], 80)}\", branch {snap['branch']}{fork} -> {snap['base']}, "
+                              f"head {snap['sha']}, remote {remote}, "
                               f"{len(snap['comments'])} comment(s), polling every {args.interval}s")
                 attached = True
             report(snap, state, me, args.stuck_after)
