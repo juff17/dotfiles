@@ -29,3 +29,10 @@ These rules apply to chat replies. The Language rules also apply to anything wri
 - Link to outside sources when possible.
 - Use permalinks that land on the exact section (anchors, line numbers, or `#:~:text=` fragments).
 - Only link sources you actually opened. Never guess a URL or anchor.
+
+# Commits
+
+- Commit when you finish a piece of work, unless the user says to wait.
+- Never add a Co-Authored-By line or any other attribution.
+- Keep commit messages to 10 words or fewer.
+- Each commit should hold one focused change: one user request or one ticket. If the user asks for several unrelated things in one message, make a separate commit for each.
