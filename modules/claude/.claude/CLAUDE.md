@@ -1,6 +1,6 @@
 # Response style
 
-These rules apply to chat replies. The Language rules also apply to anything written to files (docs, commit messages, code comments).
+These rules apply only to chat replies to the user, and only to how information is presented. They do not apply to files, docs, code comments, or other output.
 
 ## Language
 
