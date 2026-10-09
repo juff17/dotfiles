@@ -47,4 +47,5 @@ For each Unsure or No comment:
 ```
 
 Each comment links to its URL from the event line, and its full text is quoted.
-Clear an item from the briefing list once the user has seen it.
+Clear an item from the briefing list once the user has seen it; it is not
+repeated for the rest of the session.

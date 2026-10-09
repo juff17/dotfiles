@@ -57,11 +57,15 @@ Several babysitters can run on the same repo at once, one per PR. Each one
 works only in its own worktree, on its own local branch `babysit/<number>`, so
 they never touch each other's files or the user's checkout.
 
+Pick a session id once when the babysit starts (`date +%Y%m%d-%H%M%S`) and
+pass the same id on every re-arm. The script remembers what it reported per
+session id, so a new id means a clean start.
+
 Run this from the user's clone of the repo (or pass `-C <clone>`):
 
 ```
 Monitor(
-  command: "python3 -u <skill-dir>/scripts/watch_pr.py <url> -C <clone>",
+  command: "python3 -u <skill-dir>/scripts/watch_pr.py <url> -C <clone> --session <id>",
   description: "PR !123 pipeline, rebase state, comments",
   timeout_ms: 1800000,
 )
@@ -75,12 +79,18 @@ Monitor(
 - It checks that the clone has a remote for the URL's repo. If not, `[setup]`
   says so: ask the user for the right clone.
 - The first event is `[watch] attached <url> ... branch <branch> -> <base>,
-  head <sha>, remote <remote>`. Use those values below. A `[setup]` or
-  `[auth]` event means the script exited: relay its message and stop.
+  head <sha>, remote <remote>, N open comment(s)`. Use those values below. A
+  `[setup]` or `[auth]` event means the script exited: relay its message and
+  stop.
+- Right after it, the first poll reports the current state: every open
+  (unresolved) comment as a `[comment]` event, plus any failed, manual, or
+  stuck jobs and conflicts. Handle them like any other event once the
+  worktree exists (step 3). Send one notification for this first sweep, not
+  one per comment.
 - Options: `--interval 60` (seconds), `--stuck-after 30` (minutes a job may
   wait for a runner).
-- `watch_pr.py <url> -C <clone> --once` prints the current state without the
-  lock or saving state. Use it to answer "how is the PR doing?".
+- `watch_pr.py <url> -C <clone> --once` prints the current state, including
+  all open comments, without the lock or saving state. Use it to answer "how is the PR doing?".
 
 ## 3. Create the worktree
 
@@ -154,11 +164,13 @@ give the full briefing of everything not yet reviewed.
 
 ## 6. Keep it running
 
-- Monitor stops after 30 minutes. On expiry, re-arm with the same command.
-  The script's state file carries over, so nothing is lost or repeated. Keep
+- Monitor stops after 30 minutes. On expiry, re-arm with the same command and
+  the same `--session` id. The state carries over, so nothing is lost or
+  repeated. Keep
   re-arming until the PR merges or closes, or the user says stop. Long
   pipelines (an hour or more) are fine.
 - To stop: TaskStop on the monitor, then a short summary of what happened and
   what is still open.
-- State files live in `~/.cache/pr-babysit/`. Delete the PR's file to start
-  fresh (all comments are then treated as already seen).
+- State lives in `~/.cache/pr-babysit/`, one file per PR and session. A new
+  session id deletes the PR's older files, so every open comment is reported
+  again in the new session.

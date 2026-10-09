@@ -1,5 +1,11 @@
 # Triaging review comments
 
+Every open (unresolved) comment is reported once per babysit session: all of
+them on the first poll, then each new one as it arrives. Resolved threads are
+never reported. Comments that cannot be resolved (GitHub conversation comments
+and review summaries, GitLab non-thread notes) always count as open. Once a
+comment is handled in this session it is not reported or notified again.
+
 The `[comment]` line has the author, the file and line (if inline), a
 shortened body, and the URL. Read the full comment and its thread before
 judging. Get the thread with:

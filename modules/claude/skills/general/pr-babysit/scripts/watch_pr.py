@@ -152,15 +152,19 @@ class GitHub(Forge):
                     "allow_failure": False,
                 })
 
-        for c in self.pages(f"{self.repo()}/pulls/{number}/comments"):
-            line = c.get("line") or c.get("original_line")
-            snap["comments"].append({
-                "id": f"rc:{c['id']}",
-                "author": c["user"]["login"],
-                "where": f"{c['path']}:{line}" if line else c["path"],
-                "body": c["body"],
-                "url": c["html_url"],
-            })
+        for t in self.review_threads(number):
+            line = t.get("line") or t.get("originalLine")
+            for c in t["comments"]["nodes"]:
+                snap["comments"].append({
+                    "id": f"rc:{c['databaseId']}",
+                    "author": (c.get("author") or {}).get("login", "ghost"),
+                    "where": f"{t['path']}:{line}" if line else t["path"],
+                    "body": c["body"],
+                    "url": c["url"],
+                    "resolved": t["isResolved"],
+                })
+        # Conversation comments and review summaries cannot be resolved, so
+        # they always count as open.
         for c in self.pages(f"repos/{self.project}/issues/{number}/comments"):
             snap["comments"].append({
                 "id": f"ic:{c['id']}",
@@ -168,6 +172,7 @@ class GitHub(Forge):
                 "where": "",
                 "body": c["body"],
                 "url": c["html_url"],
+                "resolved": False,
             })
         for r in self.pages(f"{self.repo()}/pulls/{number}/reviews"):
             if r["state"] in ("APPROVED", "CHANGES_REQUESTED"):
@@ -184,8 +189,40 @@ class GitHub(Forge):
                     "where": "review summary",
                     "body": r["body"],
                     "url": r["html_url"],
+                    "resolved": False,
                 })
         return snap
+
+    THREADS_QUERY = """
+    query($owner: String!, $name: String!, $number: Int!, $after: String) {
+      repository(owner: $owner, name: $name) {
+        pullRequest(number: $number) {
+          reviewThreads(first: 100, after: $after) {
+            pageInfo { hasNextPage endCursor }
+            nodes {
+              isResolved path line originalLine
+              comments(first: 100) { nodes { databaseId author { login } body url } }
+            }
+          }
+        }
+      }
+    }"""
+
+    def review_threads(self, number):
+        # Resolved state exists only in GraphQL, not on the REST comments API.
+        owner, name = self.project.split("/", 1)
+        threads, after = [], None
+        while True:
+            cmd = [self.cli, "api", "graphql", "--hostname", self.host,
+                   "-f", f"query={self.THREADS_QUERY}",
+                   "-F", f"owner={owner}", "-F", f"name={name}", "-F", f"number={number}"]
+            if after:
+                cmd += ["-f", f"after={after}"]
+            page = json.loads(run(cmd))["data"]["repository"]["pullRequest"]["reviewThreads"]
+            threads += page["nodes"]
+            if not page["pageInfo"]["hasNextPage"]:
+                return threads
+            after = page["pageInfo"]["endCursor"]
 
     @staticmethod
     def check_status(c):
@@ -276,6 +313,7 @@ class GitLab(Forge):
                     "where": where,
                     "body": n["body"],
                     "url": f"{mr['web_url']}#note_{n['id']}",
+                    "resolved": bool(n.get("resolvable") and n.get("resolved")),
                 })
 
         approvals = self.api(f"{self.proj()}/merge_requests/{iid}/approvals")
@@ -338,12 +376,12 @@ def find_remote(forge, cwd):
     return None
 
 
-def take_lock(path):
+def take_lock(base):
     """Hold an exclusive lock for this PR for the life of the process."""
     import fcntl
 
-    path.parent.mkdir(parents=True, exist_ok=True)
-    handle = open(path.with_suffix(".lock"), "w")
+    base.parent.mkdir(parents=True, exist_ok=True)
+    handle = open(f"{base}.lock", "w")
     try:
         fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
@@ -362,10 +400,20 @@ def preflight(forge):
         sys.exit(2)
 
 
-def state_path(forge, number):
+def pr_base(forge, number):
+    """Cache path prefix shared by this PR's lock and state files."""
     root = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "pr-babysit"
-    key = re.sub(r"[^A-Za-z0-9_.-]", "_", f"{forge.host}_{forge.project}_{number}")
-    return root / f"{key}.json"
+    return root / re.sub(r"[^A-Za-z0-9_.-]", "_", f"{forge.host}_{forge.project}_{number}")
+
+
+def session_state(base, session):
+    """State file for this session. Other sessions' files for the PR are removed,
+    so a new session starts clean and reports everything still open."""
+    keep = Path(f"{base}.{session}.json")
+    for old in base.parent.glob(f"{base.name}.*.json"):
+        if old != keep:
+            old.unlink(missing_ok=True)
+    return keep
 
 
 def load_state(path):
@@ -381,7 +429,7 @@ def load_state(path):
 def save_state(path, state):
     path.parent.mkdir(parents=True, exist_ok=True)
     out = dict(state, comments=sorted(state["comments"]), events=sorted(state["events"]))
-    tmp = path.with_suffix(".tmp")
+    tmp = Path(f"{path}.tmp")
     tmp.write_text(json.dumps(out))
     tmp.replace(path)
 
@@ -440,7 +488,7 @@ def report(snap, state, me, stuck_after):
             emit("review", f"@{r['author']} {r['state']} {r['url']}")
 
     for c in snap["comments"]:
-        if c["id"] in state["comments"]:
+        if c["resolved"] or c["id"] in state["comments"]:
             continue
         state["comments"].add(c["id"])
         if c["author"] == me:
@@ -456,9 +504,12 @@ def main():
     ap.add_argument("--interval", type=int, default=60, help="seconds between polls (default 60)")
     ap.add_argument("--stuck-after", type=int, default=30,
                     help="minutes a job may wait for a runner before [stuck] (default 30)")
+    ap.add_argument("--session", help="babysit session id; reuse it on every re-arm (required unless --once)")
     ap.add_argument("--once", action="store_true",
                     help="poll once and print events; no lock, state not saved")
     args = ap.parse_args()
+    if not args.once and not args.session:
+        ap.error("--session is required unless --once")
 
     forge, number = parse_url(args.url)
     remote = find_remote(forge, args.cwd)
@@ -468,8 +519,8 @@ def main():
         sys.exit(2)
     preflight(forge)
 
-    path = state_path(forge, number)
-    lock = None if args.once else take_lock(path)
+    base = pr_base(forge, number)
+    lock = None if args.once else take_lock(base)
     if not args.once and lock is None:
         emit("busy", f"{args.url} is already being babysat by another session")
         sys.exit(2)
@@ -483,29 +534,23 @@ def main():
         emit("setup", f"cannot reach {forge.host} through {forge.cli}: {e}")
         sys.exit(2)
 
-    state = load_state(path)
-    fresh = state is None
-    if fresh:
-        state = {"comments": set(), "events": set()}
+    path = None if args.once else session_state(base, args.session)
+    state = (load_state(path) if path else None) or {"comments": set(), "events": set()}
 
     failures, attached = 0, False
     while True:
         try:
             snap = forge.snapshot(number)
             failures = 0
-            if fresh:
-                # Comments that predate the watch are context, not new events.
-                state["comments"] = {c["id"] for c in snap["comments"]}
-                fresh = False
             if not attached:
                 fork = " (from a fork)" if snap["fork"] else ""
                 emit("watch", f"{'resumed' if state.get('sha') else 'attached'} {snap['url']} "
                               f"\"{flat(snap['title'], 80)}\", branch {snap['branch']}{fork} -> {snap['base']}, "
                               f"head {snap['sha']}, remote {remote}, "
-                              f"{len(snap['comments'])} comment(s), polling every {args.interval}s")
+                              f"{sum(not c['resolved'] and c['author'] != me for c in snap['comments'])} open comment(s), polling every {args.interval}s")
                 attached = True
             report(snap, state, me, args.stuck_after)
-            if not args.once:
+            if path:
                 save_state(path, state)
             if snap["state"] != "open":
                 emit(snap["state"], snap["url"])
