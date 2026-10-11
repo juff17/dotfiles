@@ -9,8 +9,12 @@ cmd=$(jq -r '.tool_input.command // empty' <<<"$input")
 cwd=$(jq -r '.cwd // empty' <<<"$input")
 [[ -n $cwd ]] || cwd=$PWD
 
-# Not an rm anywhere in the command: no opinion.
-grep -qE '(^|[^[:alnum:]_-])rm([[:space:]]|$)' <<<"$cmd" || exit 0
+# No rm in command position: no opinion. Matching only where a command can start
+# keeps "rm" inside arguments (commit messages, echo text) from prompting.
+lead='(^|[;&|({`]|\$\(|(^|[[:space:]])(then|do|else|-exec|-execdir|-ok)[[:space:]])'
+wrap='((sudo|doas|xargs|command|exec|env|nohup|time|nice)([[:space:]]+-[^[:space:]]*)*[[:space:]]+)*'
+gitp='(git([[:space:]]+(-[Cc][[:space:]]+[^[:space:]]+|-[^[:space:]]+))*[[:space:]]+)?'
+grep -qE "${lead}[[:space:]]*${wrap}${gitp}\\\\?(/[^[:space:]]*/)?rm([[:space:]]|$)" <<<"$cmd" || exit 0
 
 decide() {
   jq -n --arg d "$1" --arg r "$2" \
