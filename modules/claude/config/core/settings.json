@@ -55,7 +55,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$HOME/.claude/hooks/rm-scratchpad.sh"
+            "command": "$HOME/.claude/hooks/rm-guard.sh"
           }
         ]
       }
