@@ -81,7 +81,7 @@
   },
   "effortLevel": "high",
   "tui": "fullscreen",
-  "viewMode": "verbose",
+  "viewMode": "default",
   "skipWorkflowUsageWarning": true,
   "feedbackDrafts": "off"
 }
