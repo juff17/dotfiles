@@ -26,7 +26,7 @@ source "$JSTACK_DIR/lib/link.sh"
 # shellcheck source=lib/targets.sh
 source "$JSTACK_DIR/lib/targets.sh"
 
-TYPES="skills commands agents hooks config"
+TYPES="skills commands agents hooks mods config"
 
 HOST="auto"
 CATEGORY="all"
@@ -182,11 +182,11 @@ install_type() {
   [ -n "$destroot" ] || return 0   # vendor has no home for this type — skip
 
   case "$type" in
-    skills)   # each skill is a directory (SKILL.md + friends); install flat
+    skills|mods) # each is a directory; install flat
       for item in "$srcroot"/*/; do
         [ -d "$item" ] || continue
         local name; name="$(basename "$item")"
-        do_item "$item" "$destroot/$name" "$vendor:$category skill/$name"
+        do_item "$item" "$destroot/$name" "$vendor:$category ${type%s}/$name"
       done ;;
     agents)   # each agent is a single .md; install flat
       for item in "$srcroot"/*.md; do

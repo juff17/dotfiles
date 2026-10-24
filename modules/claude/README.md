@@ -24,6 +24,8 @@ jstack/
     <category>/<name>.md
   hooks/
     <category>/<name>.sh     # -> ~/.claude/hooks/<name>.sh
+  mods/
+    <category>/<name>/       # -> ~/.claude/mods/<name>, loaded via CLAUDE_CODE_PLUGIN_DIRS
   config/
     <category>/<file>        # -> ~/.claude/<file> (settings.json, statusline)
 ```

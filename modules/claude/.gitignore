@@ -15,3 +15,6 @@ __pycache__/
 
 # Per-machine record of what ./setup installed
 .installed
+
+# Type declarations Claude Code writes beside each loaded mod
+mods/**/.claude-plugin/types/

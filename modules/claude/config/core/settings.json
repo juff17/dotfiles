@@ -1,5 +1,8 @@
 {
   "cleanupPeriodDays": 90,
+  "env": {
+    "CLAUDE_CODE_PLUGIN_DIRS": "~/.claude/mods/agent-switcher"
+  },
   "attribution": {
     "commit": "",
     "pr": ""
