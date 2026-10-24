@@ -1,7 +1,7 @@
 {
   "cleanupPeriodDays": 90,
   "env": {
-    "CLAUDE_CODE_PLUGIN_DIRS": "~/.claude/mods/agent-switcher"
+    "CLAUDE_CODE_PLUGIN_DIRS": "~/.claude/mods"
   },
   "attribution": {
     "commit": "",
@@ -28,7 +28,7 @@
     ],
     "defaultMode": "auto"
   },
-  "model": "opus[1m]",
+  "model": "opus",
   "hooks": {
     "SessionStart": [
       {
@@ -37,6 +37,15 @@
           {
             "type": "command",
             "command": "$HOME/.claude/hooks/gitignore-worktrees.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.config/ghostty/bin/ghostty-claude-start"
           }
         ]
       }
@@ -62,6 +71,16 @@
           }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.config/ghostty/bin/ghostty-claude-ping"
+          }
+        ]
+      }
     ]
   },
   "statusLine": {
@@ -82,9 +101,14 @@
       }
     }
   },
-  "effortLevel": "high",
-  "tui": "fullscreen",
   "viewMode": "default",
-  "skipWorkflowUsageWarning": true,
-  "feedbackDrafts": "off"
+  "feedbackDrafts": "off",
+  "effortLevel": "high",
+  "modelSettings": {
+    "claude-opus-5-5": {
+      "effortLevel": "high"
+    }
+  },
+  "tui": "fullscreen",
+  "skipWorkflowUsageWarning": true
 }

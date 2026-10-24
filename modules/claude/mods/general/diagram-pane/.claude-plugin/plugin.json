@@ -1,0 +1,1 @@
+{ "name": "diagram-pane", "version": "0.3.0", "description": "Side pane that shows the diagrams the agent draws to explain things", "types": "./types/index.d.ts" }
