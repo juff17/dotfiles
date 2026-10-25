@@ -50,11 +50,19 @@ echo "==> Updating system"
 sudo apt update
 sudo apt install -y software-properties-common apt-transport-https wget git
 
+# apt-packages.txt leaves out what kubuntu-desktop already pulls in, so it must be present.
+# On a GNOME install apt would stop to ask GDM vs SDDM; preseed SDDM so this runs unattended.
+echo "==> Installing KDE (kubuntu-desktop)"
+if ! dpkg -s kubuntu-desktop >/dev/null 2>&1; then
+  echo "sddm shared/default-x-display-manager select sddm" | sudo debconf-set-selections
+  sudo apt install -y kubuntu-desktop
+fi
+
 echo "==> Installing APT packages"
 bash "$HERE"/scripts/install_apt_packages.sh
 
 echo "==> Running system installers"
-for s in docker uv zsh jetbrains_nf msfonts; do
+for s in docker uv zsh jetbrains_nf msfonts claude; do
   bash "$HERE/scripts/install_$s.sh"
 done
 

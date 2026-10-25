@@ -7,7 +7,7 @@ Dotfiles + machine setup for a Linux (KDE) workstation. Everything under [`home/
 
 ```bash
 git clone https://github.com/juff17/dotfiles && cd dotfiles
-./install.sh            # full bootstrap: system packages -> system installers -> link dotfiles
+./install.sh            # full bootstrap: KDE + system packages -> system installers -> link dotfiles
 ./install.sh --links    # only (re)symlink dotfiles — no sudo/apt, no installers
 ```
 
@@ -24,16 +24,17 @@ git clone https://github.com/juff17/dotfiles && cd dotfiles
 | Path | What it is | Installed by |
 |---|---|---|
 | `home/` | `$HOME` mirror — dotfiles symlinked into place (`.zshrc`, `.config/…`) | `./install.sh` (symlink) |
-| `scripts/` | System installers (apt packages, docker, uv, zsh + p10k, fonts) | `./install.sh` (full) |
+| `scripts/` | System installers (apt packages, docker, uv, zsh + p10k, fonts, Claude Code) | `./install.sh` (full) |
 | `apt-packages.txt` | Package list consumed by `scripts/install_apt_packages.sh` | — |
 
 Add a new dotfile by dropping it at its mirrored path under `home/` (e.g. `home/.config/foo/bar.conf`)
 and re-running `./install.sh --links`.
 
 ## Claude Code config
-Claude Code settings, hooks, skills, commands and agents live in [jstack](https://github.com/juff17/jstack),
-not here. Clone it and run its `./setup`. Its desktop notifications use the icon and `claude-code` desktop
-entry under `home/.local/share/`, which also list Claude Code in System Settings > Notifications.
+`./install.sh` installs Claude Code itself (native installer, skipped if already present). Its settings,
+hooks, skills, commands and agents live in [jstack](https://github.com/juff17/jstack), not here: clone it
+and run its `./setup`. Its desktop notifications use the icon and `claude-code` desktop entry under
+`home/.local/share/`, which also list Claude Code in System Settings > Notifications.
 
 ## Machine-local shell settings
 `.zshrc` sources `~/.zshrc.local` last if it exists. Put anything specific to one machine there (CA bundle
