@@ -1,46 +1,68 @@
 # dotfiles
 
-Dotfiles + machine setup for a Linux (KDE) workstation. Everything under [`home/`](./home) mirrors
-`$HOME` and is symlinked into place; system packages and programs are installed by separate scripts.
+Dotfiles + machine setup for a Linux (KDE) workstation, split into modules under [`modules/`](./modules).
+Each module is one part of the setup, so you can install any part without taking everything.
 
 ## Install
 
 ```bash
 git clone https://github.com/juff17/dotfiles && cd dotfiles
-./install.sh            # full bootstrap: KDE + system packages -> system installers -> link dotfiles
-./install.sh --links    # only (re)symlink dotfiles — no sudo/apt, no installers
+./install.sh                     # every module
+./install.sh ghostty shell       # just these, plus the modules they require
+./install.sh --links [module...] # only (re)symlink files: no sudo/apt, no installers
+./install.sh --list              # show the modules and what each one has
 ```
 
-- **Per-file symlinks.** `home/` is a mirror of `$HOME`; the installer walks every file under it and
-  links it to the same relative path. Per-file (not whole-dir) means multiple sources can share a
-  directory — e.g. `~/.config/` holds our files alongside everything else that lives there.
-- **Conflicts are backed up, not clobbered.** Any existing file in the way is moved into
-  `.dotfiles-backup/<timestamp>/` in the repo (gitignored) with its relative path preserved, then the symlink is created.
+## Modules
+
+| Module | What it sets up |
+|---|---|
+| `kde` | `kubuntu-desktop` (SDDM preselected), KDE colors/icons and global shortcuts |
+| `base` | apt packages for every machine: fzf, ripgrep, psql, build toolchain, zram, cpufreq, duperemove |
+| `shell` | zsh, Oh My Zsh, Powerlevel10k, JetBrains Mono Nerd Font; `.zshrc`, `.p10k.zsh`, `z.sh` |
+| `fonts` | JetBrains Mono, Noto, Microsoft core fonts |
+| `node` | fnm + Node.js LTS |
+| `dev` | Docker, uv |
+| `ghostty` | Ghostty, tmux, btop, yazi and the layout config (requires `node`), see [`docs/ghostty.md`](./docs/ghostty.md) |
+| `dolphin` | Dolphin settings, Filelight |
+| `claude` | Claude Code, and its notification icon + desktop entry |
+
+A full install runs them in that order. `kde` goes first because `base` leaves out what
+`kubuntu-desktop` already pulls in (curl, vim, htop, unzip, dolphin, ark, ...).
+
+A module folder can have any of:
+
+| File | Used for |
+|---|---|
+| `packages.txt` | apt packages, one per line (`#` comments allowed) |
+| `install.sh` | other install steps: snaps, curl installers, debconf answers |
+| `home/` | files symlinked into `$HOME` at the same relative path |
+| `after-link.sh` | runs after `home/` is linked, also with `--links` |
+| `requires` | modules to install first, one per line |
+
+Each module runs its packages, then `install.sh`, then links `home/`. Install steps skip what's already
+installed, so re-running is safe.
+
+To add a dotfile, drop it at its mirrored path under a module's `home/` (e.g.
+`modules/kde/home/.config/foo/bar.conf`) and re-run `./install.sh --links`. To add a module, create a
+folder under `modules/` and add it to `ORDER` in `install.sh`.
+
+## Linking
+
+- **Per-file symlinks.** Every file under a module's `home/` is linked to the same path under `$HOME`.
+  Per-file (not whole-dir) means several modules can share a directory such as `~/.config/`.
+- **Conflicts are backed up, not clobbered.** A file in the way is moved into
+  `.dotfiles-backup/<timestamp>/` in the repo (gitignored) with its relative path kept. A link left
+  from an older layout of this repo is replaced without a backup.
 - **Idempotent.** Re-running reports `ok` for links already in place.
 - Overrides: `DOTFILES_TARGET=/path` (link target, for a dry run) · `DOTFILES_BACKUP=/path` (backup root).
 
-## Layout
-
-| Path | What it is | Installed by |
-|---|---|---|
-| `home/` | `$HOME` mirror — dotfiles symlinked into place (`.zshrc`, `.config/…`) | `./install.sh` (symlink) |
-| `scripts/` | System installers (apt packages, docker, uv, node, yazi, zsh + p10k, fonts, Claude Code) | `./install.sh` (full) |
-| `docs/` | Longer write-ups (e.g. [`ghostty.md`](./docs/ghostty.md)) — not installed | — |
-| `apt-packages.txt` | Package list consumed by `scripts/install_apt_packages.sh` | — |
-
-Add a new dotfile by dropping it at its mirrored path under `home/` (e.g. `home/.config/foo/bar.conf`)
-and re-running `./install.sh --links`.
-
 ## Claude Code config
-`./install.sh` installs Claude Code itself (native installer, skipped if already present). Its settings,
-hooks, skills, commands and agents live in [jstack](https://github.com/juff17/jstack), not here: clone it
-and run its `./setup`. Its desktop notifications use the icon and `claude-code` desktop entry under
-`home/.local/share/`, which also list Claude Code in System Settings > Notifications.
+The `claude` module installs Claude Code itself (native installer, skipped if already present). Its
+settings, hooks, skills, commands and agents live in [jstack](https://github.com/juff17/jstack), not here:
+clone it and run its `./setup`. Its desktop notifications use the icon and `claude-code` desktop entry
+this module links, which also list Claude Code in System Settings > Notifications.
 
 ## Machine-local shell settings
 `.zshrc` sources `~/.zshrc.local` last if it exists. Put anything specific to one machine there (CA bundle
 overrides, tokens, work-only settings); it isn't tracked here.
-
-## Ghostty
-The Ghostty setup (a btop + viewer + tmux-tabs layout in every window) lives in `home/.config/ghostty/`.
-How it works, its keys and its dependencies: [`docs/ghostty.md`](./docs/ghostty.md).

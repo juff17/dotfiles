@@ -1,0 +1,4 @@
+# The layout runs inside tmux, with btop in its top pane. yazi comes from snap (install.sh).
+ghostty
+tmux
+btop
