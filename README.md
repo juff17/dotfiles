@@ -24,7 +24,8 @@ git clone https://github.com/juff17/dotfiles && cd dotfiles
 | Path | What it is | Installed by |
 |---|---|---|
 | `home/` | `$HOME` mirror — dotfiles symlinked into place (`.zshrc`, `.config/…`) | `./install.sh` (symlink) |
-| `scripts/` | System installers (apt packages, docker, uv, zsh + p10k, fonts, Claude Code) | `./install.sh` (full) |
+| `scripts/` | System installers (apt packages, docker, uv, node, yazi, zsh + p10k, fonts, Claude Code) | `./install.sh` (full) |
+| `docs/` | Longer write-ups (e.g. [`ghostty.md`](./docs/ghostty.md)) — not installed | — |
 | `apt-packages.txt` | Package list consumed by `scripts/install_apt_packages.sh` | — |
 
 Add a new dotfile by dropping it at its mirrored path under `home/` (e.g. `home/.config/foo/bar.conf`)
@@ -40,5 +41,6 @@ and run its `./setup`. Its desktop notifications use the icon and `claude-code` 
 `.zshrc` sources `~/.zshrc.local` last if it exists. Put anything specific to one machine there (CA bundle
 overrides, aliases into other repos); it isn't tracked here.
 
-## Other configs
-Ghostty, tmux, btop and yazi configs live in the `ghosty-config` repo, not here.
+## Ghostty
+The Ghostty setup (a btop + viewer + tmux-tabs layout in every window) lives in `home/.config/ghostty/`.
+How it works, its keys and its dependencies: [`docs/ghostty.md`](./docs/ghostty.md).

@@ -36,6 +36,21 @@ link_dotfiles() {
     local rel="${f#"$SRC"/}"
     place "$f" "$DEST/$rel" "$rel"
   done < <(find "$SRC" -type f ! -name '.gitkeep' -print0)
+  mark_ghostty_windows
+}
+
+# The Ghostty layout treats any window it hasn't seen as new and builds its
+# tmux layout there, so record the windows already open as existing; only
+# windows opened from now on get the layout. Skipped for a dry-run target.
+mark_ghostty_windows() {
+  [ "$DEST" = "$HOME" ] && pgrep -x ghostty >/dev/null || return 0
+  (
+    source "$SRC/.config/ghostty/bin/ghostty-lib.sh"
+    if state=$(state_dir); then
+      windows >>"$state/known"
+      echo "  marked open Ghostty windows as existing"
+    fi
+  )
 }
 
 # --- links-only mode -------------------------------------------------------
@@ -62,7 +77,7 @@ echo "==> Installing APT packages"
 bash "$HERE"/scripts/install_apt_packages.sh
 
 echo "==> Running system installers"
-for s in docker uv zsh jetbrains_nf msfonts claude; do
+for s in docker uv node yazi zsh jetbrains_nf msfonts claude; do
   bash "$HERE/scripts/install_$s.sh"
 done
 
