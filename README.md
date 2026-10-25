@@ -24,7 +24,7 @@ git clone https://github.com/juff17/dotfiles && cd dotfiles
 | Path | What it is | Installed by |
 |---|---|---|
 | `home/` | `$HOME` mirror — dotfiles symlinked into place (`.zshrc`, `.config/…`) | `./install.sh` (symlink) |
-| `scripts/` | System installers (apt packages, docker, postgres, python/uv, zsh + p10k, fonts, vscode, …) | `./install.sh` (full) |
+| `scripts/` | System installers (apt packages, docker, uv, zsh + p10k, fonts) | `./install.sh` (full) |
 | `apt-packages.txt` | Package list consumed by `scripts/install_apt_packages.sh` | — |
 
 Add a new dotfile by dropping it at its mirrored path under `home/` (e.g. `home/.config/foo/bar.conf`)

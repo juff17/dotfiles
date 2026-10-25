@@ -54,7 +54,7 @@ echo "==> Installing APT packages"
 bash "$HERE"/scripts/install_apt_packages.sh
 
 echo "==> Running system installers"
-for s in docker postgres gitlfs uv python zsh jetbrains_nf msfonts vscode; do
+for s in docker uv zsh jetbrains_nf msfonts; do
   bash "$HERE/scripts/install_$s.sh"
 done
 
