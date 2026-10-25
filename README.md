@@ -13,7 +13,7 @@ git clone https://github.com/juff17/dotfiles && cd dotfiles
 
 - **Per-file symlinks.** `home/` is a mirror of `$HOME`; the installer walks every file under it and
   links it to the same relative path. Per-file (not whole-dir) means multiple sources can share a
-  directory — e.g. `~/.claude/commands/` holds our files *and* the `cg.md` that `context_groups` installs.
+  directory — e.g. `~/.config/` holds our files alongside everything else that lives there.
 - **Conflicts are backed up, not clobbered.** Any existing file in the way is moved into
   `~/.dotfiles-backup/<timestamp>/` with its relative path preserved, then the symlink is created.
 - **Idempotent.** Re-running reports `ok` for links already in place.
@@ -23,7 +23,7 @@ git clone https://github.com/juff17/dotfiles && cd dotfiles
 
 | Path | What it is | Installed by |
 |---|---|---|
-| `home/` | `$HOME` mirror — dotfiles symlinked into place (`.zshrc`, `.config/…`, `.claude/…`) | `./install.sh` (symlink) |
+| `home/` | `$HOME` mirror — dotfiles symlinked into place (`.zshrc`, `.config/…`) | `./install.sh` (symlink) |
 | `scripts/` | System installers (apt packages, docker, postgres, python/uv, zsh, fonts, vscode, …) | `./install.sh` (full) |
 | `context_groups/` | The `cg` CLI + `/cg` slash command — a program with its own installer | its `install.sh`, called by root |
 | `orchestrator/` | Design docs for an agent-orchestrator effort — **not installed**, reference only | — |
@@ -32,37 +32,10 @@ git clone https://github.com/juff17/dotfiles && cd dotfiles
 Add a new dotfile by dropping it at its mirrored path under `home/` (e.g. `home/.config/foo/bar.conf`)
 and re-running `./install.sh --links`.
 
-## Claude Code config (`home/.claude/`)
-- `settings.json` — Opus, `cleanupPeriodDays` 90, and the SessionStart hook below.
-- `hooks/gitignore-worktrees.sh` (SessionStart) — appends `.claude/worktrees/` + orchestration artifacts
-  to each repo's `.git/info/exclude` (local, untracked, idempotent) so they never leak into a diff.
-- `agents/`, `commands/` — kept as placeholders (the `.gitkeep` files are not symlinked).
-- `skills/standup-prep/` — the personal daily standup-prep skill (see below).
-
-### Plugins
-`settings.json` carries the plugin config, but **plugin files are machine-local** (cached under
-`~/.claude/plugins/`, not version-controlled). So on a new machine the config alone does not install
-anything — `enabledPlugins` only *activates* plugins that are already on disk. Run these once per
-machine to install them:
-
-```
-/plugin install skill-creator@claude-plugins-official
-/plugin install pr-review-toolkit@claude-plugins-official
-/plugin install ponytail@ponytail
-```
-
-- `claude-plugins-official` is a built-in marketplace — no registration needed.
-- `ponytail@ponytail` comes from the `ponytail` marketplace, which **is** registered in
-  `extraKnownMarketplaces` (so its `/plugin install` resolves without a separate `marketplace add`).
-- After installing, `enabledPlugins` in `settings.json` keeps all three enabled automatically.
-
-## standup-prep skill
-Prepares your personal daily standup update (*Yesterday / Today / Blockers*) from your own JIRA
-activity (read-only) and your public Slack messages, presented in chat — never posted. Optionally run
-on weekday mornings by a Claude cloud routine (`/schedule`). Portable: the logic is company-agnostic and
-your identity + board status names live in a gitignored `config.yaml`. Set up in three steps (connect
-Atlassian + Slack MCPs, fill config, run). See
-[`home/.claude/skills/standup-prep/README.md`](./home/.claude/skills/standup-prep/README.md).
+## Claude Code config
+Claude Code settings, hooks, skills, commands and agents live in [jstack](https://github.com/juff17/jstack),
+not here. Clone it and run its `./setup`. Its desktop notifications use the icon and `claude-code` desktop
+entry under `home/.local/share/`, which also list Claude Code in System Settings > Notifications.
 
 ## context_groups
 `cg` manages named sets of directories ("context groups") for Claude Code sessions. Installs the CLI to
