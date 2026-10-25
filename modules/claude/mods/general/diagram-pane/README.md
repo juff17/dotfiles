@@ -18,7 +18,7 @@ them: a new session starts with none, `claude --resume` brings that session's
 own back, and `/clear` starts over. The store keeps the 20 sessions used last.
 `/diagram-pane` opens the in-chat pane in either mode.
 
-dv lives in ghosty-config (`config/viewer/`), not here. The Ghostty pane is
+dv lives in the dotfiles repo (`home/.config/ghostty/viewer/`), not here. The Ghostty pane is
 started by `~/.config/ghostty/bin/ghostty-claude-start` (a `SessionStart`
 hook) through `ghostty-viewer`, and shows the window's active tab. Outside that
 layout, with `'ghostty'` set, nothing shows a diagram until you run
@@ -55,8 +55,8 @@ dv closes a tab by writing the file back without it. The mod can't watch the
 file, so before each change it keeps only the tabs the file still lists, when
 `session` is its own.
 
-Changing these fields breaks dv; change `config/viewer/diagram-view.mjs` in
-ghosty-config with them.
+Changing these fields breaks dv; change `home/.config/ghostty/viewer/diagram-view.mjs`
+in the dotfiles repo with them.
 
 ## Tests
 

@@ -95,7 +95,7 @@ async function persist($: EngineInterface) {
   await publish($)
 }
 
-// The Ghostty layout's viewer (dv, in ghosty-config) runs outside Claude Code,
+// The Ghostty layout's viewer (dv, in the dotfiles repo) runs outside Claude Code,
 // so it reads the tabs from a file per tmux pane beside the PNGs and shows the
 // active tab's. Named for the tmux socket too, as pane ids repeat across
 // servers. Its format is in the README.

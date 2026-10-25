@@ -7,7 +7,7 @@ import { addDiagram, drawPane, endSession, restore, scrollPane } from './pane'
 const PANE = 'diagram'
 const TITLE = 'Diagram'
 const TOOL = 'mcp__diagram-pane__show'
-// 'ghostty' leaves diagrams to the Ghostty layout's viewer (dv, in ghosty-config),
+// 'ghostty' leaves diagrams to the Ghostty layout's viewer (dv, in the dotfiles repo),
 // which reads state.json, and never opens the pane on its own; 'claude' opens
 // the pane beside the chat.
 const VIEWER = 'ghostty' as 'claude' | 'ghostty'
