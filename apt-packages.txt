@@ -1,13 +1,11 @@
 # Consumed by scripts/install_apt_packages.sh. Packages with their own installer
-# under scripts/ (zsh, git-lfs, postgres, ms fonts, docker, vscode) are not listed here.
+# under scripts/ (zsh, ms fonts, docker) are not listed here.
 
 # cli tools
-bat
 curl
-fastfetch
 fzf
+postgresql-client
 htop
-qrencode
 ripgrep
 unzip
 7zip
@@ -16,7 +14,6 @@ bash-completion
 
 # build toolchain
 build-essential
-cmake
 g++
 pkg-config
 libpq-dev
@@ -24,21 +21,12 @@ libpq-dev
 # system
 cpufrequtils
 duperemove
-hwloc
 zram-tools
 
 # desktop apps
 dolphin
 filelight
-flameshot
-gimp
-gimp-help-en
 inkscape
-sqlitebrowser
-
-# docs / plotting
-gnuplot
-pandoc
 
 # fonts
 fonts-jetbrains-mono
