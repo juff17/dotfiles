@@ -4,10 +4,7 @@
 #   ./install.sh            # full bootstrap: system packages -> link dotfiles -> program installers
 #   ./install.sh --links    # only symlink home/ into $HOME (no sudo/apt, no program installers)
 #
-# Dotfile linking is per-file (home/ mirrors $HOME), so multiple sources can share a directory
-# (e.g. ~/.claude/commands/ holds our files + the cg.md that context_groups installs).
-# Exception: each ~/.claude/skills/<name>/ is linked as a whole folder (a skill is a
-# self-contained unit), so adding files to a skill needs no re-link.
+# Dotfile linking is per-file (home/ mirrors $HOME), so multiple sources can share a directory.
 # Conflicts are moved into a timestamped backup folder, preserving their relative path.
 #   DOTFILES_TARGET=/path  override the link target (default $HOME) — handy for a dry run
 #   DOTFILES_BACKUP=/path  override the backup root  (default <repo>/.dotfiles-backup, gitignored)
@@ -35,28 +32,10 @@ place() {  # place <src-file> <dest-path> <rel-path>
 
 link_dotfiles() {
   echo "linking dotfiles -> $DEST"
-  chmod +x "$SRC"/.claude/hooks/*.sh 2>/dev/null || true
-
-  # Skills are linked as whole folders: each skill is a self-contained unit, so
-  # adding/removing files inside one needs no re-link, and a skill backs up as one
-  # folder. Everything else is linked per-file so shared dirs (commands/, agents/,
-  # hooks/) can mix sources.
-  local skills="$SRC/.claude/skills"
-  if [ -d "$skills" ]; then
-    for d in "$skills"/*/; do
-      [ -d "$d" ] || continue          # no-op if the glob matched nothing
-      d="${d%/}"; local rel="${d#"$SRC"/}"
-      place "$d" "$DEST/$rel" "$rel"
-    done
-  fi
-
-  # Per-file for the rest, pruning each skill folder (linked whole above).
   while IFS= read -r -d '' f; do
     local rel="${f#"$SRC"/}"
     place "$f" "$DEST/$rel" "$rel"
-  done < <(find "$SRC" \
-    \( -type d -path "$skills/*" ! -path "$skills/*/*" \) -prune -o \
-    -type f ! -name '.gitkeep' -print0)
+  done < <(find "$SRC" -type f ! -name '.gitkeep' -print0)
 }
 
 # --- links-only mode -------------------------------------------------------

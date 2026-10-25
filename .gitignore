@@ -2,14 +2,7 @@
 .dotfiles-backup/
 *.bak.*
 
-# machine-local Claude settings (never committed)
-.claude/settings.local.json
-
-home/.claude/skills/standup-prep/config.yaml
-home/.claude/skills/slack-digest/config.yaml
-
-# python runtime artifacts (skills are folder-symlinked into ~/.claude, so these
-# get created inside the repo when a skill's scripts run)
+# python runtime artifacts
 __pycache__/
 *.pyc
 

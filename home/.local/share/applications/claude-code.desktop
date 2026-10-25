@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Claude Code
+Comment=Claude Code notifications
+Exec=claude
+Icon=claude-code
+Terminal=true
+NoDisplay=true
+X-GNOME-UsesNotifications=true
