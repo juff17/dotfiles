@@ -1,20 +1,14 @@
-# Consumed by scripts/install_apt_packages.sh. Packages with their own installer
-# under scripts/ (zsh, ms fonts, docker) are not listed here.
+# Consumed by scripts/install_apt_packages.sh. Assumes Ubuntu + kubuntu-desktop, so
+# anything those already pull in (curl, vim, htop, unzip, dolphin, ark/7zip, ...) is
+# left out, as are packages with their own installer under scripts/ (zsh, ms fonts, docker).
 
 # cli tools
-curl
 fzf
 postgresql-client
-htop
 ripgrep
-unzip
-7zip
-vim
-bash-completion
 
 # build toolchain
 build-essential
-g++
 pkg-config
 libpq-dev
 
@@ -24,7 +18,6 @@ duperemove
 zram-tools
 
 # desktop apps
-dolphin
 filelight
 inkscape
 
