@@ -1,37 +1,45 @@
-htop
-hwloc
+# Consumed by scripts/install_apt_packages.sh. Packages with their own installer
+# under scripts/ (zsh, git-lfs, postgres, ms fonts, docker, vscode) are not listed here.
+
+# cli tools
 bat
-vim
 curl
-duperemove
-git
-git-lfs
-inkscape
-unzip
-zsh
-cpufrequtils
-gnuplot
-bash-completion
-pandoc
+fastfetch
+fzf
+htop
 qrencode
-yakuake
-ttf-mscorefonts-installer
-fonts-noto
-p7zip-full
-sqlitebrowser
-postgresql-client
-zram-tools
+ripgrep
+unzip
+7zip
+vim
+bash-completion
+
+# build toolchain
 build-essential
 cmake
-pkg-config
 g++
+pkg-config
 libpq-dev
+
+# system
+cpufrequtils
+duperemove
+hwloc
+zram-tools
+
+# desktop apps
+dolphin
+filelight
 flameshot
 gimp
 gimp-help-en
-filelight
-ripgrep
-fzf
-fastfetch
+inkscape
+sqlitebrowser
+
+# docs / plotting
+gnuplot
+pandoc
+
+# fonts
 fonts-jetbrains-mono
-dolphin
+fonts-noto
