@@ -1,0 +1,18 @@
+# apt packages for every machine. Assumes Ubuntu + kubuntu-desktop (the kde module),
+# so anything those already pull in (curl, vim, htop, unzip, dolphin, ark/7zip, ...)
+# is left out. Packages that belong to one setup live in that module's packages.txt.
+
+# cli tools
+fzf
+postgresql-client
+ripgrep
+
+# build toolchain
+build-essential
+pkg-config
+libpq-dev
+
+# system
+cpufrequtils
+duperemove
+zram-tools

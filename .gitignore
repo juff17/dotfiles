@@ -3,7 +3,7 @@
 *.bak.*
 
 # machine-local shell settings (sourced by .zshrc, never committed)
-home/.zshrc.local
+modules/shell/home/.zshrc.local
 
 # python runtime artifacts
 __pycache__/
@@ -13,14 +13,14 @@ __pycache__/
 # rewrites them mid-session — these hold only per-machine/runtime state, not
 # portable config: notification "Seen" flags, panel geometry, migration lists,
 # recent-file paths)
-home/.config/plasmanotifyrc
-home/.config/plasmashellrc
+modules/kde/home/.config/plasmanotifyrc
+modules/kde/home/.config/plasmashellrc
 
 # KDE files with no actual customization (only defaults / migration markers /
 # first-run flags) — nothing worth versioning
-home/.config/powermanagementprofilesrc
-home/.config/plasma-localerc
+modules/kde/home/.config/powermanagementprofilesrc
+modules/kde/home/.config/plasma-localerc
 
 # Kate editor — not used on this setup, don't track its config
-home/.config/katevirc
-home/.config/kate/
+modules/kde/home/.config/katevirc
+modules/kde/home/.config/kate/

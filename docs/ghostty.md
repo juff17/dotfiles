@@ -1,6 +1,6 @@
 # Ghostty
 
-My [Ghostty](https://ghostty.org) configuration, in [`home/.config/ghostty/`](../home/.config/ghostty/). Every new window opens as a layout:
+My [Ghostty](https://ghostty.org) configuration, in [`modules/ghostty/home/.config/ghostty/`](../modules/ghostty/home/.config/ghostty/). Every new window opens as a layout:
 
 ```
 ┌──────────────────────────────────────────────┐
@@ -21,9 +21,9 @@ The theme is Catppuccin Mocha.
 
 ## Install
 
-The dotfiles' `./install.sh` sets it all up: `ghostty`, `tmux` and `btop` come from `apt-packages.txt`, yazi from `scripts/install_yazi.sh` (snap), and Node.js for Diff and Diagrams from `scripts/install_node.sh` (fnm). btop and yazi are optional, see above.
+`./install.sh ghostty` sets it all up: `ghostty`, `tmux` and `btop` from the module's `packages.txt`, yazi from its `install.sh` (snap), and Node.js for Diff and Diagrams from the `node` module (fnm), which it requires. btop and yazi are optional, see above.
 
-`./install.sh --links` symlinks each file in `home/.config/ghostty/` into `~/.config/ghostty/`, so edits here apply live. A file already in the way is moved to `.dotfiles-backup/`. Windows that are open during install keep their layout; new windows get the new one.
+`./install.sh --links ghostty` symlinks each file in `modules/ghostty/home/.config/ghostty/` into `~/.config/ghostty/`, so edits here apply live. A file already in the way is moved to `.dotfiles-backup/`. Windows that are open during install keep their layout (the module's `after-link.sh` records them); new windows get the new one.
 
 The Claude Code hooks live in jstack's `config/core/settings.json`:
 - **SessionStart:** `bin/ghostty-claude-start` points the viewer at Claude's folder.
@@ -81,7 +81,7 @@ Settings you can change through the environment:
 `dv`'s zoom and pan math has tests. They use only Node's built-in test runner:
 
 ```bash
-node --test home/.config/ghostty/viewer/view.test.mjs
+node --test modules/ghostty/home/.config/ghostty/viewer/view.test.mjs
 ```
 
 ## Limits

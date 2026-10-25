@@ -1,0 +1,2 @@
+fonts-jetbrains-mono
+fonts-noto
