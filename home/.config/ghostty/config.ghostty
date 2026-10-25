@@ -1,0 +1,22 @@
+theme = Catppuccin Mocha
+
+# Every new split, tab and window runs ghostty-surface. In a new window it
+# starts the layout's tmux: btop on top, the tabs below. Other splits get your
+# shell.
+command = shell:exec ~/.config/ghostty/bin/ghostty-surface
+# Ghostty only adds its shell features when it sees a shell as the command,
+# so name the shell ghostty-surface ends up running.
+shell-integration = zsh
+
+# Tab keys go to tmux instead of making Ghostty tabs, so new tabs open in the
+# tmux tab bar under btop. layout.conf binds these sequences.
+keybind = ctrl+shift+t=csi:9001~
+keybind = ctrl+shift+w=csi:9002~
+keybind = ctrl+tab=csi:9003~
+keybind = ctrl+shift+tab=csi:9004~
+keybind = ctrl+shift+arrow_right=csi:9003~
+keybind = ctrl+shift+arrow_left=csi:9004~
+
+# Claude Code writes the clipboard three times per copy inside tmux, so the
+# "Copied to clipboard" popup would show three times.
+app-notifications = no-clipboard-copy
