@@ -39,7 +39,7 @@ and run its `./setup`. Its desktop notifications use the icon and `claude-code` 
 
 ## Machine-local shell settings
 `.zshrc` sources `~/.zshrc.local` last if it exists. Put anything specific to one machine there (CA bundle
-overrides, aliases into other repos); it isn't tracked here.
+overrides, tokens, work-only settings); it isn't tracked here.
 
 ## Ghostty
 The Ghostty setup (a btop + viewer + tmux-tabs layout in every window) lives in `home/.config/ghostty/`.
