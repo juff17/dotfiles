@@ -1,0 +1,12 @@
+# yazi runs as the Files mode of the Ghostty viewer pane (bin/ghostty-viewer),
+# which reads where to go next from how yazi quits: plainly (writing its cwd
+# file) for Diff, without the cwd file for Diagrams.
+[[mgr.prepend_keymap]]
+on = "<Tab>"
+run = "quit"
+desc = "Go to the diff"
+
+[[mgr.prepend_keymap]]
+on = "q"
+run = "quit --no-cwd-file"
+desc = "Go to the diagrams"

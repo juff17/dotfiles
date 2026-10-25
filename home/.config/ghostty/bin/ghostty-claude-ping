@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Claude Code Stop and permission_prompt hook: when Claude finishes or asks for
+# permission in the Ghostty layout, rings the bell in its tmux pane, which
+# turns that tab red if you're on another one. jstack's agent-notify.sh sends
+# the desktop notification.
+
+[[ ${TMUX:-} == */"ghostty,"* && -n ${TMUX_PANE:-} ]] || exit 0
+
+tty=$(tmux display -p -t "$TMUX_PANE" '#{pane_tty}')
+[[ -w $tty ]] && printf '\a' >"$tty"
+exit 0

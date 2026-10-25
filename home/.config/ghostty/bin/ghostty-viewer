@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+# The left-hand viewer: three modes take turns in one pane, starting with
+# Files. Tab goes Diagrams → Files → Diff → Diagrams, and the header's tabs
+# jump straight to one.
+#   - Files: the yazi file manager. q goes to Diagrams.
+#   - Diff: the uncommitted changes of the repository (viewer/diff-view.mjs).
+#     q goes to Files.
+#   - Diagrams: Claude's diagrams (viewer/diagram-view.mjs, dv). q closes the
+#     pane.
+#   ghostty-viewer [dir] [node]
+# node is the Node.js binary for Diff and Diagrams. Ghostty's own PATH usually
+# lacks it, so without one it uses the one ghostty-claude-start last saw.
+# VIEWER_ID is yazi's client id, which ghostty-claude-start sends `cd` to.
+
+dir=${1:-$PWD}
+node=${2:-$(command -v node || cat "${XDG_CACHE_HOME:-$HOME/.cache}/ghostty-layout/node" 2>/dev/null)}
+conf="$(dirname "$(dirname "$(readlink -f "$0")")")"
+# Where ghostty-claude-start leaves Claude's folder for Files when yazi isn't
+# running to be sent there.
+dir_file=${VIEWER_ID:+${XDG_RUNTIME_DIR:-/tmp}/ghostty-layout/viewer-$VIEWER_ID.dir}
+dv="$conf/viewer/diagram-view.mjs"
+gv="$conf/viewer/diff-view.mjs"
+
+# Diff and Diagrams exit with the code of the mode to show next; any other
+# code closes the pane.
+FILES=3
+DIFF=4
+DIAGRAMS=5
+# yazi can't pick an exit code, but it writes its folder to this file when it
+# quits plainly: Tab and the Diff tab do that, q and the Diagrams tab don't.
+next="${XDG_RUNTIME_DIR:-/tmp}/ghostty-viewer-$$"
+trap 'rm -f "$next"' EXIT
+
+mode=files
+command -v yazi >/dev/null || mode=diff
+[[ $mode == diff && -z $node ]] && {
+  echo "Neither yazi nor Node.js is installed."
+  read -rsn1 -p "Press any key to close."
+  exit 1
+}
+
+while :; do
+  case $mode in
+    files)
+      if ! command -v yazi >/dev/null; then
+        mode=diff
+        continue
+      fi
+      rm -f "$next"
+      [[ -n $dir_file && -s $dir_file ]] && dir=$(<"$dir_file")
+      YAZI_CONFIG_HOME="$conf/yazi" yazi ${VIEWER_ID:+--client-id "$VIEWER_ID"} \
+        --cwd-file="$next" "$dir"
+      [[ -s $next ]] && mode=diff || mode=diagrams
+      continue
+      ;;
+    diff)
+      [[ -n $node ]] || { mode=files; continue; }
+      GV_FILES_EXIT=$FILES GV_DIAGRAMS_EXIT=$DIAGRAMS "$node" "$gv" "$dir"
+      ;;
+    diagrams)
+      [[ -n $node ]] || { mode=files; continue; }
+      DV_TAB_EXIT=$FILES DV_DIFF_EXIT=$DIFF "$node" "$dv"
+      ;;
+  esac
+  case $? in
+    "$FILES") mode=files ;;
+    "$DIFF") mode=diff ;;
+    "$DIAGRAMS") mode=diagrams ;;
+    *) exit 0 ;;
+  esac
+done

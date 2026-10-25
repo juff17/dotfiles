@@ -1,0 +1,4 @@
+# yazi in the Ghostty viewer pane (bin/ghostty-viewer): the file list and a
+# wide preview, without the parent column.
+[mgr]
+ratio = [ 0, 3, 7 ]

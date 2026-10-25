@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# Claude Code SessionStart hook (on startup and resume): points the window's
+# viewer at the folder Claude started in. A running yazi (Files) goes there
+# now; otherwise Files opens there next time. It never moves focus, so you can
+# type into Claude straight away. If the window has no viewer (you closed it),
+# it opens one, which holds focus for a second (see open_viewer).
+# Does nothing outside the Ghostty layout. SessionStart adds anything printed
+# to Claude's context, so it stays silent.
+
+[[ ${TMUX:-} == */"ghostty,"* ]] || exit 0
+source "$(dirname "$(readlink -f "$0")")/ghostty-lib.sh"
+
+session=$(tmux display -p '#S' 2>/dev/null)
+win=${session#ghostty-}
+[[ $win =~ ^[0-9]+$ ]] || exit 0
+
+# Diff and Diagrams need Node.js, which Ghostty's own PATH usually lacks, so
+# the viewer reads where it is from here.
+if node=$(command -v node); then
+  cache=${XDG_CACHE_HOME:-$HOME/.cache}/ghostty-layout
+  mkdir -p "$cache" && readlink -f "$node" >"$cache/node"
+fi
+
+viewer=$(layout list-panes -t "layout-$win" -F '#{pane_id} #{pane_start_command}' 2>/dev/null |
+  awk '/ghostty-viewer/ { print $1; exit }')
+if [[ -z $viewer ]]; then
+  open_viewer "$win" "$PWD"
+  exit 0
+fi
+
+dir_file=$(viewer_dir_file "$win")
+mkdir -p "$(dirname "$dir_file")" && echo "$PWD" >"$dir_file"
+ya=$(command -v ya || command -v yazi.ya) &&
+  "$ya" emit-to "$(viewer_id "$win")" cd "$PWD" >/dev/null 2>&1
+exit 0

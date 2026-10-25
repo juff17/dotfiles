@@ -1,0 +1,36 @@
+# Catppuccin Mocha, as the viewer's Files mode is drawn in the layout design.
+
+[mgr]
+cwd            = { fg = "#89b4fa", bold = true }
+border_symbol  = "│"
+border_style   = { fg = "#45475a" }
+symlink_target = { fg = "#a6adc8", italic = true }
+
+# The bar on the hovered file. Its padding is drawn in the bar color, so full
+# blocks give it square ends.
+[indicator]
+parent  = { fg = "#11111b", bg = "#89b4fa", bold = true }
+current = { fg = "#11111b", bg = "#89b4fa", bold = true }
+preview = { underline = true }
+padding = { open = "█", close = "█" }
+
+[mode]
+normal_main = { fg = "#11111b", bg = "#89b4fa", bold = true }
+normal_alt  = { fg = "#89b4fa" }
+select_main = { fg = "#11111b", bg = "#f38ba8", bold = true }
+select_alt  = { fg = "#f38ba8" }
+unset_main  = { fg = "#11111b", bg = "#f38ba8", bold = true }
+unset_alt   = { fg = "#f38ba8" }
+
+[status]
+perm_sep   = { fg = "#a6adc8" }
+perm_type  = { fg = "#a6adc8" }
+perm_read  = { fg = "#a6adc8" }
+perm_write = { fg = "#a6adc8" }
+perm_exec  = { fg = "#a6adc8" }
+
+[filetype]
+rules = [
+	{ url = "*/", fg = "#89b4fa", bold = true },
+	{ url = "*", fg = "#cdd6f4" },
+]
