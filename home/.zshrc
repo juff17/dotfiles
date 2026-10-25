@@ -23,18 +23,11 @@ fi
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
 
 # fnm
-FNM_PATH="/home/jonathan/.local/share/fnm"
+FNM_PATH="$HOME/.local/share/fnm"
 if [ -d "$FNM_PATH" ]; then
   export PATH="$FNM_PATH:$PATH"
   eval "$(fnm env --shell zsh)"
 fi
 
-# Viewer for the jstack diagram-pane mod, meant for a Ghostty split
-alias dv="$HOME/.claude/mods/diagram-pane/viewer/diagram-view.mjs"
-
-# Use the system CA store (emSign roots removed) instead of bundled root lists
-export NODE_OPTIONS="--use-openssl-ca"
-export REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
-export SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
-export PIP_CERT=/etc/ssl/certs/ca-certificates.crt
-export UV_NATIVE_TLS=1
+# Machine-local settings, not tracked
+[[ ! -f ~/.zshrc.local ]] || source ~/.zshrc.local

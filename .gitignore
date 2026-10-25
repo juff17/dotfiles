@@ -2,6 +2,9 @@
 .dotfiles-backup/
 *.bak.*
 
+# machine-local shell settings (sourced by .zshrc, never committed)
+home/.zshrc.local
+
 # python runtime artifacts
 __pycache__/
 *.pyc
@@ -18,7 +21,6 @@ home/.config/flameshotrc
 # first-run flags) — nothing worth versioning
 home/.config/powermanagementprofilesrc
 home/.config/plasma-localerc
-home/.config/yakuakerc
 
 # Kate editor — not used on this setup, don't track its config
 home/.config/katevirc

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # dotfiles installer.
 #
-#   ./install.sh            # full bootstrap: system packages -> link dotfiles -> program installers
-#   ./install.sh --links    # only symlink home/ into $HOME (no sudo/apt, no program installers)
+#   ./install.sh            # full bootstrap: system packages -> system installers -> link dotfiles
+#   ./install.sh --links    # only symlink home/ into $HOME (no sudo/apt, no installers)
 #
 # Dotfile linking is per-file (home/ mirrors $HOME), so multiple sources can share a directory.
 # Conflicts are moved into a timestamped backup folder, preserving their relative path.
@@ -48,20 +48,17 @@ fi
 # --- full bootstrap --------------------------------------------------------
 echo "==> Updating system"
 sudo apt update
-sudo apt install -y software-properties-common apt-transport-https wget git stow
+sudo apt install -y software-properties-common apt-transport-https wget git
 
 echo "==> Installing APT packages"
 bash "$HERE"/scripts/install_apt_packages.sh
 
 echo "==> Running system installers"
-for s in docker postgres gitlfs uv python zsh ohmyposh jetbrains_nf msfonts vscode; do
+for s in docker postgres gitlfs uv python zsh jetbrains_nf msfonts vscode; do
   bash "$HERE/scripts/install_$s.sh"
 done
 
 echo "==> Linking dotfiles"
 link_dotfiles
-
-echo "==> Installing programs"
-DOTFILES_BACKUP="$BACKUP_ROOT" bash "$HERE"/context_groups/install.sh
 
 echo "==> Done"

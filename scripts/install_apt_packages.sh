@@ -3,4 +3,5 @@ set -e
 
 echo "==> Installing packages from apt-packages.txt"
 
-xargs -a apt-packages.txt sudo apt install -y
+LIST="$(dirname "${BASH_SOURCE[0]}")/../apt-packages.txt"
+grep -vE '^\s*(#|$)' "$LIST" | xargs sudo apt install -y
