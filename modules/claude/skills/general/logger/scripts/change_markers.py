@@ -30,6 +30,7 @@ PLACEHOLDER_RE = re.compile(r"\{[^}]*\}|\$\{[^}]*\}|#\{[^}]*\}|\$\w+|%[-+ #0-9.]
 SKIP_FILES_RE = re.compile(r"\.(md|txt|json|ya?ml|toml|lock|csv)$")
 MIN_FRAGMENT = 8
 MAX_CALL_LINES = 6
+ESCAPED_RE = re.compile(r"\\([\"'`\\])")
 
 
 def git(cwd, *args):
@@ -94,7 +95,8 @@ def fragment(line):
     for m in STRING_RE.finditer(line):
         literal = next(g for g in m.groups() if g is not None)
         for piece in PLACEHOLDER_RE.split(literal):
-            piece = piece.strip(" :=,-")
+            # The program prints \" as ", so the marker must not keep the backslash.
+            piece = ESCAPED_RE.sub(r"\1", piece).strip(" :=,-")
             if len(piece) > len(best):
                 best = piece
     return best if len(best) >= MIN_FRAGMENT else None
@@ -129,7 +131,11 @@ def markers(lines):
         if not frag or frag in seen:
             continue
         seen.add(frag)
-        yield {"where": f"{path}:{line_no}", "text": frag, "regex": re.sub(r"([.^$*+?()\[\]{}|\\])", r"\\\1", frag)}
+        yield {"where": f"{path}:{line_no}", "text": frag, "regex": marker_regex(frag)}
+
+
+def marker_regex(text):
+    return re.sub(r"([.^$*+?()\[\]{}|\\])", r"\\\1", text)
 
 
 def main():

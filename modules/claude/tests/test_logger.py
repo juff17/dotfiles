@@ -641,13 +641,13 @@ class Fragments(unittest.TestCase):
         for line in ("logger.level = :debug", "log.debug? and x", "logger.formatter proc"):
             self.assertFalse(cm.LOG_CALL_RE.search(line), line)
 
-    # Suspected bug: escaped quotes stay in the fragment as \" and the regex
-    # escapes the backslash, so the marker never matches the printed message.
-    @unittest.expectedFailure
+    # The program prints \" as ", so the marker drops the backslash.
     def test_escaped_quotes_still_match_the_printed_message(self):
-        frag = cm.fragment(r'logger.info("refusing \"admin\" login from outside")')
-        regex = re.sub(r"([.^$*+?()\[\]{}|\\])", r"\\\1", frag)
-        self.assertRegex('refusing "admin" login from outside', regex)
+        marker, = cm.markers([("app.py", 1, r'logger.info("refusing \"admin\" login from outside")')])
+        self.assertEqual(marker["text"], 'refusing "admin" login from outside')
+        self.assertRegex('WARN refusing "admin" login from outside', marker["regex"])
+        marker, = cm.markers([("app.py", 1, r"logger.info('backup of C:\\data isn\'t ready yet')")])
+        self.assertRegex(r"backup of C:\data isn't ready yet", marker["regex"])
 
 
 class Repo(unittest.TestCase):
