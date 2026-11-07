@@ -68,7 +68,7 @@ Diagrams come from jstack's diagram-pane mod, which renders each one to a PNG an
 | click **+ new** on the rail, or `n` in the hub | New agent |
 | `h` / `l`, `j` / `k` in the hub | Move between lanes and agents (`tab`: the monitors strip) |
 | `enter` in the hub (a click only selects) | Open that agent's live session beside the list, with focus in it |
-| `ctrl+shift+h` / `ctrl+shift+l` in the hub | Focus the list / the open session |
+| `alt+s` in the hub | Swap focus between the list and the open session |
 | `ctrl+shift+b` (or `ctrl+]` in the session) | Close the session the hub opened and go back to the board; in the workspace, go to the board |
 | `a` / `d` in the hub | Allow or deny the selected permission prompt |
 | `e` / `E` in the hub | Mark the selected done agent, or all of them, as seen |
