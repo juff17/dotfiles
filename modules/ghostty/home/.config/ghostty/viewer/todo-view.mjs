@@ -225,10 +225,15 @@ function summary(view) {
 
 function itemRow(item, selected) {
   const back = selected ? C.cursorBg : ''
-  const box = item.done ? `${C.green}☑${C.reset}${back}` : '☐'
+  // ☑ has an emoji form that some fonts draw two cells wide; ✓ stays one.
+  const box = item.done ? `${C.green}✓${C.reset}${back}` : '☐'
   const right = `${item.repo} · ${age(Date.now() - (item.done || item.created))}`
   const room = Math.max(4, width() - 4 - right.length - 3)
-  const title = item.done ? `${C.sub}${C.strike}${fit(item.title, room)}${C.reset}${back}` : `${selected ? C.bold : ''}${fit(item.title, room)}`
+  const fitted = fit(item.title, room)
+  const words = fitted.trimEnd()
+  const title = item.done
+    ? `${C.sub}${C.strike}${words}${C.reset}${back}${fitted.slice(words.length)}`
+    : `${selected ? C.bold : ''}${fitted}`
   return `${back}  ${box} ${title}${C.reset}${back} ${C.sub}${right} ${C.reset}`
 }
 
