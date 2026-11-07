@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Alt+E (layout.conf) runs this: opens the current tab's repo in VS Code. A
+# Alt+V (layout.conf) runs this: opens the current tab's repo in VS Code. A
 # tab in a git worktree opens that worktree, not the main checkout, since
 # --show-toplevel names the worktree. Outside git it opens the tab's folder.
 # $1 is the tab session to read: the window's, or the one the hub opened.
