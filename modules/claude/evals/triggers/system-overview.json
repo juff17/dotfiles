@@ -1,21 +1,5 @@
 [
  {
-  "query": "/system-overview",
-  "should_trigger": true
- },
- {
-  "query": "/system-overview for this repo",
-  "should_trigger": true
- },
- {
-  "query": "run /system-overview",
-  "should_trigger": true
- },
- {
-  "query": "/system-overview, focus on the hub",
-  "should_trigger": true
- },
- {
   "query": "what does this repo do",
   "should_trigger": false
  },

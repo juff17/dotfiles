@@ -20,7 +20,7 @@
   "should_trigger": true
  },
  {
-  "query": "/ticket-implement PROJ-5",
+  "query": "grab PROJ-5 and implement it, make a worktree off main",
   "should_trigger": true
  },
  {

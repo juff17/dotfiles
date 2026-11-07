@@ -15,6 +15,7 @@ Usage:
   python3 evals/run_triggers.py                 # every skill
   python3 evals/run_triggers.py todo gitlink    # just these
   python3 evals/run_triggers.py -j 6 --runs 3   # 6 at once, 3 runs per query
+  python3 evals/run_triggers.py --cwd ../..     # run in the dotfiles repo
 """
 
 import argparse
@@ -82,12 +83,12 @@ def bare(skill):
     return skill.rsplit(":", 1)[-1] if skill else skill
 
 
-def run_query(query, model, timeout):
+def run_query(query, model, timeout, cwd=None):
     env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
     cmd = ["claude", "-p", query, *CLAUDE_ARGS] + (["--model", model] if model else [])
-    with tempfile.TemporaryDirectory() as cwd:
+    with tempfile.TemporaryDirectory() as tmp:
         p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                             text=True, cwd=cwd, env=env)
+                             text=True, cwd=cwd or tmp, env=env)
         deadline = time.time() + timeout
 
         def lines():
@@ -111,13 +112,16 @@ def main():
     ap.add_argument("--runs", type=int, default=1, help="runs per query; a case triggers if most runs do")
     ap.add_argument("--model", default=None)
     ap.add_argument("--timeout", type=int, default=90)
+    ap.add_argument("--cwd", default=None,
+                    help="folder to run in (default: an empty temp dir). Queries that name files"
+                         " fire more realistically in a repo that has them")
     args = ap.parse_args()
 
     names = args.skills or sorted(p.stem for p in CASES.glob("*.json"))
     jobs = [(s, c, r) for s in names for c in json.loads((CASES / f"{s}.json").read_text())
             for r in range(args.runs)]
     with ThreadPoolExecutor(args.jobs) as pool:
-        outs = list(pool.map(lambda j: run_query(j[1]["query"], args.model, args.timeout), jobs))
+        outs = list(pool.map(lambda j: run_query(j[1]["query"], args.model, args.timeout, args.cwd), jobs))
 
     by_case = {}
     for (skill, case, _), (tool, fired) in zip(jobs, outs):

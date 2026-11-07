@@ -20,7 +20,7 @@
   "should_trigger": true
  },
  {
-  "query": "/comment-cleaner full",
+  "query": "sweep the whole repo for useless AI-written comments",
   "should_trigger": true
  },
  {

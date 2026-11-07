@@ -20,7 +20,7 @@
   "should_trigger": true
  },
  {
-  "query": "/todo add look into flaky tray test",
+  "query": "add 'look into the flaky tray test' to my todos",
   "should_trigger": true
  },
  {

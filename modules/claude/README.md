@@ -59,7 +59,9 @@ at the dotfiles root).
 `evals/run_triggers.py` checks that each skill's description makes it fire on
 the prompts it should, and not on near-misses. `evals/triggers/<skill>.json` is
 a list of `{"query", "should_trigger"}` cases: six that should fire it and four
-that share its words but want something else. Each query goes to `claude -p`
+that share its words but want something else (`system-overview` runs only
+from its slash command, so it has near-misses only). Queries never start with
+`/`: `claude -p` runs a slash command itself, so no Skill call would show. Each query goes to `claude -p`
 with every installed skill loaded, so the skills compete as they do in real
 use, and the run stops at the first tool call. A failed case names the skill
 that fired instead, so a collision between two skills shows up as one.

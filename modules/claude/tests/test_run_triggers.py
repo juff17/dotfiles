@@ -30,6 +30,9 @@ def delta(text):
 
 STOP = se({"type": "content_block_stop"})
 
+# Skills meant to run only from their slash command: their cases are all near-misses.
+SLASH_ONLY = {"system-overview"}
+
 
 class FirstTool(unittest.TestCase):
     def test_skill_input_is_assembled_from_deltas(self):
@@ -71,7 +74,14 @@ class CaseFiles(unittest.TestCase):
             with self.subTest(path.name):
                 cases = json.loads(path.read_text())
                 self.assertTrue(all(set(c) == {"query", "should_trigger"} for c in cases))
-                self.assertEqual({c["should_trigger"] for c in cases}, {True, False})
+                kinds = {False} if path.stem in SLASH_ONLY else {True, False}
+                self.assertEqual({c["should_trigger"] for c in cases}, kinds)
+
+    def test_no_slash_queries(self):
+        # claude -p expands a /command itself, so no Skill call is ever seen.
+        for path in rt.CASES.glob("*.json"):
+            for c in json.loads(path.read_text()):
+                self.assertFalse(c["query"].startswith("/"), f"{path.name}: {c['query']}")
 
 
 if __name__ == "__main__":
