@@ -48,6 +48,9 @@ def main():
 
     def read_file(path):
         if ref:
+            # `git show` would also print a tree's listing, so check it is a file.
+            if git(repo, "cat-file", "-t", f"{ref}:{path}") != "blob\n":
+                return None
             return git(repo, "show", f"{ref}:{path}")
         p = repo / path
         return p.read_text(errors="replace") if p.is_file() else None

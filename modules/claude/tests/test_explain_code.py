@@ -204,11 +204,8 @@ class AtRef(Repo):
         self.assertEqual(code, 1)
         self.assertIn("ref 'no-such-branch' is not a branch or commit in this repo", err)
 
-    @unittest.expectedFailure
     def test_a_file_step_naming_a_directory_is_not_found_at_the_ref(self):
-        # Suspected bug: at a ref, read_file uses `git show ref:path`, which
-        # succeeds for a tree and returns its listing, so a `file` step pointing
-        # at a directory passes. On disk the same step is reported as not found.
+        # `git show ref:dir` succeeds and prints the tree, so the type is checked.
         code, problems, _, _ = self.validate(tour=self.tour(step("F", file="src")))
         self.assertEqual(problems, [f"step 1 (F): file 'src' not found at ref '{self.sha}'"])
 
