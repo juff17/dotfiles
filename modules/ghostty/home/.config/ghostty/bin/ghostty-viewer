@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
-# The left-hand viewer: three modes take turns in one pane, starting with
-# Files. Tab goes Diagrams → Files → Diff → Diagrams, and the header's tabs
-# jump straight to one.
+# The left-hand viewer: four modes take turns in one pane, starting with
+# Files. Tab goes Diagrams → Files → Diff → Todo → Diagrams, and the header's
+# tabs jump straight to one.
 #   - Files: the yazi file manager. q goes to Diagrams.
 #   - Diff: the uncommitted changes of the repository (viewer/diff-view.mjs).
+#     q goes to Files.
+#   - Todo: every repo's todos, from bin/ghostty-todo (viewer/todo-view.mjs).
 #     q goes to Files.
 #   - Diagrams: Claude's diagrams (viewer/diagram-view.mjs, dv). q closes the
 #     pane.
 #   ghostty-viewer [dir] [node]
-# node is the Node.js binary for Diff and Diagrams. Ghostty's own PATH usually
+# node is the Node.js binary for Diff, Todo and Diagrams. Ghostty's own PATH usually
 # lacks it, so without one it uses the one ghostty-claude-start last saw.
 # VIEWER_ID is yazi's client id, which ghostty-claude-start sends `cd` to.
 
@@ -20,16 +22,20 @@ conf="$(dirname "$(dirname "$(readlink -f "$0")")")"
 dir_file=${VIEWER_ID:+${XDG_RUNTIME_DIR:-/tmp}/ghostty-layout/viewer-$VIEWER_ID.dir}
 dv="$conf/viewer/diagram-view.mjs"
 gv="$conf/viewer/diff-view.mjs"
+tv="$conf/viewer/todo-view.mjs"
 
-# Diff and Diagrams exit with the code of the mode to show next; any other
-# code closes the pane.
+# Diff, Todo and Diagrams exit with the code of the mode to show next; any
+# other code closes the pane.
 FILES=3
 DIFF=4
 DIAGRAMS=5
+TODO=6
 # yazi can't pick an exit code, but it writes its folder to this file when it
-# quits plainly: Tab and the Diff tab do that, q and the Diagrams tab don't.
+# quits plainly: Tab and the Diff and Todo tabs do that, q and the Diagrams
+# tab don't. The Todo tab also leaves GV_TODO_MARK (yazi/init.lua).
 next="${XDG_RUNTIME_DIR:-/tmp}/ghostty-viewer-$$"
-trap 'rm -f "$next"' EXIT
+todo_mark="$next.todo"
+trap 'rm -f "$next" "$todo_mark"' EXIT
 
 mode=files
 command -v yazi >/dev/null || mode=diff
@@ -46,26 +52,37 @@ while :; do
         mode=diff
         continue
       fi
-      rm -f "$next"
+      rm -f "$next" "$todo_mark"
       [[ -n $dir_file && -s $dir_file ]] && dir=$(<"$dir_file")
-      YAZI_CONFIG_HOME="$conf/yazi" yazi ${VIEWER_ID:+--client-id "$VIEWER_ID"} \
+      YAZI_CONFIG_HOME="$conf/yazi" GV_TODO_MARK="$todo_mark" yazi ${VIEWER_ID:+--client-id "$VIEWER_ID"} \
         --cwd-file="$next" "$dir"
-      [[ -s $next ]] && mode=diff || mode=diagrams
+      if [[ -s $next && -e $todo_mark && -n $node ]]; then
+        mode=todo
+      elif [[ -s $next ]]; then
+        mode=diff
+      else
+        mode=diagrams
+      fi
       continue
       ;;
     diff)
       [[ -n $node ]] || { mode=files; continue; }
-      GV_FILES_EXIT=$FILES GV_DIAGRAMS_EXIT=$DIAGRAMS "$node" "$gv" "$dir"
+      GV_FILES_EXIT=$FILES GV_TODO_EXIT=$TODO GV_DIAGRAMS_EXIT=$DIAGRAMS "$node" "$gv" "$dir"
+      ;;
+    todo)
+      [[ -n $node ]] || { mode=files; continue; }
+      TD_FILES_EXIT=$FILES TD_DIFF_EXIT=$DIFF TD_DIAGRAMS_EXIT=$DIAGRAMS "$node" "$tv" "$dir"
       ;;
     diagrams)
       [[ -n $node ]] || { mode=files; continue; }
-      DV_TAB_EXIT=$FILES DV_DIFF_EXIT=$DIFF "$node" "$dv"
+      DV_TAB_EXIT=$FILES DV_DIFF_EXIT=$DIFF DV_TODO_EXIT=$TODO "$node" "$dv"
       ;;
   esac
   case $? in
     "$FILES") mode=files ;;
     "$DIFF") mode=diff ;;
     "$DIAGRAMS") mode=diagrams ;;
+    "$TODO") mode=todo ;;
     *) exit 0 ;;
   esac
 done

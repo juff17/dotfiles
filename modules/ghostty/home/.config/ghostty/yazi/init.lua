@@ -1,5 +1,5 @@
 -- The viewer pane's Files mode, laid out like the design: a header row with
--- the Diagrams / Files / Diff tabs above the path, names without icons
+-- the Diagrams / Files / Diff / Todo tabs above the path, names without icons
 -- (folders end in /), and a status bar with only the mode, name, permissions
 -- and position.
 
@@ -7,6 +7,7 @@ local TABS = {
 	{ " Diagrams ", ui.Style():fg("#a6adc8"):bold() },
 	{ " Files ", ui.Style():fg("#11111b"):bg("#cdd6f4"):bold() },
 	{ " Diff ", ui.Style():fg("#a6adc8"):bold() },
+	{ " Todo ", ui.Style():fg("#a6adc8"):bold() },
 }
 
 function Root:layout()
@@ -45,7 +46,8 @@ function Header:redraw()
 end
 
 -- bin/ghostty-viewer reads where to go from how yazi quit: plainly (writing
--- its cwd file) for Diff, without the cwd file for Diagrams.
+-- its cwd file) for Diff, without the cwd file for Diagrams, and plainly
+-- after leaving the GV_TODO_MARK file for Todo.
 function Header:click(event, up)
 	if up or event.y ~= self._area.y then
 		return
@@ -58,6 +60,13 @@ function Header:click(event, up)
 				ya.emit("quit", { no_cwd_file = true })
 			elseif i == 3 then
 				ya.emit("quit", {})
+			elseif i == 4 then
+				local mark = os.getenv("GV_TODO_MARK")
+				local f = mark and io.open(mark, "w")
+				if f then
+					f:close()
+					ya.emit("quit", {})
+				end
 			end
 			return
 		end

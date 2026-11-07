@@ -25,17 +25,20 @@ const PAN_STEP = 0.2
 const TAB_MAX = 18
 const TAB_EXIT = Number(process.env.DV_TAB_EXIT) || 0
 const DIFF_EXIT = Number(process.env.DV_DIFF_EXIT) || 0
+const TODO_EXIT = Number(process.env.DV_TODO_EXIT) || 0
 // Rows around the picture: the mode header and the tab row above, the hint
 // row below.
 const TOP = 3
 const CHROME_ROWS = 3
 // The mode header names the viewer pane's other modes when it shares the pane
-// with them: Files (DV_TAB_EXIT, which Tab goes to) and Diff (DV_DIFF_EXIT).
+// with them: Files (DV_TAB_EXIT, which Tab goes to), Diff (DV_DIFF_EXIT) and
+// Todo (DV_TODO_EXIT).
 // Clicking one exits with its code.
 const MODES = [
   { label: ' Diagrams ', exit: 0 },
   { label: ' Files ', exit: TAB_EXIT },
   { label: ' Diff ', exit: DIFF_EXIT },
+  { label: ' Todo ', exit: TODO_EXIT },
 ].filter((m, i) => i === 0 || m.exit)
 
 const out = s => process.stdout.write(s)
