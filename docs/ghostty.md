@@ -38,7 +38,7 @@ The theme is Catppuccin Mocha.
 A Plasma panel widget puts the hub's agents beside the clock. It is the only alert: Claude sends no desktop pop-ups (jstack has no notification hook, and Ghostty's `desktop-notifications` is off):
 
 - **In the panel:** a glyph and count per kind: ▲ needs you, ✗ broke (a monitor saw a failed job, an error, a crash or a conflict), ✻ working, ◉ watching (◌ gone quiet) and ✓ done; ○ when nothing runs. A new ▲ or ✗ fills it with its colour for two seconds, and a ring stays around it until you open the inbox.
-- **The inbox** (click it, or the shortcut you give it): every item in those sections, needs-you first, each with its buttons. **Allow** and **Deny** answer a permission prompt, only while it's on screen, as in the hub; **Go** switches to the agent's tab and brings Ghostty to the front, or opens a background agent in the hub; **Open hub ↗** shows the hub. Keys: `j` / `k` move, `↵` goes, `1` / `2` press the first two buttons, `x` dismisses an item until it changes, `esc` closes. Done items fold into one line until shown, and leave once you open them.
+- **The inbox** (click it, or the shortcut you give it): every item in those sections, needs-you first, each with its buttons. **Allow** and **Deny** answer a permission prompt, only while it's on screen, as in the hub; **Go** opens the agent's live session in the hub, beside the list of the rest, and brings Ghostty to the front (the workspace stays on its tab); **Open hub ↗** shows the hub. Keys: `j` / `k` move, `↵` goes, `1` / `2` press the first two buttons, `x` dismisses an item until it changes, `esc` closes. Done items fold into one line until shown, and leave once you open them.
 - **Notes:** a session can post something only it knows needs you, a fix ready to push or a finished rebase, as a ▲ item: pr-babysit's `notify.sh` writes it to `$XDG_RUNTIME_DIR/agent-hub/notes/`. Go takes you to that session; Go or `x` clears it, and it's dropped after a day.
 - It reads and acts through `ghostty-hub tray` (`hub/tray.mjs`), the same agents the hub shows, so handling an item in one clears it in the other. It keeps agentd running while it's in the panel.
 
@@ -151,7 +151,7 @@ node --test modules/ghostty/home/.config/ghostty/viewer/view.test.mjs modules/gh
 - **Closing the last tab** closes the window.
 - **Ghostty tabs:** tabs made from Ghostty's own tab button don't get the layout.
 - **Answering from the hub** (`a` / `d`) works for tab agents, and only while the prompt is on screen. A background agent's prompt is answered in its session (Enter). The same goes for Allow and Deny in the Agents widget.
-- **Go in the Agents widget** brings the first Ghostty window to the front. With several layout windows open, the tab still switches in the right one, but it may be another window that comes forward.
+- **Go in the Agents widget** brings the first Ghostty window to the front. With several layout windows open, the agent still opens in the right window's hub, but it may be another window that comes forward.
 - **Sessions outside the layout** (Claude in another terminal or another tmux) show on the hub, but can't be opened from it.
 - **An open session resizes its tab** to the hub's pane, the way two tmux clients on one window do; it goes back when you're in the workspace again.
 - **`shift`+drag** selects across the whole window, btop and viewer included, since Ghostty sees one split.

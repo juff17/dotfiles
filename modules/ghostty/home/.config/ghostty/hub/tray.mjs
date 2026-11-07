@@ -173,27 +173,22 @@ async function answer(a, allow) {
   return { ok: true, message: `${allow ? 'Allowed' : 'Denied'} ${a.cmd.replace(/^Allow |\?$/g, '')}` }
 }
 
-// Takes you to the agent: its tab in the workspace, or for a background
-// agent, its session opened in the hub. `raise` asks the widget to bring
-// Ghostty to the front, which only the panel can do.
+// Takes you to the agent: its live session opened in the hub, beside the
+// list of the rest, as Enter on the board does. A tab agent opens in the hub
+// of its own Ghostty window, through a grouped session, so the workspace
+// stays on the tab it was on; a background agent opens with claude attach.
+// `raise` asks the widget to bring Ghostty to the front, which only the
+// panel can do.
 async function go(a) {
-  if (a.pane) {
-    const tab = await run(['tmux', ...TABS, 'select-window', '-t', `${a.pane.session}:${a.pane.window}`])
-    if (!tab.ok) return { ok: false, message: `Couldn't switch to ${a.title}: ${tab.err}` }
-    if (a.pane.win) await run(['tmux', ...LAYOUT, 'select-window', '-t', `layout-${a.pane.win}:work`])
-    return { ok: true, raise: true, message: `${a.title}, tab ${a.pane.tab}` }
-  }
-  if (a.jobId) {
-    const layout = await layoutSession()
-    if (!layout) return { ok: false, message: 'No Ghostty layout window is open to show it in' }
-    const hub = (await run(['tmux', ...LAYOUT, 'show', '-v', '-t', layout, '@hub'])).out.trim()
-    if (!hub) return { ok: false, message: 'The hub is not running' }
-    writeFileSync(HUB_OPEN, a.id)
-    await run(['tmux', ...LAYOUT, 'select-window', '-t', `${layout}:hub`])
-    await run(['tmux', ...LAYOUT, 'send-keys', '-t', hub, '-l', OPEN_AGENT_KEY])
-    return { ok: true, raise: true, message: `${a.title}, in the hub` }
-  }
-  return { ok: false, message: `${a.title} runs outside the layout, so there's nowhere to take you` }
+  if (!a.pane && !a.jobId) return { ok: false, message: `${a.title} runs outside the layout, so there's nowhere to take you` }
+  const layout = a.pane?.win ? `layout-${a.pane.win}` : await layoutSession()
+  if (!layout) return { ok: false, message: 'No Ghostty layout window is open to show it in' }
+  const hub = (await run(['tmux', ...LAYOUT, 'show', '-v', '-t', layout, '@hub'])).out.trim()
+  if (!hub) return { ok: false, message: 'The hub is not running' }
+  writeFileSync(HUB_OPEN, a.id)
+  await run(['tmux', ...LAYOUT, 'select-window', '-t', `${layout}:hub`])
+  await run(['tmux', ...LAYOUT, 'send-keys', '-t', hub, '-l', OPEN_AGENT_KEY])
+  return { ok: true, raise: true, message: `${a.title}, in the hub` }
 }
 
 // The layout session to show things in: one a Ghostty window is attached
