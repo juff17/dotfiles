@@ -1,0 +1,42 @@
+[
+ {
+  "query": "draw how a todo hand-off flows from the viewer to a new agent",
+  "should_trigger": true
+ },
+ {
+  "query": "can you visualize the hub's lanes and what moves an agent between them",
+  "should_trigger": true
+ },
+ {
+  "query": "sequence diagram of what happens when claude asks for a permission and I hit Allow in the widget",
+  "should_trigger": true
+ },
+ {
+  "query": "show me a picture of how setup links skills into each agent's folder",
+  "should_trigger": true
+ },
+ {
+  "query": "I'm a visual person, map out the state machine for a monitor (watching, stale, ended...)",
+  "should_trigger": true
+ },
+ {
+  "query": "flowchart of rm-guard's decision for a single rm command",
+  "should_trigger": true
+ },
+ {
+  "query": "add a mermaid diagram to docs/ghostty.md showing the layout",
+  "should_trigger": false
+ },
+ {
+  "query": "make a bar chart of test counts per module",
+  "should_trigger": false
+ },
+ {
+  "query": "the diagram pane isn't rendering, mermaid-cli keeps failing, can you debug it",
+  "should_trigger": false
+ },
+ {
+  "query": "what does the dv command do",
+  "should_trigger": false
+ }
+]

@@ -1,0 +1,42 @@
+[
+ {
+  "query": "start a new python project for a CLI tool, set it up properly with uv, ruff, tests and CI",
+  "should_trigger": true
+ },
+ {
+  "query": "add a linter and pre-commit hooks to this repo",
+  "should_trigger": true
+ },
+ {
+  "query": "write a README for this project",
+  "should_trigger": true
+ },
+ {
+  "query": "this repo has no CI, add github actions for tests and type checking",
+  "should_trigger": true
+ },
+ {
+  "query": "scaffold a new typescript library repo for me",
+  "should_trigger": true
+ },
+ {
+  "query": "restructure the README, it's a mess",
+  "should_trigger": true
+ },
+ {
+  "query": "fix the ruff error on line 12 of run_triggers.py",
+  "should_trigger": false
+ },
+ {
+  "query": "why is my github actions job failing",
+  "should_trigger": false
+ },
+ {
+  "query": "set up my zsh config on this new laptop",
+  "should_trigger": false
+ },
+ {
+  "query": "update the install section of the readme to mention --links",
+  "should_trigger": false
+ }
+]

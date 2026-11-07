@@ -1,0 +1,42 @@
+[
+ {
+  "query": "tail the api container logs and tell me if anything breaks",
+  "should_trigger": true
+ },
+ {
+  "query": "keep an eye on the service in staging while I deploy",
+  "should_trigger": true
+ },
+ {
+  "query": "watch the logs and check my new 'retry scheduled' log line actually gets hit",
+  "should_trigger": true
+ },
+ {
+  "query": "get me a kibana link for the 500s on checkout between 2 and 3pm yesterday to share with the team",
+  "should_trigger": true
+ },
+ {
+  "query": "something is failing in prod since this morning, dig through the logs and find out why",
+  "should_trigger": true
+ },
+ {
+  "query": "follow kubectl logs for the worker deployment in dev",
+  "should_trigger": true
+ },
+ {
+  "query": "add structured logging to the hub with log levels",
+  "should_trigger": false
+ },
+ {
+  "query": "my python logger prints everything twice, why",
+  "should_trigger": false
+ },
+ {
+  "query": "watch my PR's pipeline until it merges",
+  "should_trigger": false
+ },
+ {
+  "query": "show me git log for the last week",
+  "should_trigger": false
+ }
+]

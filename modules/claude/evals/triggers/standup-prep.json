@@ -1,0 +1,42 @@
+[
+ {
+  "query": "prep my standup",
+  "should_trigger": true
+ },
+ {
+  "query": "what did I do yesterday",
+  "should_trigger": true
+ },
+ {
+  "query": "give me my daily update from jira and slack",
+  "should_trigger": true
+ },
+ {
+  "query": "standup in 5 min, what do I say",
+  "should_trigger": true
+ },
+ {
+  "query": "write my yesterday/today/blockers",
+  "should_trigger": true
+ },
+ {
+  "query": "summarize my activity from yesterday for standup",
+  "should_trigger": true
+ },
+ {
+  "query": "schedule a daily standup reminder at 9:30",
+  "should_trigger": false
+ },
+ {
+  "query": "what's on my todo list",
+  "should_trigger": false
+ },
+ {
+  "query": "summarize the slack thread about the outage",
+  "should_trigger": false
+ },
+ {
+  "query": "what did this repo change yesterday",
+  "should_trigger": false
+ }
+]

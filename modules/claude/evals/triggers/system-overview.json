@@ -1,0 +1,42 @@
+[
+ {
+  "query": "/system-overview",
+  "should_trigger": true
+ },
+ {
+  "query": "/system-overview for this repo",
+  "should_trigger": true
+ },
+ {
+  "query": "run /system-overview",
+  "should_trigger": true
+ },
+ {
+  "query": "/system-overview, focus on the hub",
+  "should_trigger": true
+ },
+ {
+  "query": "what does this repo do",
+  "should_trigger": false
+ },
+ {
+  "query": "explain this codebase to me",
+  "should_trigger": false
+ },
+ {
+  "query": "walk me through the architecture of the dotfiles repo",
+  "should_trigger": false
+ },
+ {
+  "query": "write a README for this project",
+  "should_trigger": false
+ },
+ {
+  "query": "give me a high level overview of how the hub works",
+  "should_trigger": false
+ },
+ {
+  "query": "document the endpoints of this service",
+  "should_trigger": false
+ }
+]

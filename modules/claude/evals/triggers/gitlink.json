@@ -1,0 +1,42 @@
+[
+ {
+  "query": "send me a link to lines 40-60 of rm-guard.sh so I can paste it in slack",
+  "should_trigger": true
+ },
+ {
+  "query": "permalink to the first_tool function please",
+  "should_trigger": true
+ },
+ {
+  "query": "can you give me a github url pointing at where we parse the stream json",
+  "should_trigger": true
+ },
+ {
+  "query": "my teammate wants to see the retry logic, get me a shareable link to it",
+  "should_trigger": true
+ },
+ {
+  "query": "link to modules/claude/setup line 34",
+  "should_trigger": true
+ },
+ {
+  "query": "need a link to this snippet for the PR description, the one that disables hooks",
+  "should_trigger": true
+ },
+ {
+  "query": "what's the github url of this repo's remote",
+  "should_trigger": false
+ },
+ {
+  "query": "create a symlink from ~/.zshrc to the dotfiles copy",
+  "should_trigger": false
+ },
+ {
+  "query": "open a PR for this branch on github",
+  "should_trigger": false
+ },
+ {
+  "query": "show me lines 40-60 of rm-guard.sh",
+  "should_trigger": false
+ }
+]

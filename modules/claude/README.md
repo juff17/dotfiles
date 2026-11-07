@@ -28,6 +28,8 @@ modules/claude/
     <category>/<file>        # -> ~/.claude/<file> (settings.json, statusline)
   tests/
     test_<tool>.py           # not installed; setup only links the folders above
+  evals/
+    triggers/<skill>.json    # not installed; trigger cases for each skill
 ```
 
 Tools are grouped by type first, then by **category**: `docify` (document
@@ -48,6 +50,32 @@ and they never call a real GitHub or GitLab:
 ```sh
 python3 -m unittest discover -s tests
 ```
+
+CI runs them on every push to main and every PR (`.github/workflows/tests.yml`
+at the dotfiles root).
+
+## Trigger evals
+
+`evals/run_triggers.py` checks that each skill's description makes it fire on
+the prompts it should, and not on near-misses. `evals/triggers/<skill>.json` is
+a list of `{"query", "should_trigger"}` cases: six that should fire it and four
+that share its words but want something else. Each query goes to `claude -p`
+with every installed skill loaded, so the skills compete as they do in real
+use, and the run stops at the first tool call. A failed case names the skill
+that fired instead, so a collision between two skills shows up as one.
+
+```sh
+python3 evals/run_triggers.py                # every skill, about 3 minutes
+python3 evals/run_triggers.py todo gitlink   # just these
+python3 evals/run_triggers.py -j 6 --runs 3  # 6 at once, majority of 3 runs
+```
+
+Runs use your Claude login and count against its usage, so they are not in CI.
+Hooks are off and nothing is saved, so runs don't show in the agent hub. Each
+run's full results go to `evals/results/` (git-ignored). Re-run a skill's
+cases after changing its description, and add a case for each miss you see in
+real use. A new skill needs a case file: `tests/test_run_triggers.py` fails
+without one.
 
 ## Install
 

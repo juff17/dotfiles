@@ -1,0 +1,42 @@
+[
+ {
+  "query": "should I move the hub from node to rust? poke holes in this",
+  "should_trigger": true
+ },
+ {
+  "query": "I'm deciding whether to merge jstack into dotfiles or keep them separate, get me a council",
+  "should_trigger": true
+ },
+ {
+  "query": "go/no-go on switching our team from postgres to dynamodb for the events table",
+  "should_trigger": true
+ },
+ {
+  "query": "give me second opinions with real dissent: rewrite the viewer in go or keep patching it",
+  "should_trigger": true
+ },
+ {
+  "query": "hard to undo decision: drop codex/opencode support from the installer entirely?",
+  "should_trigger": true
+ },
+ {
+  "query": "I want a few independent views before choosing between monorepo and polyrepo for the new services",
+  "should_trigger": true
+ },
+ {
+  "query": "review my diff for bugs",
+  "should_trigger": false
+ },
+ {
+  "query": "what's the difference between postgres and dynamodb",
+  "should_trigger": false
+ },
+ {
+  "query": "rename the hub folder to agents",
+  "should_trigger": false
+ },
+ {
+  "query": "which is faster, node or rust, for json parsing",
+  "should_trigger": false
+ }
+]

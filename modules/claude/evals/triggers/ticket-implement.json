@@ -1,0 +1,42 @@
+[
+ {
+  "query": "implement PROJ-212",
+  "should_trigger": true
+ },
+ {
+  "query": "pick up ticket ENG-4410 and build it in a worktree",
+  "should_trigger": true
+ },
+ {
+  "query": "can you do https://acme.atlassian.net/browse/PROJ-301 end to end, base branch develop",
+  "should_trigger": true
+ },
+ {
+  "query": "work on jira PROJ-87, there's a figma link in it",
+  "should_trigger": true
+ },
+ {
+  "query": "take PROJ-99 from ticket to tested code",
+  "should_trigger": true
+ },
+ {
+  "query": "/ticket-implement PROJ-5",
+  "should_trigger": true
+ },
+ {
+  "query": "write a ticket for adding dark mode",
+  "should_trigger": false
+ },
+ {
+  "query": "implement PROJ-1, PROJ-2, PROJ-3 and PROJ-4 in parallel",
+  "should_trigger": false
+ },
+ {
+  "query": "what's the status of PROJ-212",
+  "should_trigger": false
+ },
+ {
+  "query": "implement a function that parses jira keys from a string",
+  "should_trigger": false
+ }
+]

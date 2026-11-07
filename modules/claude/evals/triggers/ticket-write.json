@@ -1,0 +1,42 @@
+[
+ {
+  "query": "write a ticket for the hub flickering on resize",
+  "should_trigger": true
+ },
+ {
+  "query": "file a jira ticket: tray Allow button sometimes does nothing",
+  "should_trigger": true
+ },
+ {
+  "query": "create a user story with acceptance criteria for exporting todos to markdown",
+  "should_trigger": true
+ },
+ {
+  "query": "update PROJ-212, add acceptance criteria for the error case",
+  "should_trigger": true
+ },
+ {
+  "query": "turn this bug report from slack into a proper ticket for whoever picks it up",
+  "should_trigger": true
+ },
+ {
+  "query": "can you draft a ticket for adding cost tracking to the statusline",
+  "should_trigger": true
+ },
+ {
+  "query": "implement PROJ-212",
+  "should_trigger": false
+ },
+ {
+  "query": "what tickets did I move yesterday",
+  "should_trigger": false
+ },
+ {
+  "query": "write a technical spec for the whole notifications epic",
+  "should_trigger": false
+ },
+ {
+  "query": "close PROJ-212 in jira",
+  "should_trigger": false
+ }
+]
