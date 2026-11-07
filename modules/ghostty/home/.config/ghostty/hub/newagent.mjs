@@ -28,6 +28,8 @@ const CHOICES = {
   mode: ['default', 'auto', 'acceptEdits', 'plan'],
   effort: ['default', 'low', 'medium', 'high', 'xhigh'],
 }
+// What a new agent starts with; 'default' is still a choice, for Claude's own.
+const START = { model: 'opus', mode: 'auto', effort: 'medium' }
 const BOX = bg(P.base)
 // Space between the popup's border and the form.
 const MARGIN_X = 3
@@ -269,9 +271,9 @@ function main() {
   d = {
     kind: 0,
     runAs: 0,
-    model: 0,
-    mode: 0,
-    effort: 0,
+    model: CHOICES.model.indexOf(START.model),
+    mode: CHOICES.mode.indexOf(START.mode),
+    effort: CHOICES.effort.indexOf(START.effort),
     recent: Math.max(0, recents.indexOf(root)),
     field: 'prompt',
     folder: { text: tilde(root), at: tilde(root).length },
