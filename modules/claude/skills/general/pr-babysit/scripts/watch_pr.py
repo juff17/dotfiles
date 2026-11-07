@@ -171,9 +171,12 @@ class GitHub(Forge):
         for t in self.review_threads(number):
             line = t.get("line") or t.get("originalLine")
             for c in t["comments"]["nodes"]:
+                author = c.get("author") or {}
+                # GraphQL drops the "[bot]" suffix that REST logins carry.
+                bot = "[bot]" if author.get("__typename") == "Bot" else ""
                 snap["comments"].append({
                     "id": f"rc:{c['databaseId']}",
-                    "author": (c.get("author") or {}).get("login", "ghost"),
+                    "author": author.get("login", "ghost") + bot,
                     "where": f"{t['path']}:{line}" if line else t["path"],
                     "body": c["body"],
                     "url": c["url"],
@@ -217,7 +220,7 @@ class GitHub(Forge):
             pageInfo { hasNextPage endCursor }
             nodes {
               isResolved path line originalLine
-              comments(first: 100) { nodes { databaseId author { login } body url } }
+              comments(first: 100) { nodes { databaseId author { login __typename } body url } }
             }
           }
         }
