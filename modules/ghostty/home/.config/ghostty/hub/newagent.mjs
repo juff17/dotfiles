@@ -7,9 +7,9 @@
 
 import { readdirSync, statSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { BOLD, P, bg, clean, enter, fg, leave, paint, render, tokens, width } from './term.mjs'
+import { BOLD, ITALIC, P, bg, clean, enter, fg, leave, paint, render, tokens, width } from './term.mjs'
 
 const HOME = homedir()
 
@@ -57,22 +57,114 @@ let RESULT = null
 let recents = []
 let d = null
 let hits = []
+// While Tab cycles through the folders that match: where they are, their
+// names and which one is in the field.
+let menu = null
 
 function fields() {
   const k = KINDS[d.kind].id
   return ['kind', 'folder', 'recent', k === 'task' ? 'prompt' : 'target', ...(k === 'task' ? ['runAs'] : []), 'model', 'mode', 'effort', 'start']
 }
 
-function input(field, w, on) {
+// `ghost` is the rest of a suggestion, drawn dim after the text with the
+// cursor on its first character, as fish and zsh-autosuggestions do.
+function input(field, w, on, ghost = '') {
   const { text, at } = d[field]
   const shown = clean(text)
   if (!on) return render([[shown || ' ', fg(P.text)]], w, BOX)
   // Keep the cursor in view on a long line.
   const start = Math.max(0, at - w + 2)
   const before = shown.slice(start, at)
+  if (ghost && at === shown.length) return render([[before, fg(P.text)], [ghost[0], '\x1b[7m' + fg(P.overlay1)], [ghost.slice(1), fg(P.overlay1)]], w, BOX)
   const cur = shown[at] ?? ' '
   const after = shown.slice(at + 1)
   return render([[before, fg(P.text)], [cur, '\x1b[7m'], [after, fg(P.text)]], w, BOX)
+}
+
+// ------------------------------------------------------------ folders
+
+// The folders the Folder field's last part could be: those that start with
+// it, or, when none does, those that do ignoring case. Hidden ones only when
+// the part starts with a dot, as in a shell.
+function matchesOf(text) {
+  const full = expand(text)
+  const dir = full.endsWith('/') ? full : dirname(full)
+  const part = full.endsWith('/') ? '' : basename(full)
+  let all = []
+  try {
+    all = readdirSync(dir, { withFileTypes: true })
+      .filter(e => (part.startsWith('.') || !e.name.startsWith('.')) && isDir(dir, e))
+      .map(e => e.name)
+      .sort()
+  } catch {}
+  let names = all.filter(n => n.startsWith(part))
+  if (!names.length) names = all.filter(n => n.toLowerCase().startsWith(part.toLowerCase()))
+  return { dir, part, names }
+}
+
+function isDir(dir, e) {
+  if (e.isDirectory()) return true
+  if (!e.isSymbolicLink()) return false
+  try {
+    return statSync(join(dir, e.name)).isDirectory()
+  } catch {
+    return false
+  }
+}
+
+const setFolder = text => (d.folder = { text, at: text.length })
+const pathTo = (dir, name) => tilde(join(dir, name))
+
+// What's left of the first match, while the cursor is at the end of a part
+// it extends.
+function suggestion() {
+  if (d.field !== 'folder' || menu || d.folder.at !== d.folder.text.length) return ''
+  const { part, names } = matchesOf(d.folder.text)
+  return part && names[0]?.startsWith(part) ? `${names[0].slice(part.length)}/` : ''
+}
+
+// Tab as in zsh: one match is filled in with its slash; several fill in
+// what they share, and once nothing more is shared, Tab steps through them
+// (Shift+Tab back) until another key keeps the one shown.
+function tab(back) {
+  if (menu) {
+    menu.i = (menu.i + (back ? menu.names.length - 1 : 1)) % menu.names.length
+    return setFolder(`${pathTo(menu.dir, menu.names[menu.i])}/`)
+  }
+  const { dir, part, names } = matchesOf(d.folder.text)
+  if (!names.length) return
+  if (names.length === 1) return setFolder(`${pathTo(dir, names[0])}/`)
+  let common = names[0]
+  for (const n of names) while (!n.toLowerCase().startsWith(common.toLowerCase())) common = common.slice(0, -1)
+  if (common.length > part.length) return setFolder(pathTo(dir, common))
+  menu = { dir, names, i: back ? names.length - 1 : 0 }
+  setFolder(`${pathTo(dir, names[menu.i])}/`)
+}
+
+// Under Folder while you type in it: the folders that match, the one Tab is
+// on highlighted, in place of Recent.
+function matchesRow(w) {
+  const { part, names } = menu ?? matchesOf(d.folder.text)
+  const head = [['Matches'.padEnd(LABEL_COLS), fg(P.blue)]]
+  if (!menu && !part && !d.folder.text.endsWith('/')) return null
+  if (!names.length) return [...head, ['no folder matches', ITALIC + fg(P.overlay1)]]
+  const chip = (n, i) => [` ${n} `, menu && i === menu.i ? fg(P.crust) + bg(P.blue) : fg(P.text) + bg(P.surface0)]
+  const room = w - LABEL_COLS
+  // Starts late enough that the highlighted one fits, and says what's hidden.
+  let from = 0
+  const fits = (a, b) => names.slice(a, b + 1).reduce((n, x) => n + width(x) + 3, 0) + (a > 0 ? 2 : 0) + 8 <= room
+  while (menu && from < menu.i && !fits(from, menu.i)) from++
+  const spans = from > 0 ? [['… ', fg(P.overlay1)]] : []
+  let used = from > 0 ? 2 : 0
+  let i = from
+  for (; i < names.length; i++) {
+    const cost = width(names[i]) + 3
+    if (used + cost + (i < names.length - 1 ? 8 : 0) > room) break
+    spans.push(chip(names[i], i), [' ', ''])
+    used += cost
+  }
+  if (i < names.length) spans.push([`+${names.length - i} more`, fg(P.overlay1)])
+  return [...head, ...spans]
 }
 
 function draw() {
@@ -94,11 +186,14 @@ function draw() {
   ])
   note(KINDS[d.kind].sub)
   row(null, [])
-  row('folder', [...label('Folder', 'folder'), { input: 'folder' }])
-  row('recent', [
-    ...label('Recent', 'recent'),
-    ...recents.flatMap((p, i) => [[` ${p.split('/').pop()} `, i === d.recent && d.field === 'recent' ? fg(P.crust) + bg(P.blue) : fg(P.text) + bg(P.surface0)], [' ', '']]),
-  ])
+  row('folder', [...label('Folder', 'folder'), { input: 'folder', ghost: suggestion() }])
+  row(
+    'recent',
+    (d.field === 'folder' && matchesRow(w)) || [
+      ...label('Recent', 'recent'),
+      ...recents.flatMap((p, i) => [[` ${p.split('/').pop()} `, i === d.recent && d.field === 'recent' ? fg(P.crust) + bg(P.blue) : fg(P.text) + bg(P.surface0)], [' ', '']]),
+    ],
+  )
   row(null, [])
   if (kind === 'task') row('prompt', [...label('Task', 'prompt'), { input: 'prompt' }])
   else row('target', [...label(kind === 'pr' ? 'PR link' : 'Watch', 'target'), { input: 'target' }])
@@ -136,7 +231,7 @@ function draw() {
     let inner
     if (inp) {
       const lw = spans.reduce((n, [t]) => n + width(t), 0)
-      inner = render(spans, lw, BOX) + input(inp.input, w - lw, d.field === b.f)
+      inner = render(spans, lw, BOX) + input(inp.input, w - lw, d.field === b.f, inp.ghost)
     } else inner = render(spans, w, BOX)
     if (b.f) hits.push({ y: lines.length + 1, f: b.f })
     lines.push(pad + inner + pad)
@@ -152,6 +247,7 @@ function key(k, paste) {
   const at = fs.indexOf(d.field)
   const move = n => (d.field = fs[Math.min(fs.length - 1, Math.max(0, at + n))])
   d.error = null
+  if (k !== '\t' && k !== '\x1b[Z') menu = null
   if (paste !== undefined) {
     if (['folder', 'prompt', 'target'].includes(d.field)) insert(d[d.field], paste.replace(/\s*\n\s*/g, ' '))
     return
@@ -161,10 +257,16 @@ function key(k, paste) {
     (CHOICES[d.field] ? [CHOICES[d.field].length, d.field] : null)
   if (k === '\x1b' || k === '\x03') return finish(null)
   if (k === '\x13') return submit()
+  if (d.field === 'folder' && (k === '\t' || (k === '\x1b[Z' && menu))) return tab(k === '\x1b[Z')
   if (k === '\x1b[A' || k === '\x1b[Z') return move(-1)
   if (k === '\x1b[B') return move(1)
   if (k === '\r') return d.field === 'start' ? submit() : move(1)
-  if (k === '\t') return d.field === 'folder' ? complete() : move(1)
+  if (k === '\t') return move(1)
+  // → or End at the end of the folder takes the suggestion.
+  if (d.field === 'folder' && (k === '\x1b[C' || k === '\x1b[F' || k === '\x05')) {
+    const rest = suggestion()
+    if (rest) return setFolder(d.folder.text + rest)
+  }
   if (choice && (k === '\x1b[C' || k === '\x1b[D' || k === ' ')) {
     const [n, prop] = choice
     if (!n) return
@@ -200,24 +302,6 @@ function insert(text, s) {
   const c = clean(s)
   text.text = text.text.slice(0, text.at) + c + text.text.slice(text.at)
   text.at += c.length
-}
-
-// Tab in Folder: the longest common start of the folders that match.
-function complete() {
-  const full = expand(d.folder.text)
-  const dir = full.endsWith('/') ? full : dirname(full)
-  const part = full.endsWith('/') ? '' : full.slice(dir.length + (dir.endsWith('/') ? 0 : 1))
-  let names = []
-  try {
-    names = readdirSync(dir, { withFileTypes: true })
-      .filter(e => e.isDirectory() && e.name.startsWith(part) && (part.startsWith('.') || !e.name.startsWith('.')))
-      .map(e => e.name)
-  } catch {}
-  if (!names.length) return
-  let common = names[0]
-  for (const n of names) while (!n.startsWith(common)) common = common.slice(0, -1)
-  const next = tilde(join(dir, common)) + (names.length === 1 ? '/' : '')
-  d.folder = { text: next, at: next.length }
 }
 
 function submit() {
