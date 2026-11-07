@@ -2,8 +2,9 @@
 # Claude Code SessionStart hook (on startup and resume): points the window's
 # viewer at the folder Claude started in. A running yazi (Files) goes there
 # now; otherwise Files opens there next time. It never moves focus, so you can
-# type into Claude straight away. If the window has no viewer (you closed it),
-# it opens one, which holds focus for a second (see open_viewer).
+# type into Claude straight away. If the window has no viewer (you closed it)
+# and the workspace shows, it opens one, which holds focus for a second (see
+# open_viewer).
 # Does nothing outside the Ghostty layout. SessionStart adds anything printed
 # to Claude's context, so it stays silent.
 
@@ -25,10 +26,23 @@ if claude=$(command -v claude); then
   mkdir -p "$cache" && echo "$claude" >"$cache/claude"
 fi
 
-viewer=$(layout list-panes -t "layout-$win" -F '#{pane_id} #{pane_start_command}' 2>/dev/null |
+# One hook at a time per window: Claude can start several sessions at once
+# (agents in worktrees), and each would otherwise see no viewer and open one.
+if lock_dir=$(state_dir); then
+  exec 9>"$lock_dir/claude-start-$win.lock" && flock -w 10 9
+fi
+
+# -s: every window of the session. The viewer lives in the workspace window,
+# which isn't the current one while the hub shows.
+viewer=$(layout list-panes -s -t "layout-$win" -F '#{pane_id} #{pane_start_command}' 2>/dev/null |
   awk '/ghostty-viewer/ { print $1; exit }')
 if [[ -z $viewer ]]; then
-  open_viewer "$win" "$PWD"
+  # Only while the workspace shows. yazi's terminal questions are answered to
+  # the focused pane, and with the hub in front that's the hub, which reads
+  # the answer's letters as its keys (o and q switch to the workspace).
+  tabs=$(layout show -t "layout-$win" -v @tabs 2>/dev/null)
+  [[ -n $tabs && $(layout display -p -t "$tabs" '#{window_active}' 2>/dev/null) == 1 ]] &&
+    open_viewer "$win" "$PWD"
   exit 0
 fi
 
