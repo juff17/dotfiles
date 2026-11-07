@@ -37,6 +37,7 @@ ERROR_RE = re.compile(
     r"\b(error|exception|traceback|fatal|panic|critical|unhandled|uncaught"
     r"|failed|failure|refused|timed? ?out|deadlock|oom|out of memory|killed"
     r"|segmentation fault|stack ?trace)\b"
+    r"|(?-i:\b[A-Z]\w*(?:Error|Exception))(?::|$)"
     r'|"level"\s*:\s*"(error|fatal|critical)"'
     r"|\blevel=(error|fatal|crit)"
     r'|\b(status|code)[=:"\s]+5\d\d\b'
@@ -50,6 +51,9 @@ BENIGN_RE = re.compile(
 )
 # Stack trace continuation lines, kept with the error that started them.
 CONTINUATION_RE = re.compile(r"^(\s+\S|at |Caused by|File \"|\.\.\. \d+ more)")
+# The unindented line naming the exception, which ends a Python trace and
+# starts a Java one: "KeyError: 'id'", "java.lang.IllegalStateException: closed".
+EXCEPTION_LINE_RE = re.compile(r"^(?:[a-z_]\w*\.)*[A-Z]\w*(?:Error|Exception)(?::|$)")
 MAX_CONTINUATION = 15
 MAX_LINE = 400
 FLOOD_WINDOW = 10
@@ -100,7 +104,7 @@ class Filter:
         self.window_start = time.monotonic()
         self.window_count = 0
         self.flood_dropped = 0
-        self.continuing = {}  # source -> remaining continuation lines
+        self.continuing = {}  # source -> (remaining continuation lines, print them)
         self.lock = threading.Lock()
 
     def classify(self, text):
@@ -117,28 +121,35 @@ class Filter:
             return
         with self.lock:
             tag = self.classify(text)
-            if tag is None:
-                left = self.continuing.get(source, 0)
-                if left and CONTINUATION_RE.match(text):
-                    self.continuing[source] = left - 1
+            # (lines left, whether to print them): a trace whose error was
+            # suppressed as a repeat is swallowed rather than printed.
+            left, keep = self.continuing.get(source, (0, False))
+            exception_line = EXCEPTION_LINE_RE.match(text)
+            if left and tag != "match" and (CONTINUATION_RE.match(text) or exception_line):
+                # Right after the error, the exception line opens a Java trace;
+                # after stack lines, it is the last line of a Python one.
+                ends = exception_line and left < MAX_CONTINUATION
+                self.continuing[source] = (0, False) if ends else (left - 1, keep)
+                if keep:
                     self._send(f"    {text.strip()}")
-                else:
-                    self.continuing[source] = 0
+                return
+            if tag is None:
+                self.continuing[source] = (0, False)
                 return
             key = (tag, normalize(text))
             entry = self.seen.get(key)
             t = time.monotonic()
             if entry and t - entry[0] < self.dedup:
                 entry[1] += 1
-                self.continuing[source] = 0
+                self.continuing[source] = (MAX_CONTINUATION, False)
                 return
             if entry and entry[1]:
                 self._send(f"[repeat] x{entry[1] + 1} in last {self.dedup}s: {text}")
                 self.seen[key] = [t, 0]
-                self.continuing[source] = 0
+                self.continuing[source] = (MAX_CONTINUATION, False)
                 return
             self.seen[key] = [t, 0]
-            self.continuing[source] = MAX_CONTINUATION if tag == "error" else 0
+            self.continuing[source] = (MAX_CONTINUATION, True) if tag == "error" else (0, False)
             self._send(f"[{tag}] {source}: {text}")
 
     def _send(self, line):

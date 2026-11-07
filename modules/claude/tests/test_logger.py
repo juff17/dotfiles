@@ -227,15 +227,26 @@ class Continuation(Watch):
         self.assertEqual(len(self.lines()), len(self.TRACE),
                          "one error line, its traceback line reported as an error, two stack lines")
 
-    # Suspected bug: the last line of a Python traceback names the exception
-    # ("KeyError: 'id'"). "KeyError" has no word break before "Error", so
-    # ERROR_RE misses it, and it is not indented, so CONTINUATION_RE misses it
-    # too. The most useful line of the trace is dropped.
-    @unittest.expectedFailure
+    # The last line of a Python traceback names the exception ("KeyError: 'id'")
+    # with no word break before "Error" and no indent; it stays with its trace.
     def test_a_python_traceback_keeps_its_exception_line(self):
         self.feed("Traceback (most recent call last):", '  File "app.py", line 3, in pay',
-                  "    order['id']", "KeyError: 'id'")
-        self.assertIn("KeyError: 'id'", self.out.getvalue())
+                  "    order['id']", "KeyError: 'id'", "KeyError: 'name'")
+        self.assertEqual(self.lines(), ["[error] api: Traceback (most recent call last):",
+                                        '    File "app.py", line 3, in pay',
+                                        "    order['id']",
+                                        "    KeyError: 'id'",
+                                        "[error] api: KeyError: 'name'"])
+
+    def test_a_java_exception_line_opens_its_trace(self):
+        self.feed("ERROR request failed", "java.lang.IllegalStateException: closed",
+                  "\tat com.shop.Pay.run(Pay.java:9)")
+        self.assertEqual(self.lines(), ["[error] api: ERROR request failed",
+                                        "    java.lang.IllegalStateException: closed",
+                                        "    at com.shop.Pay.run(Pay.java:9)"])
+
+    def test_a_class_name_ending_in_error_without_a_colon_is_not_an_error(self):
+        self.assertIsNone(wl.Filter(filter_args()).classify("registered ValidationError handler"))
 
 
 class Flood(Watch):
