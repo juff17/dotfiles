@@ -8,11 +8,10 @@
 import { readdirSync, statSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { BOLD, P, bg, clean, enter, fg, leave, paint, render, tokens, width } from './term.mjs'
 
 const HOME = homedir()
-const [RESULT, OPTS] = process.argv.slice(2)
-const { folder = '', recents = [] } = JSON.parse(OPTS || '{}')
 
 const KINDS = [
   { id: 'task', glyph: '✻', color: P.blue, label: 'Task', sub: 'a worker with a prompt' },
@@ -33,26 +32,28 @@ const BOX = bg(P.base)
 // Space between the popup's border and the form.
 const MARGIN_X = 3
 const MARGIN_Y = 1
+const HINTS = '↑/↓ field   ←/→ choose   tab complete folder   ctrl+s start   esc cancel'
+// The tallest form is a task's: kind and its note, a gap, folder, recent, a
+// gap, the prompt, a gap, run as and its note, a gap, model, mode, effort, a
+// gap, Start. Below it a gap, then the keys.
+const BODY_ROWS = 16
+const LABEL_COLS = 10
+
+// The popup's size, border included, which the hub opens it at: just room
+// for the form, with the folder and prompt as wide as the keys line.
+export const POPUP = {
+  w: width(HINTS) + 2 * MARGIN_X + 2,
+  h: BODY_ROWS + 2 + 2 * MARGIN_Y + 2,
+}
 
 const tilde = p => (p.startsWith(HOME) ? `~${p.slice(HOME.length)}` : p)
 const expand = p => (p.startsWith('~') ? HOME + p.slice(1) : p)
 const cols = () => process.stdout.columns || 80
 const rows = () => process.stdout.rows || 24
 
-const root = (folder || recents[0] || join(HOME, 'projects')).replace(/\/\.claude\/worktrees\/.*$/, '')
-const d = {
-  kind: 0,
-  runAs: 0,
-  model: 0,
-  mode: 0,
-  effort: 0,
-  recent: Math.max(0, recents.indexOf(root)),
-  field: 'prompt',
-  folder: { text: tilde(root), at: tilde(root).length },
-  prompt: { text: '', at: 0 },
-  target: { text: '', at: 0 },
-  error: null,
-}
+let RESULT = null
+let recents = []
+let d = null
 let hits = []
 
 function fields() {
@@ -78,9 +79,9 @@ function draw() {
   const w = W - 2 * MARGIN_X
   const kind = KINDS[d.kind].id
   const body = []
-  const label = (name, f) => [[name.padEnd(10), fg(d.field === f ? P.blue : P.sub)]]
+  const label = (name, f) => [[name.padEnd(LABEL_COLS), fg(d.field === f ? P.blue : P.sub)]]
   const row = (f, spans) => body.push({ f, line: spans })
-  const note = text => row(null, [[`${' '.repeat(10)}${text}`, fg(P.overlay1)]])
+  const note = text => row(null, [[`${' '.repeat(LABEL_COLS)}${text}`, fg(P.overlay1)]])
   row('kind', [
     ...label('Kind', 'kind'),
     ...KINDS.flatMap((x, i) => [
@@ -115,14 +116,19 @@ function draw() {
   row(null, [])
   const lands =
     kind !== 'task' ? 'lands in Monitors, as a background session' : RUN_AS[d.runAs].id === 'bg' ? 'lands in Working, no tab' : 'opens its session in the hub'
-  row('start', [[' Start ', BOLD + (d.field === 'start' ? fg(P.crust) + bg(P.blue) : fg(P.blue) + bg(P.surface0))], ['  ctrl+s', fg(P.sub)], [`   ${lands}`, fg(P.overlay1)]])
+  // An error stands in for where the agent lands, beside the Start it stopped.
+  row('start', [
+    [' Start ', BOLD + (d.field === 'start' ? fg(P.crust) + bg(P.blue) : fg(P.blue) + bg(P.surface0))],
+    ['  ctrl+s', fg(P.sub)],
+    d.error ? [`   ${d.error}`, BOLD + fg(P.peach)] : [`   ${lands}`, fg(P.overlay1)],
+  ])
 
-  // The form sits at the top; the error and the keys keep the bottom rows.
+  // The keys keep the bottom row, so they stay put as the form changes length.
   hits = []
   const blank = render([], W, BOX)
   const lines = Array.from({ length: MARGIN_Y }, () => blank)
   const pad = render([], MARGIN_X, BOX)
-  for (const b of body.slice(0, Math.max(0, H - MARGIN_Y - 3))) {
+  for (const b of body.slice(0, Math.max(0, H - 2 * MARGIN_Y - 2))) {
     const spans = b.line.filter(s => !s.input)
     const inp = b.line.find(s => s.input)
     let inner
@@ -133,9 +139,9 @@ function draw() {
     if (b.f) hits.push({ y: lines.length + 1, f: b.f })
     lines.push(pad + inner + pad)
   }
-  while (lines.length < H - 2) lines.push(blank)
-  lines.push(pad + render(d.error ? [[d.error, BOLD + fg(P.peach)]] : [], w, BOX) + pad)
-  lines.push(pad + render([['↑/↓ field   ←/→ choose   tab complete folder   ctrl+s start   esc cancel', fg(P.overlay1)]], w, BOX) + pad)
+  while (lines.length < H - MARGIN_Y - 1) lines.push(blank)
+  lines.push(pad + render([[HINTS, fg(P.overlay1)]], w, BOX) + pad)
+  while (lines.length < H) lines.push(blank)
   paint(lines.slice(0, H))
 }
 
@@ -250,25 +256,48 @@ function finish(spec) {
   process.exit(0)
 }
 
-if (!RESULT || !process.stdin.isTTY) {
-  console.error('newagent.mjs <result file> <options json>, in a terminal; the hub runs it.')
-  process.exit(1)
-}
-process.stdin.setRawMode(true)
-process.stdin.on('data', data => {
-  for (const t of tokens(data.toString('utf8'))) {
-    if (t.mouse) {
-      if (t.mouse.up || t.mouse.button & 64 || (t.mouse.button & 3) !== 0) continue
-      const h = hits.find(r => r.y === t.mouse.y)
-      if (!h) continue
-      d.field = h.f
-      if (h.f === 'start') submit()
-    } else key(t.key ?? '', t.paste)
+function main() {
+  const [result, opts] = process.argv.slice(2)
+  if (!result || !process.stdin.isTTY) {
+    console.error('newagent.mjs <result file> <options json>, in a terminal; the hub runs it.')
+    process.exit(1)
   }
+  RESULT = result
+  const { folder = '', recents: given = [] } = JSON.parse(opts || '{}')
+  recents = given
+  const root = (folder || recents[0] || join(HOME, 'projects')).replace(/\/\.claude\/worktrees\/.*$/, '')
+  d = {
+    kind: 0,
+    runAs: 0,
+    model: 0,
+    mode: 0,
+    effort: 0,
+    recent: Math.max(0, recents.indexOf(root)),
+    field: 'prompt',
+    folder: { text: tilde(root), at: tilde(root).length },
+    prompt: { text: '', at: 0 },
+    target: { text: '', at: 0 },
+    error: null,
+  }
+  process.stdin.setRawMode(true)
+  process.stdin.on('data', data => {
+    for (const t of tokens(data.toString('utf8'))) {
+      if (t.mouse) {
+        if (t.mouse.up || t.mouse.button & 64 || (t.mouse.button & 3) !== 0) continue
+        const h = hits.find(r => r.y === t.mouse.y)
+        if (!h) continue
+        d.field = h.f
+        if (h.f === 'start') submit()
+      } else key(t.key ?? '', t.paste)
+    }
+    draw()
+  })
+  process.stdout.on('resize', draw)
+  process.on('SIGHUP', () => finish(null))
+  process.on('SIGTERM', () => finish(null))
+  enter()
   draw()
-})
-process.stdout.on('resize', draw)
-process.on('SIGHUP', () => finish(null))
-process.on('SIGTERM', () => finish(null))
-enter()
-draw()
+}
+
+// The hub imports POPUP; run as a program, this is the form.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main()

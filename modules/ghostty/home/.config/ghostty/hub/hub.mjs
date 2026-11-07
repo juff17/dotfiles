@@ -18,6 +18,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { RUN, follow, markReviewed } from './client.mjs'
 import { cardHeights, counts, lanes, launch, monitorsOf, scrollTo } from './model.mjs'
+import { POPUP } from './newagent.mjs'
 import { BOLD, ITALIC, MONITOR, P, STATE, ago, bar, bg, clean, enter, fg, leave, mix, paint, pill, render, split, tokens, width } from './term.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
@@ -404,14 +405,10 @@ function drawList() {
 
 // ------------------------------------------------------------ new agent
 
-// The form runs in a tmux popup over the whole window (newagent.mjs), sized
-// to it, so it has room beside an open session as well as over the board.
-// It writes what you chose to a file; the hub starts the agent from that.
-// Its width follows the window's; its height is the form's, which doesn't
-// grow with more room.
-const POPUP_SHARE = 0.7
-const POPUP_WIDTH = { min: 84, max: 140 }
-const POPUP_HEIGHT = 23
+// The form runs in a tmux popup over the whole window (newagent.mjs), the
+// form's own size, so it has room beside an open session as well as over
+// the board. It writes what you chose to a file; the hub starts the agent
+// from that.
 let asking = false
 
 function recents() {
@@ -435,7 +432,6 @@ function remember(dir) {
 }
 
 const shq = s => `'${String(s).replace(/'/g, `'\\''`)}'`
-const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n))
 
 async function openDialog() {
   if (asking) return
@@ -447,8 +443,8 @@ async function openDialog() {
       unlinkSync(result)
     } catch {}
     const [W, H] = (await outer('display', '-p', '-t', process.env.TMUX_PANE, '#{window_width} #{window_height}')).out.trim().split(' ').map(Number)
-    const w = clamp(Math.round(W * POPUP_SHARE), Math.min(POPUP_WIDTH.min, W - 2), Math.min(POPUP_WIDTH.max, W - 2))
-    const h = Math.min(POPUP_HEIGHT, H - 2)
+    const w = Math.min(POPUP.w, W - 2)
+    const h = Math.min(POPUP.h, H - 2)
     const opts = JSON.stringify({ folder: focused()?.cwd ?? '', recents: recents() })
     const cmd = [process.execPath, join(HERE, 'newagent.mjs'), result, opts].map(shq).join(' ')
     // display-popup returns once the popup closes.
