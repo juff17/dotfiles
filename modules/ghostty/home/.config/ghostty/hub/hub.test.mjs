@@ -1,7 +1,7 @@
 // node --test modules/ghostty/home/.config/ghostty/hub/hub.test.mjs
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { addEntry, cardHeights, classify, counts, describeTool, emptyTranscript, lanes, launch, monitorProcess, monitorsOf, parseNotification, repoOf, scrollTo } from './model.mjs'
+import { addEntry, cardHeights, classify, counts, describeTool, emptyTranscript, lanes, launch, monitorProcess, monitorsOf, pairParked, parseNotification, repoOf, scrollTo } from './model.mjs'
 import { clean, render, width } from './term.mjs'
 
 const ts = s => new Date(Date.UTC(2026, 10, 7, 12, 0, s)).toISOString()
@@ -216,6 +216,19 @@ test('a monitor\'s process is the newest shell under its session running its com
   assert.equal(monitorProcess(procs, 1, 'python3 watch.py'), null)
   assert.equal(monitorProcess(procs, 0, cmd), null)
   assert.equal(monitorProcess([{ pid: 20, ppid: 1, pgid: 20, start: 1, cmdline: `bash -c ${cmd}` }], 1, cmd).pid, 20)
+})
+
+test('a tab parked on a background job is one agent with it, shown in the tab', () => {
+  const tab = session('busy', { sessionId: 'tab1', pid: 5, parkedJobId: 'job1', tmux: 'ghostty-1:@3.%4' })
+  const job = session('idle', { sessionId: 'job1', pid: 6, kind: 'bg', jobId: 'job1' })
+  const other = session('busy', { sessionId: 's9', pid: 7 })
+  const out = pairParked([tab, job, other])
+  assert.deepEqual(out.map(e => e.session.sessionId), ['job1', 's9'], 'the tab is not an agent of its own')
+  assert.equal(out[0].viewer, tab, 'the job shows in the tab')
+  assert.equal(out[1].viewer, null)
+  const [alone] = pairParked([tab])
+  assert.equal(alone.session.sessionId, 'tab1', 'a tab whose job is gone stays')
+  assert.equal(alone.session.status, 'idle', 'not stuck at the status it parked with')
 })
 
 test('worktree sessions know their repo and worktree', () => {

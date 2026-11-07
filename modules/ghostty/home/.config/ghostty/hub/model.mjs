@@ -239,6 +239,28 @@ export function monitorProcess(procs, sessionPid, command) {
   return mine.sort((a, b) => b.start - a.start)[0] ?? null
 }
 
+// A tab can park its conversation in a background job (parkedJobId) and
+// then only shows it: its own session file stops at the status it had when
+// it parked, and its transcript at that point. So the two are one agent:
+// the job's session, with the tab's session as `viewer`, whose pane it
+// shows in. A tab parked on a job that's gone is idle, not stuck where it
+// stopped.
+export function pairParked(list) {
+  const jobs = new Map(list.filter(s => s.jobId).map(s => [s.jobId, s]))
+  const viewers = new Map()
+  const out = []
+  for (const s of list) {
+    if (!s.parkedJobId) continue
+    if (jobs.has(s.parkedJobId)) viewers.set(s.parkedJobId, s)
+  }
+  for (const s of list) {
+    if (s.parkedJobId && jobs.has(s.parkedJobId)) continue
+    if (s.parkedJobId) out.push({ session: { ...s, status: 'idle' }, viewer: null })
+    else out.push({ session: s, viewer: (s.jobId && viewers.get(s.jobId)) || null })
+  }
+  return out
+}
+
 // A worktree session runs in <repo>/.claude/worktrees/<name>.
 export function repoOf(cwd) {
   const m = cwd.match(/^(.*)\/\.claude\/worktrees\/([^/]+)/)

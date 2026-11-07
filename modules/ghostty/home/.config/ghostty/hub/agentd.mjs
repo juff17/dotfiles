@@ -13,7 +13,7 @@ import { execFile } from 'node:child_process'
 import { closeSync, existsSync, openSync, readFileSync, readSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync, mkdirSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { addEntry, classify, emptyTranscript } from './model.mjs'
+import { addEntry, classify, emptyTranscript, pairParked } from './model.mjs'
 import { STATE, MONITOR } from './term.mjs'
 import { RUN, alivePid } from './client.mjs'
 
@@ -370,10 +370,10 @@ async function tick() {
   const stopped = stoppedTasks()
   const agents = []
   const live = new Set()
-  for (const s of list) {
+  for (const { session: s, viewer } of pairParked(list)) {
     live.add(s.sessionId)
     const t = transcript(s)
-    const p = paneOf(s, pane)
+    const p = paneOf(viewer ?? s, pane)
     if (p?.looked) {
       review(s.sessionId)
       seen.set(s.sessionId, now)
