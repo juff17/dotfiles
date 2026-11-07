@@ -995,7 +995,14 @@ process.stdin.on('data', data => {
   draw()
 })
 // After the new size is read; a SIGWINCH handler can run before that.
-process.stdout.on('resize', draw)
+// Beside an open session the list keeps its width: tmux shares a window
+// resize out between the panes, so the hub puts its own width back, as the
+// rail does. Not once the session's pane is gone, when the hub should widen.
+process.stdout.on('resize', async () => {
+  draw()
+  if (peek && cols() !== LIST_COLS && (await paneAlive(peek.pane)))
+    await outer('resize-pane', '-t', process.env.TMUX_PANE, '-x', String(LIST_COLS))
+})
 const bye = () => {
   leave()
   process.exit(0)

@@ -170,7 +170,7 @@ node --test modules/ghostty/home/.config/ghostty/viewer/view.test.mjs modules/gh
 ## Limits
 
 - **btop's pane** only displays. It ignores the mouse and never takes focus, so keys always go to the viewer or the tabs. If btop exits anyway, it starts again a second later.
-- **Dividers:** the line under btop can't be dragged, so a drag that runs up over it doesn't resize btop. The divider beside the viewer still drags.
+- **Dividers:** the line under btop can't be dragged, so a drag that runs up over it doesn't resize btop. The divider beside the viewer still drags. The hub's list beside an open session can't be dragged either, and puts its width back after a window resize.
 - **Right-click** goes to the program under the pointer; tmux's own pane menu is turned off.
 - **When a window opens**, the viewer holds focus for about a second while yazi starts, then hands it back. yazi asks Ghostty about the terminal through tmux, and tmux gives the answers to whichever pane has focus; in Claude's pane one of them reads as Alt+P and opens the model picker. Keys typed in that second go to yazi. Starting Claude never moves focus, since yazi is already running.
 - **Closing the last tab** closes the window. Only workspace tabs count: closing the last one also closes the window's hub tabs and whatever runs in them.
