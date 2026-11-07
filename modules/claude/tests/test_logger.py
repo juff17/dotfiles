@@ -744,13 +744,15 @@ class Markers(Repo):
         self.assertIn("no base branch found; pass --base", r.stderr)
         self.assertEqual(run_script("change_markers", "-C", str(self.dir), "--base", "trunk").returncode, 0)
 
-    # Suspected bug: `git diff <base>` leaves out untracked files, so a log call
-    # in a new file that has not been `git add`ed yet is missed, though the
-    # docstring promises uncommitted lines.
-    @unittest.expectedFailure
-    def test_a_new_untracked_file_is_scanned(self):
-        self.write("handlers.py", 'logger.info("webhook received from stripe")\n')
-        self.assertEqual(self.texts(), ["webhook received from stripe"])
+    # `git diff <base>` leaves out untracked files, so they are read separately.
+    def test_a_new_untracked_file_is_scanned_but_an_ignored_one_is_not(self):
+        self.write(".gitignore", "build/\n")
+        self.write("build/gen.py", 'logger.info("generated code logs this")\n')
+        self.write("pkg/handlers.py", 'x = 1\nlogger.info("webhook received from stripe")\n')
+        self.assertEqual(self.markers(), [{"where": "pkg/handlers.py:2", "text": "webhook received from stripe",
+                                           "regex": "webhook received from stripe"}])
+        self.assertEqual(self.texts("-C", str(self.dir / "pkg")), ["webhook received from stripe"],
+                         "paths stay relative to the repo root from a subdirectory")
 
     # Suspected bug: a log call wrapped over several lines (black's style for
     # long messages) has the call on one line and the string on the next, so

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """change_markers: find log messages added on this branch, as regexes to watch for.
 
-Scans lines added since the merge base with the base branch (committed and
-uncommitted) for logging calls, then keeps the longest fixed text of each
+Scans lines added since the merge base with the base branch (committed,
+uncommitted, and in new untracked files that are not ignored) for logging calls, then keeps the longest fixed text of each
 message so it still matches once placeholders are filled in at runtime.
 
 Usage:
@@ -17,6 +17,7 @@ import json
 import re
 import subprocess
 import sys
+from pathlib import Path
 
 LOG_CALL_RE = re.compile(
     r"\b(log|logger|logging|_log|console|slog|zap|zerolog|klog|glog|winston|pino"
@@ -66,6 +67,24 @@ def added_lines(cwd, base):
         elif raw.startswith("+") and path:
             yield path, line_no, raw[1:]
             line_no += 1
+    yield from untracked_lines(cwd)
+
+
+def untracked_lines(cwd):
+    """Yield (file, line_no, text) for every line of new files git does not track yet."""
+    code, top = git(cwd, "rev-parse", "--show-toplevel")
+    if code:
+        return
+    _, out = git(cwd, "ls-files", "--others", "--exclude-standard", "--full-name", "-z", ":/")
+    for path in filter(None, out.split("\0")):
+        try:
+            data = (Path(top.strip()) / path).read_bytes()
+        except OSError:
+            continue
+        if b"\0" in data:
+            continue  # binary
+        for line_no, text in enumerate(data.decode("utf-8", "replace").splitlines(), 1):
+            yield path, line_no, text
 
 
 def fragment(line):
