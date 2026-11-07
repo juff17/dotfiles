@@ -375,7 +375,8 @@ function main() {
   d = {
     kind: 0,
     runAs: 0,
-    branch: 0,
+    // A task gets its own worktree unless you say otherwise.
+    branch: BRANCH.findIndex(b => b.id === 'worktree'),
     model: 0,
     mode: 0,
     effort: 0,
