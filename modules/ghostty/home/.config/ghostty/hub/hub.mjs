@@ -46,6 +46,9 @@ const LIST_COLS = 46
 // What Alt+N (layout.conf) and the rail's + new send the hub to open New
 // agent, whatever it's in the middle of.
 const NEW_AGENT_KEY = '\x1b[9100~'
+// What Ctrl+Shift+B and Ctrl+] send just before they close the open session,
+// so the hub draws the board, not the list, once its pane widens.
+const PEEK_CLOSING_KEY = '\x1b[9101~'
 
 const run = (args, opts = {}) =>
   new Promise(resolve =>
@@ -831,6 +834,11 @@ process.stdin.on('data', data => {
       confirm = null
       filtering = false
       void openDialog()
+    } else if (t.key === PEEK_CLOSING_KEY) {
+      if (peek) {
+        peek = null
+        void forgetPeek()
+      }
     } else if (t.mouse) onMouse(t.mouse)
     else if (t.key) onKey(t.key)
   }
