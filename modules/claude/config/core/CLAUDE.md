@@ -39,3 +39,9 @@ secret's value, stop and ask the user.
 
 Why: these keys grant access to the user's accounts, and anything printed
 lands in the transcript.
+
+## Commit messages
+
+- Keep each message to 20 words at most, ideally 10 to 20.
+- Say what the change does at its core, not every file it touches.
+- Never add a `Co-Authored-By: Claude` line or any other Claude attribution.
