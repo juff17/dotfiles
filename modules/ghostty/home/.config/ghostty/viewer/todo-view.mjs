@@ -24,7 +24,7 @@ import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { launch } from '../hub/model.mjs'
-import { CATEGORIES, DEFAULT_CATEGORY, HANDOFF_MODELS, STORE, add, age, arrange, change, colorOf, fill, filingState, handoffSpec, load, remove, repoOf, stamp } from './todo.mjs'
+import { CATEGORIES, DEFAULT_CATEGORY, HANDOFF_MODELS, STORE, add, age, arrange, change, colorOf, fill, filingState, handoffSpec, inGit, load, remove, repoOf, stamp } from './todo.mjs'
 
 const TODO_CLI = join(dirname(fileURLToPath(import.meta.url)), '../bin/ghostty-todo')
 
@@ -454,13 +454,14 @@ function statusRow(list, current) {
   if (prompt?.kind === 'handoff') {
     const n = prompt.ids.length
     const choice = (key, value) => `${C.blue}${key}${C.reset} ${C.text}${C.bold}${value}${C.reset}`
-    const choices = [
-      choice('t', prompt.runAs === 'tab' ? 'tab' : 'background'),
-      choice('b', prompt.worktree ? 'worktree' : 'this branch'),
-      choice('m', prompt.model),
-    ].join('  ')
+    // Outside git there's no worktree or branch to choose, only the folder.
+    const outside = n - prompt.inGit
+    const branch = !prompt.inGit
+      ? `${Date.now() - (prompt.flash ?? 0) < SAY_MS ? C.peach : C.sub}in ${n === 1 ? 'its folder' : 'their folders'}, not git${C.reset}`
+      : `${choice('b', prompt.worktree ? 'worktree' : 'this branch')}${outside ? `${C.sub} · ${outside} not in git${C.reset}` : ''}`
+    const choices = [choice('t', prompt.runAs === 'tab' ? 'tab' : 'background'), branch, choice('m', prompt.model)].join('  ')
     const lead = `${C.claudeBg}${C.crust}${C.bold} HAND OFF ${C.reset} ${C.sub}${n} ${n === 1 ? 'todo' : 'todos'} →${C.reset} ${choices}`
-    const used = 11 + `${n} todos → `.length + 't background  b this branch  m sonnet'.length
+    const used = 11 + `${n} todos → `.length + 't background  b this branch · 9 not in git  m sonnet'.length
     return width() - used > 20 ? `${lead}  ${hint([['↵', 'start'], ['esc', 'cancel']])}` : lead
   }
   if (prompt?.kind === 'confirm') return `${fg(P.peach)}${prompt.text}${C.reset}`
@@ -648,7 +649,8 @@ function startHandoff() {
     ids = [item.id]
   }
   // Without a layout window there is no tab session to open tabs in.
-  prompt = { kind: 'handoff', ids, runAs: WIN ? 'tab' : 'bg', worktree: true, model: HANDOFF_MODELS[0] }
+  const git = ids.filter(id => inGit(items.find(i => i.id === id) ?? {})).length
+  prompt = { kind: 'handoff', ids, inGit: git, runAs: WIN ? 'tab' : 'bg', worktree: git > 0, model: HANDOFF_MODELS[0] }
   draw()
 }
 
@@ -656,10 +658,18 @@ function onHandoffKey(key) {
   if (key === 't') {
     if (!WIN) return say('Not in a Ghostty layout window, so agents can only run in the background')
     prompt.runAs = prompt.runAs === 'tab' ? 'bg' : 'tab'
-  } else if (key === 'b') prompt.worktree = !prompt.worktree
+  } else if (key === 'b') {
+    // The row covers the status line, so the note itself lights up.
+    if (!prompt.inGit) {
+      prompt.flash = Date.now()
+      setTimeout(draw, SAY_MS + 50)
+      return draw()
+    }
+    prompt.worktree = !prompt.worktree
+  }
   else if (key === 'm') prompt.model = HANDOFF_MODELS[(HANDOFF_MODELS.indexOf(prompt.model) + 1) % HANDOFF_MODELS.length]
   else if (key === '\r') {
-    const { ids, ...how } = prompt
+    const { ids, inGit: _, flash: __, ...how } = prompt
     prompt = null
     return void handOff(ids, how)
   }
@@ -680,8 +690,6 @@ async function handOff(ids, how) {
   say(`Starting ${ids.length === 1 ? 'an agent' : `${ids.length} agents`}…`, P.peach)
   const started = []
   const failed = []
-  // Wanted a worktree but aren't in git, so run in their folder.
-  const loose = []
   for (const id of ids) {
     const item = items.find(i => i.id === id)
     if (!item) continue
@@ -689,13 +697,10 @@ async function handOff(ids, how) {
     const error = spec ? await startAgent(item, spec) : `${item.repo} is gone from disk`
     if (error) failed.push(`${item.title}: ${error}`)
     else started.push(item)
-    if (spec && how.worktree && !spec.worktree) loose.push(item)
   }
   for (const item of started) marked.delete(item.id)
   void refresh()
   if (failed.length) return say(`${started.length ? `Started ${started.length}; ` : ''}couldn't start ${failed.join('; ')}`, P.red)
-  if (loose.length)
-    return say(`Started ${started.length}; ${loose.map(i => `"${i.title}"`).join(', ')} isn't in a git repo, so it runs in its folder without a worktree`, P.peach)
   const where = how.runAs === 'tab' ? 'in new tabs' : 'in the background'
   say(started.length === 1 ? `Handed to an agent ${where === 'in new tabs' ? 'in a new tab' : where}: ${started[0].title}` : `Handed ${started.length} todos to agents ${where}`, P.green)
 }

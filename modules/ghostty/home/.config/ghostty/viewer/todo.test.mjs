@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 
 import { launch } from '../hub/model.mjs'
-import { FILING_TIMEOUT_MS, KEEP_DONE_MS, add, age, arrange, category, change, fill, filingState, find, handoffSpec, load, newId, prune, remove, repoOf } from './todo.mjs'
+import { FILING_TIMEOUT_MS, KEEP_DONE_MS, add, age, arrange, category, change, fill, filingState, find, handoffSpec, inGit, load, newId, prune, remove, repoOf } from './todo.mjs'
 
 const now = new Date(2026, 10, 7, 15, 0).getTime()
 const item = (id, cat, root, created, done = null) => ({ id, cat, root, repo: root.split('/').pop(), title: id, created, done })
@@ -135,6 +135,8 @@ test('a hand-off starts one task agent per item, in its repo', () => {
   assert.equal(handoffSpec(it, {}, () => false), undefined)
   const loose = handoffSpec({ ...it, repo: 'none', root: '/r/pix', worktree: '', cwd: '/r/pix' }, {}, all)
   assert.equal(loose.worktree, false, 'no worktree outside git')
+  assert.equal(inGit({ repo: 'none', root: '/r/pix' }, all), false)
+  assert.equal(inGit(it, all), true)
   assert.doesNotMatch(launch(loose).line, / -w /)
   assert.equal(handoffSpec(it, {}, d => d !== '/r/dot/.git').worktree, false, 'nor in a folder git no longer tracks')
   const bg = launch(handoffSpec({ ...it, note: '' }, { runAs: 'bg', model: 'sonnet' }, all))

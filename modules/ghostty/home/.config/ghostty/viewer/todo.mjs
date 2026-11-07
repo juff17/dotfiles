@@ -219,9 +219,11 @@ export async function repoOf(dir) {
 // says worktree: false.
 export const HANDOFF_MODELS = ['opus', 'sonnet', 'haiku']
 
+// Whether the item's repo is a git repo still, which claude -w needs.
+export const inGit = (item, exists = existsSync) => item.repo !== 'none' && !!item.root && exists(join(item.root, '.git'))
+
 export function handoffSpec(item, { runAs = 'tab', worktree = true, model = 'opus' } = {}, exists = existsSync) {
-  // claude -w needs a git repo; an item added outside one runs in its folder.
-  worktree = worktree && item.repo !== 'none' && exists(join(item.root ?? '', '.git'))
+  worktree = worktree && inGit(item, exists)
   const places = worktree ? [item.root, item.worktree, item.cwd] : [item.worktree, item.cwd, item.root]
   const cwd = places.find(d => d && exists(d))
   if (!cwd) return undefined
