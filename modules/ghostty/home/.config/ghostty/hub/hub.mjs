@@ -403,37 +403,45 @@ function drawList() {
   const items = listItems()
   const pickable = items.filter(x => x.id)
   if (!pickable.some(x => x.id === listSel)) listSel = (pickable.find(x => x.agent.id === peek?.id) ?? pickable[0])?.id ?? null
-  const sel = items.findIndex(x => x.id === listSel)
+  // Each item's rows: an agent takes two, its name and age, then its repo,
+  // branch and what it's doing; scrolling counts rows, not items.
+  const drawn = items.map(it => {
+    if (it.spacer) return [render([], W)]
+    if (it.group) return [header(it.group === 'monitors' ? { glyph: '◉', color: P.teal, name: 'Monitors' } : STATE[it.group], it.count, W)]
+    if (it.empty) return [render([[`   ${EMPTY[it.empty]}`, ITALIC + fg(P.overlay1)]], W)]
+    const fill = it.id === listSel ? SEL_BG : ''
+    if (it.monitor) {
+      const look = MONITOR[it.monitor.state]
+      const head = [[` ${look.glyph} `, fg(look.color)], [clean(it.monitor.description), BOLD + fg(P.text)]]
+      return [split(head, [[` ${ago(it.monitor.event?.at ?? it.monitor.startedAt)} `, fg(P.sub)]], W, fill)]
+    }
+    const a = it.agent
+    const open = peek && a.id === peek.id
+    const place = a.worktree ? ` ⑂ ${a.worktree}` : a.branch ? ` ⎇ ${a.branch}` : ''
+    return [
+      split([[open ? ' ▶ ' : '   ', fg(P.blue)], [clean(a.title), BOLD + fg(P.text)]], [[` ${ago(a.since)} `, fg(P.sub)]], W, fill),
+      render([['   '], [clean(a.repo), fg(P.sub)], [clean(place), fg(P.overlay1)], [` · ${clean(a.cmd)}`, fg(P.overlay1)]], W, fill),
+    ]
+  })
   const room = H - 3
+  const sel = items.findIndex(x => x.id === listSel)
   if (sel >= 0) {
-    if (sel < scroll.list) scroll.list = sel
-    if (sel >= scroll.list + room) scroll.list = sel - room + 1
+    const top = drawn.slice(0, sel).reduce((n, r) => n + r.length, 0)
+    const bottom = top + drawn[sel].length
+    if (top < scroll.list) scroll.list = top
+    if (bottom > scroll.list + room) scroll.list = bottom - room
   }
-  for (const it of items.slice(scroll.list, scroll.list + room)) {
-    const y = lines.length + 1
-    if (it.spacer) {
-      lines.push(render([], W))
-      continue
+  let row = 0
+  items.forEach((it, i) => {
+    for (const line of drawn[i]) {
+      if (row >= scroll.list && row < scroll.list + room) {
+        const y = lines.length + 1
+        if (it.id) hits.push({ x1: 1, x2: W, y1: y, y2: y, act: () => ((listSel = it.id), openSession(it.agent)) })
+        lines.push(line)
+      }
+      row++
     }
-    if (it.group) {
-      const look = it.group === 'monitors' ? { glyph: '◉', color: P.teal, name: 'Monitors' } : STATE[it.group]
-      lines.push(header(look, it.count, W))
-      continue
-    }
-    if (it.empty) {
-      lines.push(render([[`   ${EMPTY[it.empty]}`, ITALIC + fg(P.overlay1)]], W))
-      continue
-    }
-    const on = it.id === listSel
-    const open = peek && it.agent.id === peek.id && !it.monitor
-    const fill = on ? SEL_BG : ''
-    const head = it.monitor
-      ? [[` ${MONITOR[it.monitor.state].glyph} `, fg(MONITOR[it.monitor.state].color)], [clean(it.monitor.description), BOLD + fg(P.text)]]
-      : [[open ? ' ▶ ' : '   ', fg(P.blue)], [clean(it.agent.title), BOLD + fg(P.text)], [` ${clean(it.agent.cmd)}`, fg(P.sub)]]
-    const id = it.id
-    hits.push({ x1: 1, x2: W, y1: y, y2: y, act: () => ((listSel = id), openSession(it.agent)) })
-    lines.push(split(head, [[` ${ago(it.monitor ? (it.monitor.event?.at ?? it.monitor.startedAt) : it.agent.since)} `, fg(P.sub)]], W, fill))
-  }
+  })
   while (lines.length < H - 1) lines.push(render([], W))
   lines.push(footer(W))
   return lines.slice(0, H)
