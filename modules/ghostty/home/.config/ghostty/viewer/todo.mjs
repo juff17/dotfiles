@@ -287,6 +287,8 @@ export function handoffSpec(item, { runAs = 'tab', worktree = true, model = 'opu
   const prompt = [
     `Work on this item from my todo list (${about}): ${item.title.replace(/[.!?]+$/, '')}.`,
     item.note && item.note.trim().replace(/([^.!?])$/, '$1.'),
+    // The worktree may still hold work the user wants, so the agent asks.
+    worktree && 'Once the work is merged and I approve it, ask me whether to remove the worktree; never remove it unasked.',
     `Once it's finished, mark it done: ~/.config/ghostty/bin/ghostty-todo done ${item.id}`,
   ]
     .filter(Boolean)
