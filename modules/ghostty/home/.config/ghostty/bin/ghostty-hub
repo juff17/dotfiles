@@ -4,6 +4,7 @@
 #   ghostty-hub rail <window> <work|hub>  the rail down the left of either
 #   ghostty-hub peek <session> <window>   one tab's live session, beside the hub
 #   ghostty-hub attach <id>               a background agent's live session
+#   ghostty-hub tray <snapshot|seen>      the tray widget's items (hub/tray.mjs)
 #   ghostty-hub setup [window]            adds the rail and the hub to a window
 #                                         opened before they existed
 # hub and rail start again a second after they exit, like btop, so a crash
@@ -67,6 +68,9 @@ case ${1:-} in
       read -rsn1
     fi
     ;;
+  tray)
+    exec "$node" "$GHOSTTY_CONF/hub/tray.mjs" "${@:2}"
+    ;;
   setup)
     win=${2:-}
     if [[ -z $win ]]; then
@@ -80,7 +84,7 @@ case ${1:-} in
     add_hub "$win"
     ;;
   *)
-    sed -n '2,10s/^# \{0,1\}//p' "$0"
+    sed -n '2,11s/^# \{0,1\}//p' "$0"
     exit 1
     ;;
 esac

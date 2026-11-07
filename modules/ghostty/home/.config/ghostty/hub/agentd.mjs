@@ -5,8 +5,8 @@
 // tab server's panes, and writes what it found to state.json, which the hub
 // and the rails read (client.mjs). It also marks each agent's tmux tab with
 // its state's glyph (tmux.conf draws it).
-// It runs while a hub or rail does: they register in clients/, and it exits
-// once none is left. A second copy exits at once, so starting it is safe.
+// It runs while a hub, a rail or the tray widget does: they register in
+// clients/, and it exits once none is left. A second copy exits at once, so starting it is safe.
 //   agentd.mjs [--once]   --once prints one state to stdout and exits
 
 import { execFile } from 'node:child_process'
@@ -319,9 +319,21 @@ let last = ''
 let lastPanes = new Map()
 let lonelySince = 0
 
+// A client is a process, named by its pid in clients/, or the tray widget,
+// which can't stay registered as a process: it touches clients/tray each
+// time it asks for a snapshot (tray.mjs), so a fresh file counts.
+const TRAY_FRESH_MS = 15000
+
 function clientsAlive() {
   try {
     return readdirSync(join(RUN, 'clients')).some(pid => {
+      if (!/^\d+$/.test(pid)) {
+        try {
+          return Date.now() - statSync(join(RUN, 'clients', pid)).mtimeMs < TRAY_FRESH_MS
+        } catch {
+          return false
+        }
+      }
       if (alivePid(Number(pid))) return true
       try {
         unlinkSync(join(RUN, 'clients', pid))
