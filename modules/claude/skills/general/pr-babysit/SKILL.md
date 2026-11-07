@@ -138,6 +138,7 @@ may need to add.
 | `[failed]` | A job or check failed | [references/pipelines.md](references/pipelines.md) |
 | `[manual]` | A blocking manual job, environment approval, or workflow approval is waiting | Notify: human needed |
 | `[stuck]` | A job has waited for a runner longer than `--stuck-after` | Notify: human needed |
+| `[stage]` | Every job in one stage finished. On GitLab a stage; on GitHub the part of the check name before ` / ` | Chat line only, no desktop notification |
 | `[pipeline]` | All checks for the head commit finished (passed or failed) | Notify with the result |
 | `[behind]` | The base branch moved ahead; may say the host requires a rebase | [references/rebase.md](references/rebase.md) |
 | `[conflict]` | The branch conflicts with the base | [references/rebase.md](references/rebase.md) |
@@ -146,6 +147,10 @@ may need to add.
 | `[push]` | The PR head moved (the user or someone else pushed) | Fetch it. If the worktree is already at the new sha (the user pushed from it), or it is clean and still at `lease_sha`, move it to the new sha (`git reset --hard <new sha>`) and set `lease_sha` to it. Otherwise leave it and put "the PR moved under your local changes" in the briefing. |
 | `[merged]` / `[closed]` | Done; the script exits | Give the final briefing and stop |
 | `[error]` | API calls keep failing; the script keeps retrying | Tell the user once |
+
+`[failed]`, `[manual]`, `[stuck]`, `[stage]`, and `[pipeline]` end with
+`| <progress>`: every stage in pipeline order with its state. Show it as the
+progress line described in [references/briefing.md](references/briefing.md).
 
 ## 5. Notify the user
 

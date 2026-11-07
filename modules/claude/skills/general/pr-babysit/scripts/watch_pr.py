@@ -6,7 +6,11 @@ GH_TOKEN) / GITLAB_TOKEN. What has been reported is kept in a cache file, so
 re-arming the watcher after a Monitor timeout never repeats an event.
 
 Events: [watch] [setup] [busy] [auth] [error] [push] [failed] [manual] [stuck]
-        [pipeline] [behind] [conflict] [comment] [review] [merged] [closed]
+        [stage] [pipeline] [behind] [conflict] [comment] [review] [merged] [closed]
+
+Pipeline events end with "| <progress>": every stage in pipeline order with
+its state, e.g. "CI ✓ · QA ⏳ · EU". A stage is a GitLab stage, or on GitHub
+the part of the check name before " / " (a reusable workflow call).
 """
 
 import argparse
@@ -31,11 +35,14 @@ def flat(text, limit=240):
     return text if len(text) <= limit else text[: limit - 1] + "…"
 
 
+def when(iso):
+    return datetime.fromisoformat(iso.replace("Z", "+00:00"))
+
+
 def age_minutes(iso):
     if not iso:
         return 0
-    then = datetime.fromisoformat(iso.replace("Z", "+00:00"))
-    return (datetime.now(timezone.utc) - then).total_seconds() / 60
+    return (datetime.now(timezone.utc) - when(iso)).total_seconds() / 60
 
 
 class AuthError(Exception):
@@ -120,12 +127,17 @@ class GitHub(Forge):
         snap["behind"] = cmp.get("behind_by", 0)
 
         for c in self.pages(f"{self.repo()}/commits/{sha}/check-runs", key="check_runs"):
+            group, _, job = c["name"].partition(" / ")
             snap["checks"].append({
                 "id": c["id"],
                 "name": c["name"],
+                "group": group,
+                "job": job or group,
                 "status": self.check_status(c),
                 "url": c.get("html_url") or c.get("details_url") or "",
                 "waited": age_minutes(c.get("started_at")) if c["status"] == "queued" else 0,
+                "started": c.get("started_at"),
+                "finished": c.get("completed_at"),
                 "allow_failure": False,
             })
         for s in self.api(f"{self.repo()}/commits/{sha}/status").get("statuses", []):
@@ -133,9 +145,13 @@ class GitHub(Forge):
             snap["checks"].append({
                 "id": f"status:{s['context']}",
                 "name": s["context"],
+                "group": s["context"],
+                "job": s["context"],
                 "status": state,
                 "url": s.get("target_url") or "",
                 "waited": age_minutes(s.get("created_at")) if state == "pending" else 0,
+                "started": s.get("created_at"),
+                "finished": s.get("updated_at") if state != "pending" else None,
                 "allow_failure": False,
             })
         # Environment approvals and first-time-contributor approvals show up
@@ -335,9 +351,13 @@ class GitLab(Forge):
         return {
             "id": j["id"],
             "name": f"{j['name']} (stage {j['stage']})",
+            "group": j["stage"],
+            "job": j["name"],
             "status": status,
             "url": url,
             "waited": (queued or 0) / 60,
+            "started": j.get("started_at"),
+            "finished": j.get("finished_at"),
             "allow_failure": j.get("allow_failure", False),
         }
 
@@ -441,8 +461,74 @@ def once(state, key):
     return True
 
 
+UNFINISHED = ("waiting", "pending", "running", "manual")
+MARK = {"passed": "✓", "failed": "✗", "canceled": "⊘", "running": "⏳", "manual": "⏸", "waiting": ""}
+
+
+def stages(checks):
+    """Group checks into stages, in pipeline order (by first job id)."""
+    groups = {}
+    for c in checks:
+        if c.get("group"):
+            groups.setdefault(c["group"], []).append(c)
+
+    def first_id(jobs):
+        ids = [j["id"] for j in jobs if isinstance(j["id"], int)]
+        return min(ids) if ids else float("inf")
+
+    out = []
+    for name, jobs in sorted(groups.items(), key=lambda g: first_id(g[1])):
+        counted = [j for j in jobs if not j["allow_failure"]] or jobs
+        seen = {j["status"] for j in counted}
+        if seen <= {"skipped"}:
+            continue
+        if "failed" in seen:
+            status = "failed"
+        elif seen & {"running", "pending"}:
+            status = "running"
+        elif "manual" in seen:
+            status = "manual"
+        elif "waiting" in seen:
+            status = "waiting"
+        elif "canceled" in seen:
+            status = "canceled"
+        else:
+            status = "passed"
+        out.append({
+            "name": name,
+            "status": status,
+            "done": not seen & set(UNFINISHED),
+            "jobs": [j["job"] for j in jobs if j["status"] != "skipped"],
+        })
+    return out
+
+
+def progress(groups, detail=None):
+    parts = []
+    for g in groups:
+        text = f"{g['name']} {MARK[g['status']]}".strip()
+        if g["name"] == detail and g["jobs"] != [g["name"]]:
+            text += f" ({', '.join(g['jobs'])})"
+        parts.append(text)
+    return " · ".join(parts)
+
+
+def duration(checks):
+    starts = [when(c["started"]) for c in checks if c.get("started")]
+    ends = [when(c["finished"]) for c in checks if c.get("finished")]
+    if not starts or not ends:
+        return ""
+    mins = int((max(ends) - min(starts)).total_seconds() // 60)
+    return f" in {mins // 60}h {mins % 60}m" if mins >= 60 else f" in {max(mins, 1)}m"
+
+
 def report(snap, state, me, stuck_after):
     sha, short = snap["sha"], snap["sha"][:8]
+    # Stages already finished when a head is first seen are not news.
+    fresh = state.get("sha") != sha
+    groups = stages(snap["checks"])
+    line = progress(groups)
+    tail = f" | {line}" if line else ""
 
     if state.get("sha") and state["sha"] != sha:
         emit("push", f"head moved to {short}")
@@ -469,19 +555,24 @@ def report(snap, state, me, stuck_after):
             tag = "manual"
         if tag and once(state, f"{sha}:{c['id']}:{c['status']}"):
             note = " (allowed to fail)" if c["allow_failure"] else ""
-            emit(tag, f"{c['name']}{note} id={c['id']} {c['url']}")
+            emit(tag, f"{c['name']}{note} id={c['id']} {c['url']}{tail}")
         if (c["status"] == "pending" and c["waited"] >= stuck_after
                 and once(state, f"{sha}:{c['id']}:stuck")):
             emit("stuck", f"{c['name']} has waited {int(c['waited'])} min for a runner "
-                          f"id={c['id']} {c['url']}")
+                          f"id={c['id']} {c['url']}{tail}")
 
-    unfinished = ("waiting", "pending", "running", "manual")
-    if blocking and not any(c["status"] in unfinished for c in blocking):
+    finished = bool(blocking) and not any(c["status"] in UNFINISHED for c in blocking)
+    for g in groups:
+        # The pipeline event carries the last stages, so they are not sent twice.
+        if g["done"] and once(state, f"{sha}:stage:{g['name']}") and not (fresh or finished):
+            emit("stage", f"{g['name']} {g['status']} for {short} | {progress(groups, g['name'])}")
+    if finished:
         failed = [c["name"] for c in blocking if c["status"] == "failed"]
         result = "failed" if failed else "passed"
         if once(state, f"{sha}:pipeline:{result}"):
             detail = f": {', '.join(failed)}" if failed else ""
-            emit("pipeline", f"{result} for {short}, {len(failed)} of {len(blocking)} checks failed{detail}")
+            emit("pipeline", f"{result} for {short}{duration(blocking)}, {len(failed)} of "
+                             f"{len(blocking)} checks failed{detail}{tail}")
 
     for r in snap["reviews"]:
         if r["author"] != me and once(state, f"review:{r['id']}"):
