@@ -52,15 +52,6 @@
     ],
     "Notification": [
       {
-        "matcher": "agent_needs_input|agent_completed|permission_prompt|idle_prompt",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "$HOME/.claude/hooks/agent-notify.sh"
-          }
-        ]
-      },
-      {
         "matcher": "permission_prompt",
         "hooks": [
           {
@@ -87,10 +78,6 @@
           {
             "type": "command",
             "command": "$HOME/.config/ghostty/bin/ghostty-claude-ping"
-          },
-          {
-            "type": "command",
-            "command": "$HOME/.claude/hooks/agent-notify.sh"
           }
         ]
       }

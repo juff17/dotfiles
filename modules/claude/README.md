@@ -82,10 +82,11 @@ turns on plugins already installed. On a new machine, install them once:
 /plugin install playwright@claude-plugins-official
 ```
 
-`hooks/core/agent-notify.sh` sends the desktop notifications, on `Stop` and on
-the `Notification` events. Permission prompts and background sessions waiting
-on input are critical, so they stay up until dismissed. In tmux, a notification
-names the tab and is skipped while that tab is in front of you. Its icon and the `claude-code` desktop entry are in dotfiles. While dotfiles' Agents panel widget runs, it shows these instead and the hook stays quiet; so does pr-babysit's `notify.sh`.
+Claude sends no desktop notifications. What needs you (a permission prompt, a
+question, a finished agent, a failed pipeline) shows in the Agents panel
+widget from dotfiles' `ghostty` module, which reads every session itself; no
+hook is needed. pr-babysit's `notify.sh` adds what only it knows (a fix ready
+to push, a finished rebase) to that tray as a note.
 
 ## Vendor support
 

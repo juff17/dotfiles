@@ -23,7 +23,8 @@ Scripts live in this skill's `scripts/` directory:
 - `watch_pr.py`: polls pipeline, merge state, reviews, and comments, and
   prints one line per new event. It remembers what it reported, so re-arming
   it never repeats an event.
-- `notify.sh TITLE MESSAGE`: desktop alert.
+- `notify.sh TITLE MESSAGE`: puts an item in the Agents tray, under Needs
+  you, that takes the user to this session. There are no desktop pop-ups.
 
 ## Hard rules
 
@@ -161,7 +162,8 @@ progress line described in [references/briefing.md](references/briefing.md).
 
 ## 5. Notify the user
 
-Notify only when the user has something to do: a failure that needs them, a
+The Agents tray already shows the monitor's failed, manual, stuck and
+conflicted jobs on its own. Notify only when the user has something to do: a failure that needs them, a
 manual or stuck job, a finished pipeline, changes requested, a finished
 rebase, a fix waiting for review, or someone pushing over local commits.
 
