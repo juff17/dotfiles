@@ -105,16 +105,18 @@ async function activeFolder() {
   return (shown.ok && shown.out.trim()) || DIR
 }
 
-// A window shows in several sessions (the hub's grouped ones too); its own
-// is the window's ghostty-<n>.
+// A window shows in several sessions (the hub's too). A workspace tab's own
+// is its window's ghostty-<n>; a tab opened from the hub is only in
+// hubtabs-<n> (ghostty-lib.sh hub_tabs), and marked hub.
 async function readPanes() {
   const listed = await tabs('list-panes', '-a', '-F', '#{pane_id}\t#{session_name}\t#{window_id}\t#{window_index}')
   const map = new Map()
   if (!listed.ok) return map
   for (const line of listed.out.split('\n')) {
     const [pane, session, window, index] = line.split('\t')
-    const win = Number(/^ghostty-(\d+)$/.exec(session ?? '')?.[1])
-    if (pane && win) map.set(pane, { session, window, index, win })
+    const [, kind, n] = /^(ghostty|hubtabs)-(\d+)$/.exec(session ?? '') ?? []
+    if (!pane || !kind || (kind === 'hubtabs' && map.has(pane))) continue
+    map.set(pane, { session, window, index, win: Number(n), hub: kind === 'hubtabs' })
   }
   return map
 }
@@ -200,7 +202,8 @@ function tabOf(item) {
   if (!item.pane) return ''
   const at = panes.get(item.pane)
   if (!at) return 'tab closed'
-  return at.win === WIN || !WIN ? `tab ${at.index}` : `w${at.win} · tab ${at.index}`
+  const tab = at.hub ? 'a hub tab' : `tab ${at.index}`
+  return at.win === WIN || !WIN ? tab : `w${at.win} · ${tab}`
 }
 
 const clock = ms => new Date(ms).toTimeString().slice(0, 5)
@@ -459,6 +462,11 @@ async function goTo() {
   if (!item.pane) return say(item.by === 'you' ? 'You added this one here, so it has no tab to go to' : 'This one was added outside the layout’s tabs')
   panes = await readPanes()
   const at = panes.get(item.pane)
+  if (at?.hub) {
+    // The hub opens its tabs itself, beside its board.
+    if (at.win === WIN && WIN) await outer('select-window', '-t', `layout-${WIN}:hub`)
+    return say(`It's a tab the hub opened${at.win === WIN ? '' : ` in Ghostty window ${at.win}`}: pick it on the board`)
+  }
   if (at) {
     await tabs('select-window', '-t', `${at.session}:${at.window}`)
     await tabs('select-pane', '-t', item.pane)
