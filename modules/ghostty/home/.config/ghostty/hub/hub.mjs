@@ -550,8 +550,13 @@ async function open(a) {
   else if (a.jobId) cmd = `${bin} attach ${a.jobId}`
   else return say(`${a.title} runs outside the layout's tabs, so it can't be opened here`, P.peach)
   if (a.id && !a.id.startsWith('new:')) markReviewed(a.id)
+  if (!peek) await findPeek()
   if (peek && (await paneAlive(peek.pane))) {
-    await outer('respawn-pane', '-k', '-t', peek.pane, cmd)
+    // A tab of the session the pane already shows is one tab switch away;
+    // anything else (a background agent, another window's tab) restarts it.
+    const switched =
+      a.pane?.window && peek.window && (await tabs('select-window', '-t', `=peek-${peek.pane.slice(1)}:${a.pane.window}`)).ok
+    if (!switched) await outer('respawn-pane', '-k', '-t', peek.pane, cmd)
     await outer('select-pane', '-t', peek.pane)
     peek.id = a.id
     peek.window = a.pane?.window ?? null
@@ -585,6 +590,22 @@ async function closePeek() {
 }
 
 const forgetPeek = () => outer('set', '-wu', '-t', process.env.TMUX_PANE, '@peek_pane')
+
+// The hub restarts in a loop (bin/ghostty-hub), and a new one starts with
+// no open session in mind while the old one's pane may still be beside it.
+// That pane is marked @peek, so the hub takes it back rather than splitting
+// off a second one.
+async function findPeek() {
+  if (peek || !process.env.TMUX) return
+  const list = (await outer('list-panes', '-t', process.env.TMUX_PANE, '-F', '#{pane_id} #{@peek}')).out
+  const pane = list.split('\n').map(l => l.split(' ')).find(([, mark]) => mark === '1')?.[0]
+  if (!pane) return
+  // The window the pane shows, when it shows a tab; empty for `claude attach`.
+  const shown = await tabs('list-windows', '-t', `=peek-${pane.slice(1)}`, '-F', '#{window_active} #{window_id}')
+  const window = shown.ok ? (shown.out.split('\n').find(l => l.startsWith('1 '))?.slice(2) ?? null) : null
+  peek = { pane, id: agents.find(a => window && a.pane?.window === window)?.id ?? null, window }
+  await outer('set', '-w', '-t', pane, '@peek_pane', pane)
+}
 
 // a and d answer a permission prompt by pressing its keys in the agent's
 // pane: 1 for Yes, Esc for No. Only while Claude says it's waiting right now
@@ -722,6 +743,15 @@ async function watchPeek() {
     return draw()
   }
   if (!p.window) return
+  // One taken back at startup may predate the first state from agentd.
+  if (!p.id) {
+    const a = agents.find(x => x.pane?.window === p.window)
+    if (a) {
+      p.id = a.id
+      listSel = a.id
+      draw()
+    }
+  }
   const name = `peek-${p.pane.slice(1)}`
   const [session, win] = (await tabs('display', '-p', '-t', `=${name}:`, '#{session_name} #{window_id}')).out.trim().split(' ')
   if (peek !== p || session !== name || !win || win === p.window) return
@@ -758,5 +788,6 @@ follow(s => {
   draw()
 })
 draw()
+void findPeek().then(draw)
 setInterval(draw, 1000)
 setInterval(() => void watchPeek(), 400)
