@@ -30,6 +30,8 @@ that in.
   - `follow-up`: unfinished or deferred work from this session. This is the default.
   - `docs`: writing or updating docs.
   - `question`: something to decide or find out.
+  - `other`: errands and busywork that fit none of the above, often outside
+    any repo. Items added outside a git repo show `none` as their repo.
 - **Note:** one to three sentences that let the user, or a later Claude, pick the
   item up cold. Say what's left, where it is (file, function, PR) and why it
   matters. Leave the note out when the title says it all.
