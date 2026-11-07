@@ -283,7 +283,8 @@ _launch=
 [services][org.kde.spectacle.desktop]
 CurrentMonitorScreenShot=
 OpenWithoutScreenshot=
-_launch=Print\tF11\tMeta+Shift+S
+RectangularRegionScreenShot=Print\tF11\tMeta+Shift+S
+_launch=
 
 [wacomtablet]
 Map to fullscreen=Meta+Ctrl+F,Meta+Ctrl+F,Map to fullscreen
