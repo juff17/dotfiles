@@ -2,9 +2,14 @@
 // The viewer pane's Todo mode, as the canvas's T1 draws it with T3's jump
 // back: every repo's open todos grouped by category, the active tab's repo
 // first in each group, and the selected one opened under its row with its
-// note and where it came from. ↵ goes to the tab that added it, or offers to
-// start Claude there again when that tab is gone. Items come from
-// bin/ghostty-todo (the /todo skill) and from a here.
+// note and where it came from. ↵ opens the agent it was handed to in the
+// hub, beside the hub's list, or else goes to the tab that added it, or
+// offers to start Claude there again when that tab is gone. Items come from
+// bin/ghostty-todo (the /todo skill) and from here: a hands a message to
+// Claude Haiku (ghostty-todo file), which writes the item; Shift+A adds one
+// by hand, a title, a category and a note. m marks items and w hands the
+// marked ones, or the selected one, to agents: one Claude each, started as
+// the hub's New agent starts a task, in a tab or the background.
 //   todo-view.mjs [dir]
 // DV_TABS names the window's tab session as `socket:session`
 // (bin/ghostty-claude-start); without it, dir is the folder.
@@ -13,12 +18,18 @@
 // q to Files. TD_POPUP=1 runs it in Alt+T's popup (bin/ghostty-todo-panel)
 // instead: no modes, Alt+T, Esc or q close it, and so does going to a tab.
 
-import { execFile } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, watch } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
-import { CATEGORIES, DEFAULT_CATEGORY, STORE, add, age, arrange, change, colorOf, load, remove, repoOf, stamp } from './todo.mjs'
+import { readState } from '../hub/client.mjs'
+import { launch } from '../hub/model.mjs'
+import { go as openInHub } from '../hub/tray.mjs'
+import { CATEGORIES, DEFAULT_CATEGORY, HANDOFF_MODELS, STORE, TYPES, add, age, arrange, change, colorOf, fill, filingState, handoffPlace, handoffSpec, inGit, load, remove, repoOf, stamp, typeColorOf } from './todo.mjs'
+
+const TODO_CLI = join(dirname(fileURLToPath(import.meta.url)), '../bin/ghostty-todo')
 
 const DIR = process.argv[2] || process.cwd()
 const [TABS_SOCKET, TABS_SESSION] = process.env.DV_TABS?.split(':') ?? [process.env.AGENT_HUB_TABS_SOCKET || 'ghostty', '']
@@ -47,22 +58,34 @@ const CHROME_ROWS = 3
 const rgb = hex => [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16)).join(';')
 const fg = hex => `\x1b[38;2;${rgb(hex)}m`
 const bg = hex => `\x1b[48;2;${rgb(hex)}m`
-const P = { text: '#cdd6f4', sub: '#a6adc8', overlay: '#6c7086', blue: '#89b4fa', green: '#a6e3a1', peach: '#fab387', red: '#f38ba8', mauve: '#cba6f7' }
+const P = {
+  text: '#cdd6f4', sub: '#a6adc8', overlay: '#6c7086', surface2: '#585b70',
+  blue: '#89b4fa', green: '#a6e3a1', peach: '#fab387', red: '#f38ba8', mauve: '#cba6f7',
+}
 const C = {
   text: fg(P.text),
   sub: fg(P.sub),
   overlay: fg(P.overlay),
+  // Placeholder text in an empty prompt.
+  hint: fg(P.surface2),
   blue: fg(P.blue),
   green: fg(P.green),
+  peach: fg(P.peach),
+  red: fg(P.red),
+  mauve: fg(P.mauve),
   crust: fg('#11111b'),
   cursorBg: bg('#313244'),
   cardBg: bg('#181825'),
   tabBg: bg(P.text),
   pillBg: bg(P.mauve),
+  claudeBg: bg(P.peach),
   bold: '\x1b[1m',
+  italic: '\x1b[3m',
   strike: '\x1b[9m',
   reset: '\x1b[0m',
 }
+const SPINNER = '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+const SPIN_MS = 120
 
 const out = s => process.stdout.write(s)
 const width = () => process.stdout.columns
@@ -75,11 +98,16 @@ let loadError = ''
 let here = { root: '', repo: '' }
 // Where each tab-session pane is now: its window's own session, window and index.
 let panes = new Map()
+// Every agent the hub knows of, from agentd's state.
+let agents = []
 let only = false
 let showDone = false
 let cursorId = ''
+// The ids m marked, for w to hand off together.
+let marked = new Set()
 let scroll = 0
-// What the status row is asking for: a title, a category, or a yes.
+// What the status row is asking for: a message for Claude; a title, a
+// category and a note; changes to an item; how to hand items off; or a yes.
 let prompt = null
 let said = null
 // The body rows last drawn, for clicks.
@@ -145,6 +173,7 @@ async function refresh() {
     const folder = await activeFolder()
     if (folder !== here.folder) here = { folder, ...(await repoOf(folder)) }
     panes = await readPanes()
+    agents = readState()?.agents ?? []
   } finally {
     refreshing = false
     draw()
@@ -157,7 +186,7 @@ function shown() {
 }
 
 function selectable(view = shown()) {
-  const list = view.groups.flatMap(g => g.items)
+  const list = [...view.filing, ...view.groups.flatMap(g => g.items)]
   return showDone ? [...list, ...view.doneToday] : list
 }
 
@@ -200,9 +229,9 @@ const hint = pairs => pairs.map(([key, what]) => `${C.blue}${key}${C.sub} ${what
 const hintWidth = pairs => pairs.map(([key, what]) => `${key} ${what}`).join('  ').length
 
 // Where an item's tab is now, in words.
-function tabOf(item) {
-  if (!item.pane) return ''
-  const at = panes.get(item.pane)
+function tabOf(pane) {
+  if (!pane) return ''
+  const at = panes.get(pane)
   if (!at) return 'a tab now closed'
   const tab = at.hub ? 'a hub tab' : `tab ${at.index}`
   return at.win === WIN || !WIN ? tab : `w${at.win} · ${tab}`
@@ -227,41 +256,128 @@ function itemRow(item, selected) {
   const back = selected ? C.cursorBg : ''
   // ☑ has an emoji form that some fonts draw two cells wide; ✓ stays one.
   const box = item.done ? `${C.green}✓${C.reset}${back}` : '☐'
+  const mark = marked.has(item.id) ? `${C.mauve}▌${C.reset}${back}` : ' '
+  // ✻, as the hub marks a Claude at work: it's been handed to an agent.
+  const agent = item.handoff ? `${C.blue}✻ ${C.reset}${back}` : ''
   const right = `${item.repo} · ${age(Date.now() - (item.done || item.created))}`
-  const room = Math.max(4, width() - 4 - right.length - 3)
+  // The type leads the right side, in its own color.
+  const type = item.type ? `${item.type} · ` : ''
+  const room = Math.max(4, width() - 4 - type.length - right.length - (agent ? 2 : 0) - 3)
   const fitted = fit(item.title, room)
   const words = fitted.trimEnd()
   const title = item.done
     ? `${C.sub}${C.strike}${words}${C.reset}${back}${fitted.slice(words.length)}`
     : `${selected ? C.bold : ''}${fitted}`
-  return `${back}  ${box} ${title}${C.reset}${back} ${C.sub}${right} ${C.reset}`
+  const typed = item.type ? `${fg(typeColorOf(item.type))}${item.type}${C.sub} · ` : ''
+  return `${back}${mark} ${box} ${title}${C.reset}${back} ${agent}${C.sub}${typed}${right} ${C.reset}`
 }
 
 const visible = text => [...text.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '')].length
 
+const cardWidth = () => Math.max(10, width() - 7)
+const cardLine = text => {
+  const inner = text.replaceAll(C.reset, `${C.reset}${C.cardBg}`)
+  return `    ${C.cardBg} ${inner}${' '.repeat(Math.max(0, cardWidth() - visible(text)))} ${C.reset}`
+}
+
 // The selected item's card: who added it where, its note, and its keys.
 function cardRows(item) {
-  const w = Math.max(10, width() - 7)
-  const pad = text => {
-    const inner = text.replaceAll(C.reset, `${C.reset}${C.cardBg}`)
-    return `    ${C.cardBg} ${inner}${' '.repeat(Math.max(0, w - visible(text)))} ${C.reset}`
-  }
+  if (item.filing) return filingCard(item)
+  const w = cardWidth()
+  const pad = cardLine
   // The repo is on the item's row already; the branch goes last, where a
   // long one can be cut.
   const by = item.by === 'claude' ? 'Claude' : 'you'
-  const where = [tabOf(item) && `in ${tabOf(item)}`, `at ${clock(item.created)}`, item.branch && `on ${item.branch}`].filter(Boolean).join(' ')
+  const where = [tabOf(item.pane) && `in ${tabOf(item.pane)}`, `at ${clock(item.created)}`, item.branch && `on ${item.branch}`].filter(Boolean).join(' ')
   const rows = [pad(`${C.sub}${fit(`added by ${by} ${where}`, w).trimEnd()}${C.reset}`)]
+  if (prompt?.kind === 'edit' && prompt.id === item.id) return [...rows, ...editRows(w)]
+  if (item.handoff) {
+    const { name, where: ran, pane, at } = item.handoff
+    const place = ran === 'bg' ? 'in the background' : `in ${tabOf(pane) || 'a tab'}`
+    rows.push(pad(`${C.blue}✻ ${C.sub}${fit(`handed to ${name} ${place} at ${clock(at)}`, w - 2).trimEnd()}${C.reset}`))
+  }
   if (item.note) for (const line of wrap(item.note, w)) rows.push(pad(`${C.text}${line}${C.reset}`))
-  const go = !item.pane ? '' : panes.has(item.pane) ? 'go to tab' : 'reopen'
-  const keys = [...(go ? [['↵', go]] : []), ['e', 'edit'], ['c', 'category'], ['space', item.done ? 'reopen' : 'done']]
+  const go = hubAgent(item) || agentPane(item) ? 'go to agent' : !item.pane ? '' : panes.has(item.pane) ? 'go to tab' : 'reopen'
+  const keys = [...(go ? [['↵', go]] : []), ['e', 'edit'], ['c', 'category'], ['t', 'type'], ['space', item.done ? 'reopen' : 'done']]
   rows.push(pad(hint(keys)))
   return rows
+}
+
+const LABEL_W = 10
+
+// Every field of the item being edited, the one you're on with the caret:
+// the category and type as all their picks, the others as their text wrapped under it.
+function editRows(w) {
+  const room = Math.max(4, w - LABEL_W)
+  const rows = []
+  for (const field of EDIT_FIELDS) {
+    const on = prompt.field === field
+    const label = `${on ? `${C.mauve}${C.bold}` : C.sub}${FIELD_NAMES[field].padEnd(LABEL_W)}${C.reset}`
+    let lines
+    if (field === 'cat') {
+      const color = colorOf(prompt.cat)
+      lines = [
+        on
+          ? CATEGORIES.map((c, i) => `${C.blue}${i + 1}${C.reset} ${c.name === prompt.cat ? `${C.bold}${fg(c.color)}\x1b[4m` : fg(c.color)}${c.short}${C.reset}`).join(' ')
+          : `${fg(color)}${prompt.cat}${C.reset}`,
+      ]
+    } else if (field === 'type') {
+      const pick = (key, name, color) => `${C.blue}${key}${C.reset} ${name === prompt.type ? `${C.bold}${fg(color)}\x1b[4m` : fg(color)}${name ?? 'none'}${C.reset}`
+      lines = [
+        on
+          ? [...TYPES.map((t, i) => pick(i + 1, t.name, t.color)), pick(0, null, P.sub)].join(' ')
+          : prompt.type
+            ? `${fg(typeColorOf(prompt.type))}${prompt.type}${C.reset}`
+            : `${C.hint}none${C.reset}`,
+      ]
+    } else if (!prompt[field]) lines = [on ? `${CARET}${C.hint}${fit(field === 'note' ? 'Details for later' : PLACEHOLDER.title, room - 1).trimEnd()}${C.reset}` : `${C.hint}none${C.reset}`]
+    else {
+      // Room for the caret after the last character.
+      lines = wrap(prompt[field], on ? room - 1 : room).map(line => `${C.text}${line}${C.reset}`)
+      if (on) lines[lines.length - 1] += CARET
+    }
+    lines.forEach((line, i) => rows.push(cardLine(`${i ? ' '.repeat(LABEL_W) : label}${line}`)))
+  }
+  return rows
+}
+
+// A message Claude is turning into a todo: a spinner while it works, a cross
+// once it has failed, and the message itself until the real title comes.
+function filingRow(item, selected) {
+  const back = selected ? C.cursorBg : ''
+  const failed = filingState(item) === 'failed'
+  const mark = failed ? `${C.red}✕` : `${C.peach}${SPINNER[Math.floor(Date.now() / SPIN_MS) % SPINNER.length]}`
+  const right = `${item.repo} · ${age(Date.now() - item.created)}`
+  const room = Math.max(4, width() - 4 - right.length - 3)
+  const text = fit(item.title, room)
+  const title = failed ? `${selected ? C.bold : ''}${text}` : `${C.sub}${C.italic}${text}`
+  return `${back}  ${mark}${C.reset}${back} ${title}${C.reset}${back} ${C.sub}${right} ${C.reset}`
+}
+
+function filingCard(item) {
+  const w = cardWidth()
+  if (filingState(item) === 'filing')
+    return [cardLine(`${C.sub}Claude Haiku is filing this, since ${clock(item.filing.started)}${C.reset}`), cardLine(hint([['x', 'drop']]))]
+  const why = item.filing.error || 'it took too long'
+  return [
+    ...wrap(`Claude couldn't file this: ${why}`, w).map(line => cardLine(`${C.red}${line}${C.reset}`)),
+    cardLine(hint([['r', 'retry'], ['shift+a', 'add by hand'], ['x', 'drop']])),
+  ]
 }
 
 // Every body row, with the item each one belongs to so clicks and scrolling
 // find it.
 function bodyRows(view, current) {
   const rows = []
+  if (view.filing.length) {
+    rows.push({ text: `${C.sub}▾${C.reset} ${C.peach}${C.bold}filing${C.reset} ${C.sub}${view.filing.length}${C.reset}` })
+    for (const item of view.filing) {
+      const selected = item === current
+      rows.push({ text: filingRow(item, selected), item })
+      if (selected) for (const text of filingCard(item)) rows.push({ text, item })
+    }
+    rows.push({ text: '' })
+  }
   for (const g of view.groups) {
     rows.push({ text: `${C.sub}▾${C.reset} ${fg(g.color)}${C.bold}${g.name}${C.reset} ${C.sub}${g.items.length}${C.reset}` })
     for (const item of g.items) {
@@ -288,7 +404,7 @@ function emptyRows(height) {
     ? [loadError]
     : only
       ? [`No open todos in ${here.repo || 'this repo'}.`, 'f shows every repo.']
-      : ['No todos yet.', 'Ask Claude to /todo something, or press a.']
+      : ['No todos yet.', 'Press a to have Claude add one, or Shift+A to add one by hand.']
   const rows = Array.from({ length: height }, () => ({ text: '' }))
   const top = Math.max(0, Math.floor(height / 2) - 1)
   lines.forEach((line, i) => {
@@ -298,21 +414,86 @@ function emptyRows(height) {
   return rows
 }
 
-function statusRow(list, current) {
-  if (prompt?.kind === 'title') {
-    const label = prompt.edit ? 'edit' : 'add'
-    const room = width() - label.length - 6
-    const text = [...prompt.text].slice(-room).join('')
-    return `${C.pillBg}${C.crust}${C.bold} ${label.toUpperCase()} ${C.reset} ${C.text}${text}${C.reset}\x1b[7m \x1b[0m`
+const CARET = '\x1b[7m \x1b[0m'
+const PLACEHOLDER = {
+  claude: 'Describe the item and let Claude handle it, or Shift+A to add it by hand',
+  title: 'What needs doing',
+  note: 'Details for later, or ↵ to skip',
+}
+const FIELDS = ['title', 'cat', 'note']
+// Adding by hand skips the type, since t sets it after; the edit form has it.
+const EDIT_FIELDS = ['title', 'cat', 'type', 'note']
+const FIELD_NAMES = { title: 'title', cat: 'category', type: 'type', note: 'note' }
+
+// Where an add by hand is: the fields done ticked, this one bold, the rest dim.
+function trail(at) {
+  const parts = FIELDS.map((f, i) => {
+    const name = FIELD_NAMES[f]
+    if (i < FIELDS.indexOf(at)) return { text: `✓ ${name}`, color: C.sub }
+    return f === at ? { text: name, color: `${C.mauve}${C.bold}` } : { text: name, color: C.hint }
+  })
+  return {
+    text: parts.map(p => `${p.color}${p.text}${C.reset}`).join(`${C.hint} › ${C.reset}`),
+    width: parts.reduce((n, p) => n + [...p.text].length, 0) + 3 * (parts.length - 1),
   }
+}
+
+// A pill, then what's typed so far (its end, when it's long) or the
+// placeholder, then something set against the right edge if there's room.
+// The placeholder says what to do, so it keeps its room over the right side.
+function inputRow(label, pillBg, text, placeholder = '', right = null) {
+  const pill = `${pillBg}${C.crust}${C.bold} ${label} ${C.reset} `
+  const lead = label.length + 3
+  const need = text ? 30 : [...placeholder].length + 3
+  const side = right && width() - lead - right.width >= need ? right : null
+  const room = width() - lead - 1 - (side ? side.width + 2 : 0)
+  const body = text
+    ? `${C.text}${[...text].slice(-room).join('')}${C.reset}${CARET}`
+    : `${CARET}${C.hint}${fit(placeholder, room).trimEnd()}${C.reset}`
+  return side ? `${pill}${body}\x1b[${width() - side.width + 1}G${side.text}` : `${pill}${body}`
+}
+
+function statusRow(list, current) {
+  if (prompt?.kind === 'claude') {
+    const model = 'haiku 5.5 · medium'
+    return inputRow('CLAUDE', C.claudeBg, prompt.text, PLACEHOLDER.claude, { text: `${C.hint}${model}${C.reset}`, width: model.length })
+  }
+  if (prompt?.kind === 'edit') {
+    const picks = { cat: [['1–6', 'pick']], type: [['0–5', 'pick']] }[prompt.field] ?? []
+    const pairs = [['tab', 'next field'], ...picks, ['↵', 'save'], ['esc', 'cancel']]
+    return `${C.pillBg}${C.crust}${C.bold} EDIT ${C.reset}  ${hint(8 + hintWidth(pairs) < width() ? pairs : pairs.slice(-2))}`
+  }
+  if (prompt?.kind === 'title' || prompt?.kind === 'note')
+    return inputRow(prompt.kind.toUpperCase(), C.pillBg, prompt.text, PLACEHOLDER[prompt.kind], trail(prompt.kind))
   if (prompt?.kind === 'cat') {
     const picks = CATEGORIES.map((c, i) => `${C.blue}${i + 1}${C.reset} ${c.name === prompt.cat ? `${C.bold}${fg(c.color)}` : fg(c.color)}${c.short}${C.reset}`)
-    return `${C.pillBg}${C.crust}${C.bold} CATEGORY ${C.reset} ${picks.join(' ')}`
+    const line = `${C.pillBg}${C.crust}${C.bold} CATEGORY ${C.reset} ${picks.join(' ')}`
+    const used = 11 + CATEGORIES.reduce((n, c) => n + c.short.length + 3, 0)
+    const side = trail('cat')
+    return width() - used - side.width > 2 ? `${line}\x1b[${width() - side.width + 1}G${side.text}` : line
+  }
+  if (prompt?.kind === 'handoff') {
+    const n = prompt.ids.length
+    const choice = (key, value) => `${C.blue}${key}${C.reset} ${C.text}${C.bold}${value}${C.reset}`
+    // Outside git there's no worktree or branch to choose, only the folder.
+    // Items without a repo go to the open folder; the row says which.
+    const outside = n - prompt.inGit
+    const folders = [...new Set(prompt.places.filter(p => !p.git).map(p => p.cwd))]
+    const away = prompt.places.filter(p => p.moved).length
+    const branch = !prompt.inGit
+      ? `${Date.now() - (prompt.flash ?? 0) < SAY_MS ? C.peach : C.sub}in ${folders.length === 1 ? basename(folders[0]) : 'their folders'}, not git${C.reset}`
+      : `${choice('b', prompt.worktree ? 'worktree' : 'this branch')}${C.sub}${outside ? ` · ${outside} not in git` : away ? ` · ${away} without a repo → ${prompt.here.repo}` : ''}${C.reset}`
+    const choices = [choice('t', prompt.runAs === 'tab' ? 'tab' : 'background'), branch, choice('m', prompt.model)].join('  ')
+    const lead = `${C.claudeBg}${C.crust}${C.bold} HAND OFF ${C.reset} ${C.sub}${n} ${n === 1 ? 'todo' : 'todos'} →${C.reset} ${choices}`
+    const used = 11 + `${n} todos → `.length + 't background  b this branch · 9 without a repo → dotfiles  m sonnet'.length
+    return width() - used > 20 ? `${lead}  ${hint([['↵', 'start'], ['esc', 'cancel']])}` : lead
   }
   if (prompt?.kind === 'confirm') return `${fg(P.peach)}${prompt.text}${C.reset}`
   if (said && Date.now() < said.until) return `${fg(said.color)}${fit(said.text, width() - 1)}${C.reset}`
-  const pairs = [['space', 'done'], ['a', 'add'], ['x', 'delete'], ['f', only ? 'all repos' : 'this repo']]
-  const position = list.length ? `${list.indexOf(current) + 1}/${list.length} ` : ''
+  const pairs = marked.size
+    ? [['w', 'hand off'], ['m', 'mark'], ['shift+m', 'clear'], ['space', 'done']]
+    : [['space', 'done'], ['a', 'add'], ['shift+a', 'by hand'], ['m', 'mark'], ['w', 'hand off'], ['f', only ? 'all repos' : 'this repo']]
+  const position = list.length ? `${marked.size ? `${marked.size} marked · ` : ''}${list.indexOf(current) + 1}/${list.length} ` : ''
   const fits = 8 + hintWidth(pairs) + position.length < width()
   const left = `${C.pillBg}${C.crust}${C.bold} TODO ${C.reset}  ${fits ? hint(pairs) : hint(pairs.slice(0, 2))}`
   return position ? `${left}\x1b[${width() - position.length + 1}G${C.text}${position}${C.reset}` : left
@@ -325,9 +506,10 @@ function draw() {
   const list = selectable(view)
   const current = cursorItem(list)
   if (current) cursorId = current.id
+  for (const id of marked) if (!list.some(i => i.id === id && !i.done && !i.filing)) marked.delete(id)
   const height = bodyHeight()
   let rows
-  if (!view.groups.length && !(showDone && view.doneToday.length)) {
+  if (!view.groups.length && !view.filing.length && !(showDone && view.doneToday.length)) {
     rows = emptyRows(height)
     if (view.doneToday.length) rows[height - 1] = { text: `${C.sub}▸ done today ${view.doneToday.length}${C.reset}`, done: true }
     scroll = 0
@@ -365,8 +547,16 @@ function write(action) {
   }
 }
 
-function toggleDone() {
+// The item under the cursor, unless Claude is still filing it: until then
+// it has nothing to mark done, edit or recategorize.
+function realItem() {
   const item = cursorItem()
+  if (!item?.filing) return item
+  say(filingState(item) === 'failed' ? 'r retries it, Shift+A adds it by hand, x drops it' : 'Claude is still filing this; x drops it')
+}
+
+function toggleDone() {
+  const item = realItem()
   if (!item) return
   const list = selectable()
   const next = list[list.indexOf(item) + 1] ?? list[list.indexOf(item) - 1]
@@ -377,24 +567,234 @@ function toggleDone() {
 }
 
 function cycleCategory() {
-  const item = cursorItem()
+  const item = realItem()
   if (!item) return
   const at = CATEGORIES.findIndex(c => c.name === item.cat)
   const cat = CATEGORIES[(at + 1) % CATEGORIES.length].name
   write(() => change(item.id, { cat }))
 }
 
-function startAdd() {
-  prompt = { kind: 'title', text: '' }
+// Through each type, then none, then round again.
+function cycleType() {
+  const item = realItem()
+  if (!item) return
+  const at = TYPES.findIndex(t => t.name === item.type)
+  const type = at === TYPES.length - 1 ? null : TYPES[at + 1].name
+  write(() => change(item.id, { type }))
+}
+
+function startClaude() {
+  prompt = { kind: 'claude', text: '' }
   draw()
 }
 
-function startEdit() {
+// On a filing that failed, starts from its message and replaces it.
+function startManual() {
   const item = cursorItem()
-  if (!item) return
-  prompt = { kind: 'title', text: item.title, edit: item.id }
+  prompt = filingState(item ?? {}) === 'failed' ? { kind: 'title', text: item.title, replaces: item.id } : { kind: 'title', text: '' }
   draw()
 }
+
+// ghostty-todo file runs Claude and waits for it, so it goes in its own
+// session: closing the Alt+T popup doesn't stop it.
+function fileWithClaude(args) {
+  try {
+    const child = spawn(process.execPath, [TODO_CLI, 'file', ...args], { detached: true, stdio: 'ignore' })
+    child.on('error', error => say(`Couldn't run ghostty-todo: ${error.message}`, P.red))
+    child.unref()
+  } catch (error) {
+    say(`Couldn't run ghostty-todo: ${error.message}`, P.red)
+  }
+}
+
+function retryFiling() {
+  const item = cursorItem()
+  if (filingState(item ?? {}) !== 'failed') return
+  fileWithClaude(['--retry', item.id])
+  say('Asked Claude again', P.peach)
+}
+
+// Stops the filer, and the claude it started, which share its process group.
+function stopFiler(item) {
+  const pid = item.filing?.pid
+  if (!pid) return
+  try {
+    process.kill(-pid)
+  } catch {
+    try {
+      process.kill(pid)
+    } catch {}
+  }
+}
+
+function startEdit() {
+  const item = realItem()
+  if (!item) return
+  prompt = { kind: 'edit', id: item.id, field: 'title', title: item.title, cat: item.cat, type: item.type ?? null, note: item.note ?? '' }
+  draw()
+}
+
+function onEditKey(key) {
+  const at = EDIT_FIELDS.indexOf(prompt.field)
+  if (key === '\t' || key === '\x1b[B') prompt.field = EDIT_FIELDS[(at + 1) % EDIT_FIELDS.length]
+  else if (key === '\x1b[Z' || key === '\x1b[A') prompt.field = EDIT_FIELDS[(at + EDIT_FIELDS.length - 1) % EDIT_FIELDS.length]
+  else if (key === '\r') {
+    const { id, title, cat, type, note } = prompt
+    if (!title.trim()) {
+      prompt.field = 'title'
+      return say('A todo needs a title', P.peach)
+    }
+    prompt = null
+    const saved = write(() => change(id, { title: title.trim(), cat, type, note: note.trim() }))
+    return say(saved ? `Saved: ${saved.title}` : 'That todo is gone', saved ? P.green : P.peach)
+  } else if (prompt.field === 'cat') {
+    const i = CATEGORIES.findIndex(c => c.name === prompt.cat)
+    const step = { '\x1b[C': 1, ' ': 1, '\x1b[D': CATEGORIES.length - 1 }[key]
+    if (step) prompt.cat = CATEGORIES[(i + step) % CATEGORIES.length].name
+    else if (CATEGORIES[Number(key) - 1]) prompt.cat = CATEGORIES[Number(key) - 1].name
+  } else if (prompt.field === 'type') {
+    // The types, then none, as one ring.
+    const ring = [...TYPES.map(t => t.name), null]
+    const i = ring.indexOf(prompt.type)
+    const step = { '\x1b[C': 1, ' ': 1, '\x1b[D': ring.length - 1 }[key]
+    if (step) prompt.type = ring[(i + step) % ring.length]
+    else if (key === '0') prompt.type = null
+    else if (TYPES[Number(key) - 1]) prompt.type = TYPES[Number(key) - 1].name
+  } else {
+    const text = prompt[prompt.field]
+    if (key === '\x7f' || key === '\b') prompt[prompt.field] = [...text].slice(0, -1).join('')
+    else if (key === '\x15') prompt[prompt.field] = ''
+    else if (key === '\x17') prompt[prompt.field] = text.replace(/\S*\s*$/, '')
+    else if (!key.startsWith('\x1b') && key >= ' ') prompt[prompt.field] += key
+  }
+  draw()
+}
+
+function toggleMark() {
+  const item = realItem()
+  if (!item) return
+  if (item.done) return say('It’s done; space reopens it')
+  if (!marked.delete(item.id)) marked.add(item.id)
+  moveCursor(1)
+}
+
+// The marked items, in the list's order, or else the selected one.
+function startHandoff() {
+  let ids = selectable()
+    .filter(i => marked.has(i.id))
+    .map(i => i.id)
+  if (!ids.length) {
+    const item = realItem()
+    if (!item) return
+    if (item.done) return say('It’s done; space reopens it')
+    ids = [item.id]
+  }
+  // Without a layout window there is no tab session to open tabs in.
+  // Fixed as the row opens, so what it says is where the agents start.
+  const at = { ...here }
+  const places = ids.map(id => {
+    const item = items.find(i => i.id === id) ?? {}
+    const place = handoffPlace(item, at)
+    return { cwd: place.cwd, git: inGit(place), moved: place !== item }
+  })
+  const git = places.filter(p => p.git).length
+  prompt = { kind: 'handoff', ids, here: at, places, inGit: git, runAs: WIN ? 'tab' : 'bg', worktree: git > 0, model: HANDOFF_MODELS[0] }
+  draw()
+}
+
+function onHandoffKey(key) {
+  if (key === 't') {
+    if (!WIN) return say('Not in a Ghostty layout window, so agents can only run in the background')
+    prompt.runAs = prompt.runAs === 'tab' ? 'bg' : 'tab'
+  } else if (key === 'b') {
+    // The row covers the status line, so the note itself lights up.
+    if (!prompt.inGit) {
+      prompt.flash = Date.now()
+      setTimeout(draw, SAY_MS + 50)
+      return draw()
+    }
+    prompt.worktree = !prompt.worktree
+  }
+  else if (key === 'm') prompt.model = HANDOFF_MODELS[(HANDOFF_MODELS.indexOf(prompt.model) + 1) % HANDOFF_MODELS.length]
+  else if (key === '\r') {
+    const { ids, here: at, runAs, worktree, model } = prompt
+    prompt = null
+    return void handOff(ids, at, { runAs, worktree, model })
+  }
+  draw()
+}
+
+function claudePath() {
+  try {
+    return readFileSync(CLAUDE_FILE, 'utf8').trim() || 'claude'
+  } catch {
+    return 'claude'
+  }
+}
+
+// Starts one agent per item, one after another so the tabs open in order,
+// and records on each item who has it. An item without a repo goes to the
+// folder the viewer had open (at) when the row opened.
+async function handOff(ids, at, how) {
+  say(`Starting ${ids.length === 1 ? 'an agent' : `${ids.length} agents`}…`, P.peach)
+  const started = []
+  const failed = []
+  for (const id of ids) {
+    const item = items.find(i => i.id === id)
+    if (!item) continue
+    const spec = handoffSpec(handoffPlace(item, at), how)
+    const error = spec ? await startAgent(item, spec) : `${item.repo} is gone from disk`
+    if (error) failed.push(`${item.title}: ${error}`)
+    else started.push(item)
+  }
+  for (const item of started) marked.delete(item.id)
+  void refresh()
+  if (failed.length) return say(`${started.length ? `Started ${started.length}; ` : ''}couldn't start ${failed.join('; ')}`, P.red)
+  const where = how.runAs === 'tab' ? 'in new tabs' : 'in the background'
+  say(started.length === 1 ? `Handed to an agent ${where === 'in new tabs' ? 'in a new tab' : where}: ${started[0].title}` : `Handed ${started.length} todos to agents ${where}`, P.green)
+}
+
+// '' once the agent is running, or what went wrong.
+async function startAgent(item, spec) {
+  const plan = launch(spec)
+  const claude = claudePath()
+  let pane = ''
+  if (plan.where === 'tab') {
+    // -d: the tabs open behind the one you're on.
+    const made = await tabs('new-window', '-d', '-t', `ghostty-${WIN}:`, '-c', spec.cwd, '-P', '-F', '#{pane_id}')
+    if (!made.ok) return `couldn't open a tab: ${made.err}`
+    pane = made.out.trim()
+    // Typed into the tab's shell, so the shell stays when Claude exits.
+    await tabs('send-keys', '-t', pane, '-l', `${shellQuote(claude)}${plan.line.slice('claude'.length)}`)
+    await tabs('send-keys', '-t', pane, 'Enter')
+  } else {
+    // claude --bg prints its id and returns once the agent is running.
+    const error = await new Promise(done => {
+      let output = ''
+      const child = spawn(claude, plan.argv.slice(1), { cwd: spec.cwd, detached: true, stdio: ['ignore', 'pipe', 'pipe'] })
+      child.stdout.on('data', b => (output += b))
+      child.stderr.on('data', b => (output += b))
+      child.on('error', e => done(`couldn't start claude: ${e.message}`))
+      child.on('close', code => done(code ? `claude --bg failed: ${tidy(output).trim().slice(0, 120)}` : ''))
+      child.unref()
+    })
+    if (error) return error
+  }
+  write(() => change(item.id, { handoff: { name: plan.name, where: plan.where, pane, at: Date.now() } }))
+  return ''
+}
+
+// The agent the item was handed to, while the hub knows it: a tab agent by
+// its pane, a background one by the name it was started with (launch in
+// hub/model.mjs), which its card shows.
+function hubAgent(item) {
+  const { pane, name } = item.handoff ?? {}
+  if (!pane && !name) return null
+  return agents.find(a => (pane ? a.pane?.pane === pane : a.kind === 'bg' && a.title === name)) ?? null
+}
+
+// The tab of the agent the item was handed to, while it's open.
+const agentPane = item => (item.handoff?.pane && panes.has(item.handoff.pane) ? item.handoff.pane : '')
 
 function confirm(text, yes, key) {
   prompt = { kind: 'confirm', text, yes, key }
@@ -404,6 +804,12 @@ function confirm(text, yes, key) {
 function startDelete() {
   const item = cursorItem()
   if (!item) return
+  if (item.filing)
+    return confirm(`Drop "${item.title}"? x again drops it`, () => {
+      write(() => remove(item.id))
+      stopFiler(item)
+      say('Dropped it')
+    }, 'x')
   confirm(`Delete "${item.title}"? x again to delete, any other key keeps it`, () => {
     write(() => remove(item.id))
     say(`Deleted: ${item.title}`)
@@ -411,10 +817,13 @@ function startDelete() {
 }
 
 // A new item goes in under the active tab's repo, but without its pane:
-// you added it here, not from that tab.
-async function finishAdd(title, cat) {
+// you added it here, not from that tab. One that replaces a failed filing
+// keeps that filing's repo.
+async function finishAdd({ title, cat, note, replaces }) {
   const where = await repoOf(here.folder || DIR)
-  const item = write(() => add({ title, cat, by: 'you', cwd: here.folder || DIR, ...where }))
+  const old = replaces && items.find(i => i.id === replaces)
+  if (old) stopFiler(old)
+  const item = write(() => (replaces && fill(replaces, { title, cat, note, by: 'you' })) || add({ title, cat, note, by: 'you', cwd: here.folder || DIR, ...where }))
   if (item) {
     cursorId = item.id
     say(`Added to ${item.repo}: ${item.title}`, P.green)
@@ -432,25 +841,35 @@ function onPromptKey(key) {
     prompt = null
     return draw()
   }
+  if (prompt.kind === 'edit') return onEditKey(key)
+  if (prompt.kind === 'handoff') return onHandoffKey(key)
   if (prompt.kind === 'cat') {
     const picked = key === '\r' ? prompt.cat : CATEGORIES[Number(key) - 1]?.name
     if (!picked) return
-    const { title } = prompt
-    prompt = null
-    return void finishAdd(title, picked)
+    prompt = { ...prompt, kind: 'note', cat: picked, text: '' }
+    return draw()
   }
+  // What the placeholder offers. Only on an empty line, so a message can
+  // still have a capital A in it.
+  if (prompt.kind === 'claude' && key === 'A' && !prompt.text) return startManual()
   if (key === '\r') {
-    const title = prompt.text.trim()
-    if (!title) {
+    const text = prompt.text.trim()
+    if (prompt.kind === 'note') {
+      const { title, cat, replaces } = prompt
+      prompt = null
+      return void finishAdd({ title, cat, note: text, replaces })
+    }
+    if (!text) {
       prompt = null
       return draw()
     }
-    if (prompt.edit) {
-      const id = prompt.edit
+    if (prompt.kind === 'claude') {
       prompt = null
-      return write(() => change(id, { title }))
+      fileWithClaude(['--dir', here.folder || DIR, '--', text])
+      return say('Sent to Claude. It shows here once it’s filed.', P.peach)
     }
-    prompt = { kind: 'cat', title, cat: cursorItem()?.cat ?? DEFAULT_CATEGORY }
+    const current = cursorItem()
+    prompt = { kind: 'cat', title: text, replaces: prompt.replaces, cat: (!current?.filing && current?.cat) || DEFAULT_CATEGORY }
     return draw()
   }
   if (key === '\x7f' || key === '\b') prompt.text = [...prompt.text].slice(0, -1).join('')
@@ -462,14 +881,28 @@ function onPromptKey(key) {
 
 const shellQuote = text => text.replace(/[^\w./-]/g, '\\$&')
 
-// The tab that added the item, in this window or another; or, once that
-// tab is gone, a new tab running Claude there, resuming the item's session.
+// The agent it was handed to, opened in the hub beside its list as the
+// tray's Go does: a tab agent through a session of its own, so the
+// workspace stays on its tab, a background one with claude attach. Without
+// one, the tab that added it, in this window or another; or, once that tab
+// is gone, a new tab running Claude there, resuming the item's session.
 async function goTo() {
-  const item = cursorItem()
+  const item = realItem()
   if (!item) return
-  if (!item.pane) return say(item.by === 'you' ? 'You added this one here, so it has no tab to go to' : 'This one was added outside the layout’s tabs')
   panes = await readPanes()
-  const at = panes.get(item.pane)
+  agents = readState()?.agents ?? []
+  const agent = hubAgent(item)
+  if (agent) {
+    const went = await openInHub(agent, WIN ? `layout-${WIN}` : '')
+    if (!went.ok) return say(went.message, P.red)
+    return POPUP ? quit() : draw()
+  }
+  const pane = agentPane(item) || item.pane
+  if (!pane) {
+    if (item.handoff?.where === 'bg') return say(`${item.handoff.name} ran in the background and the hub no longer lists it`)
+    return say(item.by === 'you' ? 'You added this one here, so it has no tab to go to' : 'This one was added outside the layout’s tabs')
+  }
+  const at = panes.get(pane)
   if (at?.hub) {
     // The hub opens its tabs itself, beside its board.
     if (at.win === WIN && WIN) await outer('select-window', '-t', `layout-${WIN}:hub`)
@@ -478,7 +911,7 @@ async function goTo() {
   }
   if (at) {
     await tabs('select-window', '-t', `${at.session}:${at.window}`)
-    await tabs('select-pane', '-t', item.pane)
+    await tabs('select-pane', '-t', pane)
     if (at.win !== WIN && WIN) return say(`Switched to tab ${at.index} in Ghostty window ${at.win}`)
     if (WIN) {
       const tabsPane = (await outer('show', '-t', `layout-${WIN}`, '-v', '@tabs')).out.trim()
@@ -495,10 +928,7 @@ async function goTo() {
 }
 
 async function reopen(item, dir) {
-  let claude = 'claude'
-  try {
-    claude = readFileSync(CLAUDE_FILE, 'utf8').trim() || claude
-  } catch {}
+  const claude = claudePath()
   const made = await tabs('new-window', '-t', `ghostty-${WIN}:`, '-c', dir, '-P', '-F', '#{pane_id}')
   if (!made.ok) return say(`Couldn't open a tab: ${made.err}`, P.red)
   const pane = made.out.trim()
@@ -569,10 +999,19 @@ function onKey(key) {
     G: () => moveCursor(Infinity),
     '\r': () => void goTo(),
     ' ': toggleDone,
-    a: startAdd,
+    a: startClaude,
+    A: startManual,
+    r: retryFiling,
     e: startEdit,
     c: cycleCategory,
+    t: cycleType,
     x: startDelete,
+    m: toggleMark,
+    M: () => {
+      marked.clear()
+      draw()
+    },
+    w: startHandoff,
     f: () => {
       only = !only
       draw()
@@ -611,6 +1050,10 @@ readStore(true)
 draw()
 void refresh()
 setInterval(() => void refresh(), REFRESH_MS)
+// Turns the spinner of anything Claude is filing.
+setInterval(() => {
+  if (items.some(i => filingState(i) === 'filing')) draw()
+}, SPIN_MS)
 for (const [folder, name] of [
   [dirname(STORE), basename(STORE)],
   [dirname(TAB_CHANGED), 'tab-changed'],

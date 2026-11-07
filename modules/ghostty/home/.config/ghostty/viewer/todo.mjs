@@ -4,9 +4,11 @@
 // viewer never reads half a write.
 
 import { execFile } from 'node:child_process'
-import { mkdirSync, readFileSync, renameSync, rmdirSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmdirSync, statSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
+
+import { slug } from '../hub/model.mjs'
 
 export const STORE =
   process.env.TODO_FILE || join(process.env.XDG_STATE_HOME || join(homedir(), '.local/state'), 'ghostty-layout/todos.json')
@@ -24,8 +26,32 @@ export const CATEGORIES = [
 export const DEFAULT_CATEGORY = 'follow-up'
 const ALIASES = { fix: 'bug', feat: 'feature', follow: 'follow-up', followup: 'follow-up', doc: 'docs', ask: 'question', q: 'question', misc: 'other' }
 
+// What kind of work an item is, beside its category: finding something out,
+// making a call, doing something, judging someone's work, or upkeep.
+// Optional, so an item can have none.
+export const TYPES = [
+  { name: 'research', color: '#fab387' },
+  { name: 'decide', color: '#f5c2e7' },
+  { name: 'action', color: '#a6e3a1' },
+  { name: 'review', color: '#74c7ec' },
+  { name: 'chore', color: '#9399b2' },
+]
+const TYPE_ALIASES = { do: 'action', act: 'action', task: 'action' }
+
 // Done items stay this long, then a write drops them.
 export const KEEP_DONE_MS = 7 * 24 * 60 * 60 * 1000
+
+// A filing item holds a message Claude is turning into a todo (ghostty-todo
+// file) until `add --filing` replaces it with the real one. ghostty-todo
+// stops Claude well before this; past it the item counts as failed anyway,
+// in case the filer died without saying so.
+export const FILING_TIMEOUT_MS = 5 * 60 * 1000
+
+// 'filing', 'failed', or '' for an ordinary item.
+export function filingState(item, now = Date.now()) {
+  if (!item.filing) return ''
+  return item.filing.error || now - item.filing.started > FILING_TIMEOUT_MS ? 'failed' : 'filing'
+}
 
 // A category from what someone typed: a name, an alias or a unique prefix.
 export function category(input) {
@@ -36,7 +62,20 @@ export function category(input) {
   return matches.length === 1 ? matches[0].name : undefined
 }
 
-export const colorOf = name => CATEGORIES.find(c => c.name === name)?.color ?? '#cdd6f4'
+// A type from what someone typed, as category() reads one; none gives null,
+// which clears it.
+export function taskType(input) {
+  const word = String(input ?? '').trim().toLowerCase()
+  if (!word) return undefined
+  if (word === 'none') return null
+  if (TYPE_ALIASES[word]) return TYPE_ALIASES[word]
+  const matches = TYPES.filter(t => t.name.startsWith(word))
+  return matches.length === 1 ? matches[0].name : undefined
+}
+
+export const typeColorOf = name => TYPES.find(t => t.name === name)?.color ?? '#a6adc8'
+
+export const colorOf =name => CATEGORIES.find(c => c.name === name)?.color ?? '#cdd6f4'
 
 export function newId(items, random = Math.random) {
   const taken = new Set(items.map(i => i.id))
@@ -74,15 +113,19 @@ const startOfDay = now => {
 // What the viewer shows: open items grouped by category in CATEGORIES order,
 // the repo `here` (a main repo's root) first in each group and newest first
 // after that, and the items done since midnight. `only` keeps just here's.
+// Items Claude is still filing go apart, oldest first: they have no real
+// category yet and don't count as open.
 export function arrange(items, { here = '', only = false, now = Date.now() } = {}) {
   const shown = items.filter(i => !only || i.root === here)
+  const filing = shown.filter(i => i.filing).sort((a, b) => a.created - b.created)
+  const real = shown.filter(i => !i.filing)
   const order = (a, b) => (b.root === here) - (a.root === here) || b.created - a.created
-  const groups = CATEGORIES.map(c => ({ ...c, items: shown.filter(i => !i.done && i.cat === c.name).sort(order) })).filter(
+  const groups = CATEGORIES.map(c => ({ ...c, items: real.filter(i => !i.done && i.cat === c.name).sort(order) })).filter(
     g => g.items.length,
   )
   const today = startOfDay(now)
-  const doneToday = shown.filter(i => i.done && i.done >= today).sort((a, b) => b.done - a.done)
-  return { groups, doneToday, open: groups.reduce((n, g) => n + g.items.length, 0) }
+  const doneToday = real.filter(i => i.done && i.done >= today).sort((a, b) => b.done - a.done)
+  return { groups, filing, doneToday, open: groups.reduce((n, g) => n + g.items.length, 0) }
 }
 
 export function load(file = STORE) {
@@ -157,6 +200,18 @@ export function change(id, fields, file = STORE) {
   }, file)
 }
 
+// Turns the filing item `id` into a real one with these fields. Undefined
+// when no item is filing under that id: it was dropped, or filed already.
+export function fill(id, fields, file = STORE) {
+  return update(items => {
+    const item = items.find(i => i.id === id && i.filing)
+    if (!item) return { items }
+    const { filing, ...rest } = item
+    const filled = { ...rest, ...fields }
+    return { items: items.map(i => (i === item ? filled : i)), value: filled }
+  }, file)
+}
+
 export function remove(id, file = STORE) {
   return update(items => {
     const item = find(items, id)
@@ -179,4 +234,67 @@ export async function repoOf(dir) {
   const root = basename(common) === '.git' ? dirname(common) : top
   const branch = (await git(['branch', '--show-current'], top)) || (await git(['rev-parse', '--short', 'HEAD'], top))
   return { root, repo: basename(root), worktree: top === root ? '' : top, branch }
+}
+
+// The repos the filer may put an item in when the message names one: those
+// already on the list, and the git repos beside them (a projects folder).
+// A message typed in one tab is often about another repo, and without the
+// paths Claude can only file it where the tab is.
+export function knownRepos(items, { exists = existsSync, list = dir => readdirSync(dir) } = {}) {
+  const roots = new Set(items.filter(i => i.repo !== 'none' && i.root).map(i => i.root))
+  for (const parent of new Set([...roots].map(r => dirname(r)))) {
+    let names = []
+    try {
+      names = list(parent)
+    } catch {}
+    for (const name of names) roots.add(join(parent, name))
+  }
+  return [...roots]
+    .filter(root => exists(join(root, '.git')))
+    .sort()
+    .map(root => ({ repo: basename(root), root }))
+}
+
+// How the viewer hands an item to an agent, as the hub's New agent form
+// would start a task: one agent per item, in the item's repo. In its own
+// worktree it starts from the main checkout; on the current branch, from the
+// worktree or folder the item was added in. Undefined when none of those is
+// on disk any more. Outside git there is no worktree to make, so the spec
+// says worktree: false.
+export const HANDOFF_MODELS = ['opus', 'sonnet', 'haiku']
+
+// Whether the item's repo is a git repo still, which claude -w needs.
+export const inGit = (item, exists = existsSync) => item.repo !== 'none' && !!item.root && exists(join(item.root, '.git'))
+
+// Where an item's agent works: its own repo, or, for an item added outside
+// git, the folder the viewer has open (`here`: repoOf's fields plus folder).
+// That folder's repo stands in, without the branch the item was added on.
+export function handoffPlace(item, here, exists = existsSync) {
+  if (inGit(item, exists) || !here?.folder) return item
+  return { ...item, root: here.root, worktree: here.worktree, cwd: here.folder, repo: here.repo, branch: '' }
+}
+
+export function handoffSpec(item, { runAs = 'tab', worktree = true, model = 'opus' } = {}, exists = existsSync) {
+  worktree = worktree && inGit(item, exists)
+  const places = worktree ? [item.root, item.worktree, item.cwd] : [item.worktree, item.cwd, item.root]
+  const cwd = places.find(d => d && exists(d))
+  if (!cwd) return undefined
+  // The id keeps two agents on similar titles from sharing a worktree.
+  const name = slug(`${slug(item.title).split('-').slice(0, 4).join(' ')} ${item.id}`)
+  const about = [`todo ${item.id}`, `a ${item.cat} in ${item.repo}`, item.branch && `added on ${item.branch}`].filter(Boolean).join(', ')
+  // One line: a tab agent's command is typed into a shell, where a newline
+  // would run it early.
+  const prompt = [
+    `Work on this item from my todo list (${about}): ${item.title.replace(/[.!?]+$/, '')}.`,
+    item.note && item.note.trim().replace(/([^.!?])$/, '$1.'),
+    // Merging is the user's call, and the worktree may still hold work the
+    // user wants, so the agent asks before doing either.
+    worktree &&
+      "When the work is ready, commit it in the worktree and ask me whether to merge it; never merge unasked. After it's merged, ask me whether to remove the worktree; never remove it unasked.",
+    `Once it's finished, mark it done: ~/.config/ghostty/bin/ghostty-todo done ${item.id}`,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .replace(/\s*\n\s*/g, ' ')
+  return { kind: 'task', cwd, name, prompt, runAs, worktree, model, mode: 'auto', effort: 'medium' }
 }

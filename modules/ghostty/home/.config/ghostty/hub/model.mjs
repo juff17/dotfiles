@@ -486,7 +486,8 @@ export function launch(spec) {
     name = `logs ${short(spec.target.trim(), 30)}`
     where = 'bg'
   } else {
-    name = slug(prompt)
+    // A name given is a slug already: the todo list's hand-off sends one.
+    name = spec.name || slug(prompt)
   }
   // A prompt that starts with - would read as an option.
   if (prompt.startsWith('-')) prompt = ` ${prompt}`

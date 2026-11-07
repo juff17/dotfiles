@@ -178,10 +178,11 @@ async function answer(a, allow) {
 // of its own Ghostty window, through a grouped session, so the workspace
 // stays on the tab it was on; a background agent opens with claude attach.
 // `raise` asks the widget to bring Ghostty to the front, which only the
-// panel can do.
-async function go(a) {
+// panel can do. The todo list goes to its handed-off agents this way too,
+// naming its own window as `layout` for a background agent.
+export async function go(a, layout = '') {
   if (!a.pane && !a.jobId) return { ok: false, message: `${a.title} runs outside the layout, so there's nowhere to take you` }
-  const layout = a.pane?.win ? `layout-${a.pane.win}` : await layoutSession()
+  layout = a.pane?.win ? `layout-${a.pane.win}` : layout || (await layoutSession())
   if (!layout) return { ok: false, message: 'No Ghostty layout window is open to show it in' }
   const hub = (await run(['tmux', ...LAYOUT, 'show', '-v', '-t', layout, '@hub'])).out.trim()
   if (!hub) return { ok: false, message: 'The hub is not running' }
