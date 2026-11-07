@@ -243,12 +243,20 @@ class Bypasses(Guard):
         (self.wt / "link").symlink_to(self.outside)
         self.assertNotAllowed(f"rm -rf {self.wt}/lin[k]/x")
 
-    # Suspected bug: the user's shell is zsh, where a word starting with `=`
-    # expands to that command's path (`=claude` -> ~/.local/bin/claude). The
-    # hook treats `=claude` as a relative name in the cwd and allows it.
-    @unittest.expectedFailure
+    # The user's shell is zsh, where a word starting with `=` expands to that
+    # command's path (`=claude` -> ~/.local/bin/claude), outside any worktree.
     def test_a_zsh_equals_expansion_is_asked(self):
         self.assertNotAllowed("rm =claude", cwd=PAD)
+        self.assertNotAllowed(f"rm -- =claude {PAD}/x", cwd=PAD)
+
+    # zsh with EXTENDED_GLOB: `^x` matches everything but x, `x#` repeats x.
+    def test_zsh_extended_globs_are_asked(self):
+        self.assertAsks(f"rm {PAD}/^keep")
+        self.assertAsks(f"rm {PAD}/a#")
+
+    def test_ordinary_filename_characters_are_still_allowed(self):
+        self.assertAllowed(f"rm {PAD}/my-file_v2.1+final@host:8080,copy")
+        self.assertAllowed(f"rm {PAD}/a=b {PAD}/%20 {PAD}/x!")
 
 
 if __name__ == "__main__":

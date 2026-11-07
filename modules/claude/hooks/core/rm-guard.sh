@@ -51,8 +51,9 @@ in_worktree() {
 }
 
 # Reject anything a shell could expand or chain. `]` comes first so the bracket
-# expression takes it literally; backslash is literal inside brackets.
-unsafe='[]\[;&|<>`$(){}*?~"'\''\\]'
+# expression takes it literally. `^` and `#` are globs in zsh with
+# EXTENDED_GLOB, which zsh setups often turn on.
+unsafe='[]\[;&|<>`$(){}*?~^#"'\''\\]'
 if [[ $cmd == *$'\n'* || $cmd =~ $unsafe ]]; then
   decide ask "rm outside a plain single-command form"
 fi
@@ -74,6 +75,8 @@ for w in "${args[@]}"; do
     [[ $w == --pathspec-from-file* ]] && decide ask "git rm reading paths from a file"
     [[ $w == -* ]] && continue
   fi
+  # zsh expands a word starting with = to that command's path (=claude).
+  [[ $w == =* ]] && decide ask "rm target is a zsh =command expansion: $w"
   [[ $w =~ (^|/)\.\.?/*$ ]] && decide ask "rm target ends in . or ..: $w"
   p=$(resolve "$w") || decide ask "could not resolve rm target: $w"
   if [[ $p == "$scratch"?* ]] || in_worktree "$p"; then
