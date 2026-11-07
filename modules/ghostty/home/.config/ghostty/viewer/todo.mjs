@@ -27,6 +27,18 @@ const ALIASES = { fix: 'bug', feat: 'feature', follow: 'follow-up', followup: 'f
 // Done items stay this long, then a write drops them.
 export const KEEP_DONE_MS = 7 * 24 * 60 * 60 * 1000
 
+// A filing item holds a message Claude is turning into a todo (ghostty-todo
+// file) until `add --filing` replaces it with the real one. ghostty-todo
+// stops Claude well before this; past it the item counts as failed anyway,
+// in case the filer died without saying so.
+export const FILING_TIMEOUT_MS = 5 * 60 * 1000
+
+// 'filing', 'failed', or '' for an ordinary item.
+export function filingState(item, now = Date.now()) {
+  if (!item.filing) return ''
+  return item.filing.error || now - item.filing.started > FILING_TIMEOUT_MS ? 'failed' : 'filing'
+}
+
 // A category from what someone typed: a name, an alias or a unique prefix.
 export function category(input) {
   const word = String(input ?? '').trim().toLowerCase()
@@ -74,15 +86,19 @@ const startOfDay = now => {
 // What the viewer shows: open items grouped by category in CATEGORIES order,
 // the repo `here` (a main repo's root) first in each group and newest first
 // after that, and the items done since midnight. `only` keeps just here's.
+// Items Claude is still filing go apart, oldest first: they have no real
+// category yet and don't count as open.
 export function arrange(items, { here = '', only = false, now = Date.now() } = {}) {
   const shown = items.filter(i => !only || i.root === here)
+  const filing = shown.filter(i => i.filing).sort((a, b) => a.created - b.created)
+  const real = shown.filter(i => !i.filing)
   const order = (a, b) => (b.root === here) - (a.root === here) || b.created - a.created
-  const groups = CATEGORIES.map(c => ({ ...c, items: shown.filter(i => !i.done && i.cat === c.name).sort(order) })).filter(
+  const groups = CATEGORIES.map(c => ({ ...c, items: real.filter(i => !i.done && i.cat === c.name).sort(order) })).filter(
     g => g.items.length,
   )
   const today = startOfDay(now)
-  const doneToday = shown.filter(i => i.done && i.done >= today).sort((a, b) => b.done - a.done)
-  return { groups, doneToday, open: groups.reduce((n, g) => n + g.items.length, 0) }
+  const doneToday = real.filter(i => i.done && i.done >= today).sort((a, b) => b.done - a.done)
+  return { groups, filing, doneToday, open: groups.reduce((n, g) => n + g.items.length, 0) }
 }
 
 export function load(file = STORE) {
@@ -154,6 +170,18 @@ export function change(id, fields, file = STORE) {
     if (!item) return { items }
     const changed = { ...item, ...(typeof fields === 'function' ? fields(item) : fields) }
     return { items: items.map(i => (i === item ? changed : i)), value: changed }
+  }, file)
+}
+
+// Turns the filing item `id` into a real one with these fields. Undefined
+// when no item is filing under that id: it was dropped, or filed already.
+export function fill(id, fields, file = STORE) {
+  return update(items => {
+    const item = items.find(i => i.id === id && i.filing)
+    if (!item) return { items }
+    const { filing, ...rest } = item
+    const filled = { ...rest, ...fields }
+    return { items: items.map(i => (i === item ? filled : i)), value: filled }
   }, file)
 }
 

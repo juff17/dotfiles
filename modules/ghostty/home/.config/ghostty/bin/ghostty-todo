@@ -2,17 +2,21 @@
 // The todo list the viewer's Todo mode shows, from the command line. The
 // /todo skill has Claude call it; it works the same typed by hand.
 //   ghostty-todo add [--cat C] [--note N] [--dir D] [--by claude|you] title…
+//   ghostty-todo file [--dir D] message…  |  file --retry id
 //   ghostty-todo list [--all] [--done] [--json]
 //   ghostty-todo done|undo|rm id…
 //   ghostty-todo edit id [--title T] [--cat C] [--note N]
 // add records the repo, branch and worktree of D (default: here), and, when
 // run from a tab of the Ghostty layout, that tab's tmux pane and the Claude
-// session it runs under, so the viewer can go back to it. list shows this
-// repo's open items; --all every repo's. Categories: bug, feature, follow-up
-// (the default), docs, question, other (alias misc). Outside a git repo the
-// item's repo is none.
+// session it runs under, so the viewer can go back to it. file has Claude
+// Haiku write the title, category and note from a message: the message shows
+// as a filing item until Claude's add --filing id replaces it, or as failed.
+// list shows this repo's open items; --all every repo's. Categories: bug,
+// feature, follow-up (the default), docs, question, other (alias misc).
+// Outside a git repo the item's repo is none.
 
-import { readFileSync, realpathSync } from 'node:fs'
+import { spawn } from 'node:child_process'
+import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -23,18 +27,28 @@ const todo = await import(join(here, '../viewer/todo.mjs'))
 
 const TABS_SOCKET = process.env.AGENT_HUB_TABS_SOCKET || 'ghostty'
 const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude')
+// Where ghostty-claude-start saved claude: Ghostty's own PATH often lacks it.
+const CLAUDE_FILE = join(process.env.XDG_CACHE_HOME || join(homedir(), '.cache'), 'ghostty-layout/claude')
+// How the /todo skill names this command, and so how Claude runs it.
+const CLI = '~/.config/ghostty/bin/ghostty-todo'
+const FILER = { model: 'claude-haiku-5-5', effort: 'medium', limitMs: 3 * 60 * 1000 }
 
 function fail(message) {
   console.error(`ghostty-todo: ${message}`)
   process.exit(1)
 }
 
-// Flags anywhere among the words; the rest are positional.
+// Flags anywhere among the words; the rest are positional, and so is
+// everything after --.
 function parse(argv, flags) {
   const opts = {}
   const rest = []
   for (let i = 0; i < argv.length; i++) {
     const word = argv[i]
+    if (word === '--') {
+      rest.push(...argv.slice(i + 1))
+      break
+    }
     const name = word.startsWith('--') ? word.slice(2).split('=')[0] : ''
     if (!name) rest.push(word)
     else if (flags[name] === 'bool') opts[name] = true
@@ -80,6 +94,64 @@ function claudeSession() {
   return {}
 }
 
+function claudeBin() {
+  let saved = ''
+  try {
+    saved = readFileSync(CLAUDE_FILE, 'utf8').trim()
+  } catch {}
+  return [process.env.AGENT_HUB_CLAUDE, saved, join(homedir(), '.local/bin/claude')].find(c => c && existsSync(c)) || 'claude'
+}
+
+// The filer's whole job, so it adds this one item and touches nothing else;
+// dontAsk denies every tool but the add.
+const filerPrompt = id => `You file one todo and then stop. The user's message after "add todo:" describes it.
+Write a title of at most about 50 characters that says what to do. Pick one category: bug (something is broken), feature (something new to build), follow-up (unfinished work), docs, question (something to decide or find out) or other. Write a note of one to three sentences only when the title doesn't say it all, keeping what the message says about where and why.
+Then run this one command and nothing else:
+${CLI} add --filing ${id} --cat <category> --note "<note>" <title>
+Don't look into the item, read files or work on it.`
+
+// Runs Claude on a filing item and waits. Resolves to '' once the item is
+// filed or was dropped meanwhile, or to what went wrong.
+function runFiler(item) {
+  const dir = [item.worktree, item.cwd, item.root].find(d => d && existsSync(d)) || homedir()
+  const args = [
+    '-p', '--model', FILER.model, '--effort', FILER.effort, '--permission-mode', 'dontAsk',
+    '--allowedTools', `Bash(${CLI} add *)`, `Bash(${join(homedir(), '.config/ghostty/bin/ghostty-todo')} add *)`,
+    '--append-system-prompt', filerPrompt(item.id),
+    `add todo: ${item.title}`,
+  ]
+  return new Promise(done => {
+    let output = ''
+    let late = false
+    const child = spawn(claudeBin(), args, { cwd: dir, stdio: ['ignore', 'pipe', 'pipe'] })
+    const timer = setTimeout(() => {
+      late = true
+      child.kill()
+    }, FILER.limitMs)
+    const keep = chunk => (output = (output + chunk).slice(-4000))
+    child.stdout.on('data', keep)
+    child.stderr.on('data', keep)
+    // Dropping a filing item in the viewer stops this process.
+    process.on('SIGTERM', () => {
+      child.kill()
+      process.exit(1)
+    })
+    child.on('error', error => {
+      clearTimeout(timer)
+      done(`couldn't start claude: ${error.message}`)
+    })
+    child.on('close', code => {
+      clearTimeout(timer)
+      const still = todo.load().find(i => i.id === item.id && i.filing)
+      if (!still) return done('')
+      const said = output.trim().split('\n').filter(Boolean).pop()?.slice(0, 200) ?? ''
+      if (late) return done(`Claude took longer than ${FILER.limitMs / 60000} minutes`)
+      if (code) return done(`claude exited with code ${code}${said ? `: ${said}` : ''}`)
+      done(`Claude finished without filing it${said ? `: ${said}` : ''}`)
+    })
+  })
+}
+
 function show(item, now = Date.now()) {
   const cat = todo.CATEGORIES.find(c => c.name === item.cat)?.short ?? item.cat
   const mark = item.done ? '[x]' : '[ ]'
@@ -93,9 +165,22 @@ const [command, ...args] = process.argv.slice(2)
 
 switch (command) {
   case 'add': {
-    const { opts, rest } = parse(args, { cat: 'value', note: 'value', dir: 'value', by: 'value' })
+    const { opts, rest } = parse(args, { cat: 'value', note: 'value', dir: 'value', by: 'value', filing: 'value' })
     const title = rest.join(' ').trim()
     if (!title) fail('add needs a title')
+    // From the filer: fills in the item the viewer shows, which already has
+    // its repo. No tab or session: the filer's is gone once it's done.
+    if (opts.filing) {
+      const item = todo.fill(opts.filing, {
+        title,
+        cat: pickCategory(opts.cat) ?? todo.DEFAULT_CATEGORY,
+        note: opts.note ?? '',
+        by: 'claude',
+      })
+      if (!item) fail(`nothing is filing as ${opts.filing}: it was dropped or filed already`)
+      console.log(`Filed ${item.id}: ${item.title} (${item.cat}, ${item.repo})`)
+      break
+    }
     const dir = opts.dir || process.cwd()
     const claude = claudeSession()
     const by = opts.by ?? (claude.session ? 'claude' : 'you')
@@ -113,12 +198,35 @@ switch (command) {
     console.log(`Added ${item.id}: ${item.title} (${item.cat}, ${item.repo})`)
     break
   }
+  case 'file': {
+    const { opts, rest } = parse(args, { dir: 'value', retry: 'value' })
+    const filing = { started: Date.now(), pid: process.pid }
+    let item
+    if (opts.retry) {
+      item = todo.change(opts.retry, it => (it.filing ? { filing } : {}))
+      if (!item?.filing) fail(`no filing todo matches "${opts.retry}"`)
+    } else {
+      const message = rest.join(' ').trim()
+      if (!message) fail('file needs a message')
+      const dir = opts.dir || process.cwd()
+      item = todo.add({ title: message, by: 'claude', cwd: dir, ...(await todo.repoOf(dir)), filing })
+    }
+    console.log(`Filing ${item.id} with Claude: ${item.title}`)
+    const error = await runFiler(item)
+    if (error) {
+      todo.change(item.id, it => (it.filing ? { filing: { ...it.filing, error } } : {}))
+      fail(error)
+    }
+    const filed = todo.load().find(i => i.id === item.id)
+    console.log(filed ? `Filed ${filed.id}: ${filed.title} (${filed.cat}, ${filed.repo})` : `Dropped ${item.id}`)
+    break
+  }
   case 'list': {
     const { opts } = parse(args, { all: 'bool', done: 'bool', json: 'bool' })
     const { root } = await todo.repoOf(process.cwd())
     const items = todo
       .load()
-      .filter(i => (opts.all || i.root === root) && (opts.done || !i.done))
+      .filter(i => !i.filing && (opts.all || i.root === root) && (opts.done || !i.done))
       .sort((a, b) => todo.CATEGORIES.findIndex(c => c.name === a.cat) - todo.CATEGORIES.findIndex(c => c.name === b.cat) || a.created - b.created)
     if (opts.json) console.log(JSON.stringify(items, null, 1))
     else if (!items.length) console.log(opts.all ? 'No open todos.' : `No open todos in ${basename(root)}.`)
@@ -150,6 +258,6 @@ switch (command) {
     break
   }
   default:
-    console.log(readFileSync(fileURLToPath(import.meta.url), 'utf8').split('\n').slice(1, 13).map(l => l.slice(3)).join('\n'))
+    console.log(readFileSync(fileURLToPath(import.meta.url), 'utf8').split('\n').slice(1, 17).map(l => l.slice(3)).join('\n'))
     process.exit(command && command !== 'help' && command !== '--help' ? 1 : 0)
 }

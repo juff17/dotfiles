@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
-import { KEEP_DONE_MS, add, age, arrange, category, change, find, load, newId, prune, remove, repoOf } from './todo.mjs'
+import { FILING_TIMEOUT_MS, KEEP_DONE_MS, add, age, arrange, category, change, fill, filingState, find, load, newId, prune, remove, repoOf } from './todo.mjs'
 
 const now = new Date(2026, 10, 7, 15, 0).getTime()
 const item = (id, cat, root, created, done = null) => ({ id, cat, root, repo: root.split('/').pop(), title: id, created, done })
@@ -85,4 +85,37 @@ test('the store adds, changes and removes under its lock', () => {
   assert.deepEqual(load(file).map(i => i.title), [])
   assert.equal(JSON.parse(readFileSync(file, 'utf8')).v, 1)
   assert.deepEqual(load(join(file, '..', 'none.json')), [])
+})
+
+test('items Claude is filing go apart, oldest first, and are not open', () => {
+  const items = [
+    item('b1', 'bug', '/a', now - 10),
+    { ...item('f-new', 'follow-up', '/a', now - 5), filing: { started: now - 5 } },
+    { ...item('f-old', 'follow-up', '/b', now - 50), filing: { started: now - 50, error: 'no' } },
+  ]
+  const { groups, filing, open } = arrange(items, { here: '/a', now })
+  assert.deepEqual(filing.map(i => i.id), ['f-old', 'f-new'])
+  assert.deepEqual(groups.map(g => g.items.map(i => i.id)), [['b1']])
+  assert.equal(open, 1)
+  assert.deepEqual(arrange(items, { here: '/a', only: true, now }).filing.map(i => i.id), ['f-new'])
+})
+
+test('a filing fails on an error, or once it has run too long', () => {
+  assert.equal(filingState({ id: 'a' }, now), '')
+  assert.equal(filingState({ filing: { started: now - 1000 } }, now), 'filing')
+  assert.equal(filingState({ filing: { started: now - 1000, error: 'claude exited' } }, now), 'failed')
+  assert.equal(filingState({ filing: { started: now - FILING_TIMEOUT_MS - 1 } }, now), 'failed')
+})
+
+test('fill turns a filing item into a real one, once', () => {
+  const file = join(mkdtempSync(join(tmpdir(), 'todo-')), 'todos.json')
+  const plain = add({ title: 'Plain', root: '/r' }, file)
+  const placeholder = add({ title: 'ctrl shift b goes to peek', root: '/r', repo: 'r', filing: { started: now } }, file)
+  const filled = fill(placeholder.id, { title: 'Ctrl+Shift+B should open the Board', cat: 'bug', note: 'n', by: 'claude' }, file)
+  assert.equal(filled.id, placeholder.id)
+  assert.equal(filled.repo, 'r')
+  assert.equal('filing' in load(file).find(i => i.id === placeholder.id), false)
+  assert.equal(fill(placeholder.id, { title: 'again' }, file), undefined)
+  assert.equal(fill(plain.id, { title: 'not filing' }, file), undefined)
+  assert.equal(fill('missing', { title: 'x' }, file), undefined)
 })
