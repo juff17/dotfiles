@@ -16,7 +16,7 @@ import { mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from 
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { RUN, follow, markReviewed } from './client.mjs'
+import { RUN, follow, markReviewed, markStopped } from './client.mjs'
 import { HUB_OPEN } from './tray.mjs'
 import { cardHeights, counts, lanes, launch, monitorProcess, monitorsOf, scrollTo } from './model.mjs'
 import { POPUP } from './newagent.mjs'
@@ -793,6 +793,7 @@ function stopMonitor(m) {
     try {
       // A group of its own: the whole pipeline goes (tail, sleep, grep).
       process.kill(p.pgid === p.pid ? -p.pid : p.pid, 'SIGTERM')
+      markStopped(m.agent.id, m.task)
       say(`Stopped ${clean(m.description)}; ${m.agent.title} keeps running`, P.green, 8000)
     } catch (err) {
       say(`Couldn't stop ${clean(m.description)}: ${err.code ?? err.message}`, P.red, 8000)

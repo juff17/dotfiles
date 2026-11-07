@@ -59,14 +59,17 @@ function typed(content) {
   return content
 }
 
-// One task notification: which task, its summary, and its event lines.
+// One task notification: which task, its summary, and its event lines. One
+// can name several tasks, such as the one a resumed session gets for every
+// task its last process left running; `id` is the first.
 export function parseNotification(text) {
-  const id = text.match(/<task-id>([^<]+)<\/task-id>/)?.[1]
+  const ids = [...text.matchAll(/<task-id>([^<]+)<\/task-id>/g)].map(m => m[1])
+  const id = ids[0]
   if (!id) return null
   const summary = unescape(text.match(/<summary>([\s\S]*?)<\/summary>/)?.[1] ?? '')
   const event = text.match(/<event>([\s\S]*?)<\/event>/)?.[1]
   const lines = event === undefined ? [] : unescape(event).split('\n').map(l => l.trim()).filter(Boolean)
-  return { id, summary, lines }
+  return { id, ids, summary, lines }
 }
 
 const MAX_EVENTS = 20
@@ -87,12 +90,16 @@ function addNotification(t, text, at, queued = false) {
     }
   }
   const n = parseNotification(text)
-  const m = n && t.monitors[n.id]
-  if (!m) return
+  if (!n) return
   if (!n.summary.startsWith('Monitor event')) {
-    m.ended = m.ended || { reason: firstLine(n.summary) || 'ended', at }
+    for (const id of n.ids) {
+      const m = t.monitors[id]
+      if (m) m.ended = m.ended || { reason: firstLine(n.summary) || 'ended', at }
+    }
     return
   }
+  const m = t.monitors[n.id]
+  if (!m) return
   for (const line of n.lines) {
     if (line.startsWith('[Monitor expired')) {
       m.ended = { reason: 'expired', at }
@@ -205,8 +212,10 @@ export function describeTool(tool, cwd = '') {
 
 // Event tags from pr-babysit and logger that mean a person has to decide.
 const ATTENTION = new Set(['failed', 'manual', 'stuck', 'conflict', 'conflicts', 'error', 'crash', 'auth', 'setup', 'blocked'])
-// How long an ended monitor stays on the board.
-const ENDED_FOR = 30 * 60 * 1000
+// How long a monitor that ended on its own (expired, failed, its session
+// restarted) stays on the board, so you see it went. One you stopped leaves
+// at once.
+const ENDED_FOR = 5 * 60 * 1000
 
 export function monitorKind(command) {
   if (/watch_pr\.py/.test(command)) return 'pr-babysit'
@@ -238,7 +247,8 @@ export function repoOf(cwd) {
 
 // `pane` is the session's tmux pane on the tab server, or null; `alive(cmd)`
 // says whether a monitor's command still runs (true, false, or null when
-// unknown); `reviewedAt` is when you last looked at the session's result.
+// unknown); `reviewedAt` is when you last looked at the session's result;
+// `stopped` holds the tasks the hub stopped.
 // An agent's name, the first there is of: the one set with /rename, the one
 // it was launched with (--name, or the session file's name when that wasn't
 // derived from the folder), the title Claude Code gave it, its first prompt.
@@ -255,7 +265,7 @@ function nameOf(session, t) {
   )
 }
 
-export function classify({ session, t, pane, reviewedAt = 0, alive = () => null, now = Date.now() }) {
+export function classify({ session, t, pane, reviewedAt = 0, alive = () => null, stopped = new Set(), now = Date.now() }) {
   const { repo, worktree } = repoOf(session.cwd)
   const bg = session.kind === 'bg' || session.kind === 'background'
   const status = session.status === 'waiting' ? 'waiting' : session.status === 'busy' ? 'busy' : 'idle'
@@ -293,11 +303,17 @@ export function classify({ session, t, pane, reviewedAt = 0, alive = () => null,
   for (const m of Object.values(t.monitors)) {
     if (!latest[m.description] || latest[m.description].at < m.at) latest[m.description] = m
   }
+  // A monitor runs inside its session's process, so one armed before this
+  // process started went with the last one, even when no notification said
+  // so.
+  const started = session.startedAt ?? 0
   for (const m of Object.values(latest)) {
-    if (m.ended && now - m.ended.at > ENDED_FOR) continue
+    const ended = m.ended ?? (m.at < started ? { reason: 'restarted', at: started } : null)
+    if (stopped.has(m.task) || ended?.reason === 'stopped') continue
+    if (ended && now - ended.at > ENDED_FOR) continue
     const event = m.events.at(-1) ?? null
     let mstate = 'watching'
-    if (m.ended) mstate = 'ended'
+    if (ended) mstate = 'ended'
     else if (alive(m.command) === false) mstate = 'stale'
     if (mstate !== 'ended') {
       if (state === 'needs') mstate = 'action'
@@ -313,7 +329,7 @@ export function classify({ session, t, pane, reviewedAt = 0, alive = () => null,
       busy: status === 'busy',
       event,
       startedAt: m.at,
-      ended: m.ended,
+      ended,
     })
   }
   // A session that is watching something lives in the monitors strip; it

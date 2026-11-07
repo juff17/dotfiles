@@ -78,6 +78,7 @@ test('the same event happening again counts again', () => {
 test('parseNotification reads the task, summary and event lines', () => {
   const n = parseNotification(notification('abc', '[failed] lint\n[comment] @a: &quot;why&quot;'))
   assert.equal(n.id, 'abc')
+  assert.deepEqual(n.ids, ['abc'])
   assert.deepEqual(n.lines, ['[failed] lint', '[comment] @a: "why"'])
 })
 
@@ -152,8 +153,39 @@ test('a monitor whose command is gone is stale; an expired one ends', () => {
   a = classify({ session: session('idle'), t, alive: () => false, now: at(10) })
   assert.equal(a.monitors[0].state, 'ended')
   assert.equal(a.monitor, false)
-  a = classify({ session: session('idle'), t, now: at(9) + 31 * 60 * 1000 })
-  assert.equal(a.monitors.length, 0, 'an ended monitor leaves after half an hour')
+  a = classify({ session: session('idle'), t, now: at(9) + 4 * 60 * 1000 })
+  assert.equal(a.monitors.length, 1, 'an ended monitor stays a while, so you see it went')
+  a = classify({ session: session('idle'), t, now: at(9) + 6 * 60 * 1000 })
+  assert.equal(a.monitors.length, 0, 'and leaves after five minutes')
+})
+
+test('a stopped monitor leaves at once: by the hub, or by TaskStop', () => {
+  let a = classify({ session: session('idle'), t: feed(babysit), alive: () => true, stopped: new Set(['b5sky']), now: at(10) })
+  assert.equal(a.monitors.length, 0, 'the hub stopped it, before or after its exit is reported')
+  assert.equal(a.monitor, false)
+  const t = feed([...babysit, assistant(8, [tool('s1', 'TaskStop', { task_id: 'b5sky' })])])
+  a = classify({ session: session('idle'), t, now: at(10) })
+  assert.equal(a.monitors.length, 0)
+})
+
+test('a monitor armed before its session\'s process started ended with the last one', () => {
+  const resumed = session('idle', { startedAt: at(20), statusUpdatedAt: at(20) })
+  let a = classify({ session: resumed, t: feed(babysit), alive: () => true, now: at(30) })
+  assert.equal(a.monitors[0].state, 'ended', 'even when its command line happens to still match')
+  assert.equal(a.monitors[0].ended.reason, 'restarted')
+  a = classify({ session: resumed, t: feed(babysit), now: at(20) + 6 * 60 * 1000 })
+  assert.equal(a.monitors.length, 0)
+})
+
+test('a notification for several tasks ends each of them', () => {
+  const t = feed([
+    ...babysit,
+    assistant(7, [tool('m2', 'Monitor', { command: 'tail -f a.log', description: 'a.log errors' })]),
+    user(8, [result('m2', 'Monitor started (task c7, expires in 30m)')]),
+    user(9, '<task-notification>\n<task-id>b5sky</task-id>\n<task-id>c7</task-id>\n<task-id>__orphan_summary__:shell</task-id>\n<status>stopped</status>\n<summary>2 background shell command tasks didn\'t finish before the previous session ended.</summary>\n</task-notification>'),
+  ])
+  assert.ok(t.monitors.b5sky.ended)
+  assert.ok(t.monitors.c7.ended)
 })
 
 test('a re-armed monitor shows once', () => {

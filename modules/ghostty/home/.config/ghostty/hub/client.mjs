@@ -68,6 +68,15 @@ export function follow(onState) {
   check()
 }
 
+// A monitor the hub stopped, as <session id>.<task id> in stopped/, so it
+// leaves the board at once rather than lingering as ended.
+export function markStopped(sessionId, task) {
+  try {
+    mkdirSync(join(RUN, 'stopped'), { recursive: true })
+    writeFileSync(join(RUN, 'stopped', `${sessionId}.${task}`), '')
+  } catch {}
+}
+
 export function markReviewed(id) {
   try {
     mkdirSync(join(RUN, 'reviewed'), { recursive: true })

@@ -38,6 +38,7 @@ const PID_FILE = join(RUN, 'agentd.pid')
 function claim() {
   mkdirSync(join(RUN, 'clients'), { recursive: true })
   mkdirSync(join(RUN, 'reviewed'), { recursive: true })
+  mkdirSync(join(RUN, 'stopped'), { recursive: true })
   for (let i = 0; i < 2; i++) {
     try {
       const fd = openSync(PID_FILE, 'wx')
@@ -307,6 +308,21 @@ function reviews() {
   return map
 }
 
+// The monitors the hub stopped, by session: files <session id>.<task id> in
+// stopped/, written by the hub (client.mjs).
+function stoppedTasks() {
+  const map = new Map()
+  try {
+    for (const name of readdirSync(join(RUN, 'stopped'))) {
+      const [session, task] = name.split('.')
+      if (!task) continue
+      if (!map.has(session)) map.set(session, new Set())
+      map.get(session).add(task)
+    }
+  } catch {}
+  return map
+}
+
 function review(id) {
   try {
     writeFileSync(join(RUN, 'reviewed', id), '')
@@ -351,6 +367,7 @@ async function tick() {
   const pane = await panes()
   lastPanes = pane
   const seen = reviews()
+  const stopped = stoppedTasks()
   const agents = []
   const live = new Set()
   for (const s of list) {
@@ -361,7 +378,7 @@ async function tick() {
       review(s.sessionId)
       seen.set(s.sessionId, now)
     }
-    agents.push(classify({ session: s, t, pane: p, reviewedAt: seen.get(s.sessionId) ?? 0, alive, now }))
+    agents.push(classify({ session: s, t, pane: p, reviewedAt: seen.get(s.sessionId) ?? 0, alive, stopped: stopped.get(s.sessionId), now }))
   }
   for (const id of transcripts.keys()) if (!live.has(id)) transcripts.delete(id)
   const wantsProcs = agents.some(a => a.monitors.some(m => !m.ended))
