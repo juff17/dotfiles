@@ -51,7 +51,8 @@ Apply these to code you add or change, including tests.
 - **Errors:** never swallow an exception. Catch only what you can handle, and raise or return
   errors that say what failed and with which input.
 - **Logging:** log at boundaries and failures, not every step. Use the right level, include
-  the identifiers needed to trace the event, and never log secrets or personal data. Remove
+  the identifiers needed to trace the event, and never log secrets or personal data. Never
+  log sensitive content from documents or LLM output unless the user asks for it. Remove
   debug prints before finishing.
 - **Grouped tests:** cases that differ only by input and expected output go in one
   table-driven test (`it.each`, `pytest.mark.parametrize`, or the language's equivalent).
