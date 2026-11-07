@@ -235,11 +235,14 @@ async function markTabs(agents, marked = new Map()) {
 
 // Pane ids repeat across tmux servers, so a session's pane only counts when
 // the session's own tmux names this server's session and window, and Claude
-// runs under the pane's process.
+// runs under the pane's process. A tab opened or started from the hub's
+// open session names that session's peek-N group (Claude records whichever
+// session the pane was in), which shares the tab session's windows, so it
+// counts too, even after the peek is gone.
 function paneOf(s, panes) {
   const m = String(s.tmux ?? '').match(/^([^:]+):(@\d+)\.(%\d+)$/)
   const p = m && panes.get(m[3])
-  if (!p || p.session !== m[1] || p.window !== m[2]) return null
+  if (!p || (p.session !== m[1] && !/^peek-\d+$/.test(m[1])) || p.window !== m[2]) return null
   let pid = s.pid
   for (let i = 0; i < 16 && pid > 1; i++) {
     if (pid === p.pid) return p

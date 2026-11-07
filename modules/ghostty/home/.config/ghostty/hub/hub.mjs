@@ -707,21 +707,13 @@ async function start() {
 
 // ------------------------------------------------------------ actions
 
+// A click on the board only selects; Enter opens the session.
 function pick(laneIndex, id) {
-  const name = LANES[laneIndex]
-  if (focus === laneIndex && selected[name] === id) {
-    const a = board()[name].find(x => x.id === id)
-    if (a) return openSession(a)
-  }
   focus = laneIndex
-  selected[name] = id
+  selected[LANES[laneIndex]] = id
 }
 
 function pickMonitor(key) {
-  if (focus === 4 && selected.monitors === key) {
-    const m = strip().find(x => x.key === key)
-    if (m) return openSession(m.agent)
-  }
   focus = 4
   selected.monitors = key
 }
