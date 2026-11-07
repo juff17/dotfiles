@@ -302,7 +302,7 @@ function footer(w) {
   if (confirm) return render([[` ${confirm.text} `, BOLD + fg(P.peach)], ['y', fg(P.text)], [' yes  ', fg(P.sub)], ['n', fg(P.text)], [' no', fg(P.sub)]], w)
   if (note && note.until > Date.now()) return render([[` ${note.text}`, fg(note.color)]], w)
   const keys = listMode()
-    ? [['j/k', 'move'], ['↵', 'open'], peek ? ['ctrl+shift+b', 'board'] : ['esc', 'workspace'], ['a/d', 'allow/deny'], ['n', 'new']]
+    ? [['j/k', 'move'], ['↵', 'open'], ...(peek ? [['ctrl+shift+l', 'session'], ['ctrl+shift+b', 'board']] : [['esc', 'workspace']]), ['a/d', 'allow/deny'], ['n', 'new']]
     : [['h/l', 'lane'], ['j/k', 'agent'], ['tab', 'monitors'], ['↵', 'open'], ['a/d', 'allow/deny'], ['e', 'reviewed'], ['o', 'go to tab'], ['x', 'close'], ['n', 'new'], ['/', 'filter']]
   return render([[' '], ...hint(keys)], w)
 }
