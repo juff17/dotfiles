@@ -84,7 +84,8 @@ Diagrams come from jstack's diagram-pane mod, which renders each one to a PNG an
 | `a` in Todo | Add with Claude: describe it and Claude Haiku files it. On an empty line, `shift+a` switches to adding by hand |
 | `shift+a` in Todo | Add by hand: title, category (`1`–`6`), then a note (`enter` on an empty note skips it). On a filing that failed, starts from its message |
 | `r` in Todo | Retry a filing that failed |
-| `e` / `c` / `x` in Todo | Edit the title, next category, delete (`x` twice; on a filing, drops it and stops Claude) |
+| `e` in Todo | Edit: the card shows the title, category and note as a form. `tab` / `shift+tab` move between them, `1`–`6` or `←` / `→` pick the category, `enter` saves, `esc` cancels |
+| `c` / `x` in Todo | Next category, delete (`x` twice; on a filing, drops it and stops Claude) |
 | `f` / `d` in Todo | This repo only or every repo / show what's done today |
 | `q` in Todo | Switch to Files |
 | `alt+h` anywhere in the window, or **? help** on the rail | Show the keys in a popup: `j` / `k` (or click) a section, `/` to filter every key (`enter` keeps the filter, `esc` clears it), `J` / `K` or scroll to scroll; `alt+h`, `esc` or `q` close it |

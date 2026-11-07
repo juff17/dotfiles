@@ -88,7 +88,7 @@ export const SECTIONS = [
       ['a', 'Add with Claude: describe it and Haiku files it'],
       ['shift+a', 'Add by hand: title, category 1–6, then a note'],
       ['r', 'Retry a filing Claude couldn’t finish', true],
-      ['e', 'Edit the title'],
+      ['e', 'Edit: title, category and note in one form; tab moves, ↵ saves'],
       ['c', 'Next category', true],
       ['x x', 'Delete, or drop a filing (press twice)', true],
       ['f', 'This repo only / every repo', true],

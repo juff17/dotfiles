@@ -97,7 +97,7 @@ let showDone = false
 let cursorId = ''
 let scroll = 0
 // What the status row is asking for: a message for Claude; a title, a
-// category and a note; or a yes.
+// category and a note; changes to an item; or a yes.
 let prompt = null
 let said = null
 // The body rows last drawn, for clicks.
@@ -273,10 +273,40 @@ function cardRows(item) {
   const by = item.by === 'claude' ? 'Claude' : 'you'
   const where = [tabOf(item) && `in ${tabOf(item)}`, `at ${clock(item.created)}`, item.branch && `on ${item.branch}`].filter(Boolean).join(' ')
   const rows = [pad(`${C.sub}${fit(`added by ${by} ${where}`, w).trimEnd()}${C.reset}`)]
+  if (prompt?.kind === 'edit' && prompt.id === item.id) return [...rows, ...editRows(w)]
   if (item.note) for (const line of wrap(item.note, w)) rows.push(pad(`${C.text}${line}${C.reset}`))
   const go = !item.pane ? '' : panes.has(item.pane) ? 'go to tab' : 'reopen'
   const keys = [...(go ? [['↵', go]] : []), ['e', 'edit'], ['c', 'category'], ['space', item.done ? 'reopen' : 'done']]
   rows.push(pad(hint(keys)))
+  return rows
+}
+
+const LABEL_W = 10
+
+// Every field of the item being edited, the one you're on with the caret:
+// the category as all its picks, the others as their text wrapped under it.
+function editRows(w) {
+  const room = Math.max(4, w - LABEL_W)
+  const rows = []
+  for (const field of FIELDS) {
+    const on = prompt.field === field
+    const label = `${on ? `${C.mauve}${C.bold}` : C.sub}${FIELD_NAMES[field].padEnd(LABEL_W)}${C.reset}`
+    let lines
+    if (field === 'cat') {
+      const color = colorOf(prompt.cat)
+      lines = [
+        on
+          ? CATEGORIES.map((c, i) => `${C.blue}${i + 1}${C.reset} ${c.name === prompt.cat ? `${C.bold}${fg(c.color)}\x1b[4m` : fg(c.color)}${c.short}${C.reset}`).join(' ')
+          : `${fg(color)}${prompt.cat}${C.reset}`,
+      ]
+    } else if (!prompt[field]) lines = [on ? `${CARET}${C.hint}${fit(field === 'note' ? 'Details for later' : PLACEHOLDER.title, room - 1).trimEnd()}${C.reset}` : `${C.hint}none${C.reset}`]
+    else {
+      // Room for the caret after the last character.
+      lines = wrap(prompt[field], on ? room - 1 : room).map(line => `${C.text}${line}${C.reset}`)
+      if (on) lines[lines.length - 1] += CARET
+    }
+    lines.forEach((line, i) => rows.push(cardLine(`${i ? ' '.repeat(LABEL_W) : label}${line}`)))
+  }
   return rows
 }
 
@@ -395,7 +425,10 @@ function statusRow(list, current) {
     const model = 'haiku 5.5 · medium'
     return inputRow('CLAUDE', C.claudeBg, prompt.text, PLACEHOLDER.claude, { text: `${C.hint}${model}${C.reset}`, width: model.length })
   }
-  if (prompt?.kind === 'title' && prompt.edit) return inputRow('EDIT', C.pillBg, prompt.text)
+  if (prompt?.kind === 'edit') {
+    const pairs = [['tab', 'next field'], ...(prompt.field === 'cat' ? [['1–6', 'pick']] : []), ['↵', 'save'], ['esc', 'cancel']]
+    return `${C.pillBg}${C.crust}${C.bold} EDIT ${C.reset}  ${hint(8 + hintWidth(pairs) < width() ? pairs : pairs.slice(-2))}`
+  }
   if (prompt?.kind === 'title' || prompt?.kind === 'note')
     return inputRow(prompt.kind.toUpperCase(), C.pillBg, prompt.text, PLACEHOLDER[prompt.kind], trail(prompt.kind))
   if (prompt?.kind === 'cat') {
@@ -535,7 +568,35 @@ function stopFiler(item) {
 function startEdit() {
   const item = realItem()
   if (!item) return
-  prompt = { kind: 'title', text: item.title, edit: item.id }
+  prompt = { kind: 'edit', id: item.id, field: 'title', title: item.title, cat: item.cat, note: item.note ?? '' }
+  draw()
+}
+
+function onEditKey(key) {
+  const at = FIELDS.indexOf(prompt.field)
+  if (key === '\t' || key === '\x1b[B') prompt.field = FIELDS[(at + 1) % FIELDS.length]
+  else if (key === '\x1b[Z' || key === '\x1b[A') prompt.field = FIELDS[(at + FIELDS.length - 1) % FIELDS.length]
+  else if (key === '\r') {
+    const { id, title, cat, note } = prompt
+    if (!title.trim()) {
+      prompt.field = 'title'
+      return say('A todo needs a title', P.peach)
+    }
+    prompt = null
+    const saved = write(() => change(id, { title: title.trim(), cat, note: note.trim() }))
+    return say(saved ? `Saved: ${saved.title}` : 'That todo is gone', saved ? P.green : P.peach)
+  } else if (prompt.field === 'cat') {
+    const i = CATEGORIES.findIndex(c => c.name === prompt.cat)
+    const step = { '\x1b[C': 1, ' ': 1, '\x1b[D': CATEGORIES.length - 1 }[key]
+    if (step) prompt.cat = CATEGORIES[(i + step) % CATEGORIES.length].name
+    else if (CATEGORIES[Number(key) - 1]) prompt.cat = CATEGORIES[Number(key) - 1].name
+  } else {
+    const text = prompt[prompt.field]
+    if (key === '\x7f' || key === '\b') prompt[prompt.field] = [...text].slice(0, -1).join('')
+    else if (key === '\x15') prompt[prompt.field] = ''
+    else if (key === '\x17') prompt[prompt.field] = text.replace(/\S*\s*$/, '')
+    else if (!key.startsWith('\x1b') && key >= ' ') prompt[prompt.field] += key
+  }
   draw()
 }
 
@@ -584,6 +645,7 @@ function onPromptKey(key) {
     prompt = null
     return draw()
   }
+  if (prompt.kind === 'edit') return onEditKey(key)
   if (prompt.kind === 'cat') {
     const picked = key === '\r' ? prompt.cat : CATEGORIES[Number(key) - 1]?.name
     if (!picked) return
@@ -608,11 +670,6 @@ function onPromptKey(key) {
       prompt = null
       fileWithClaude(['--dir', here.folder || DIR, '--', text])
       return say('Sent to Claude. It shows here once it’s filed.', P.peach)
-    }
-    if (prompt.edit) {
-      const id = prompt.edit
-      prompt = null
-      return write(() => change(id, { title: text }))
     }
     const current = cursorItem()
     prompt = { kind: 'cat', title: text, replaces: prompt.replaces, cat: (!current?.filing && current?.cat) || DEFAULT_CATEGORY }
