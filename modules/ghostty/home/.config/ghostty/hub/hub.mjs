@@ -129,6 +129,7 @@ function hint(pairs) {
 }
 
 const tint = color => mix(color, P.mantle, 0.2)
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`
 
 // A header: a rounded bar tinted with its lane's color, the name on the left
 // and the count in a solid chip on the right.
@@ -150,7 +151,7 @@ function empty(text, w) {
 
 function summary(c, width_) {
   const left = [
-    [` ${c.needs + c.working + c.done + c.idle} tasks · ${c.monitors} monitor${c.monitors === 1 ? '' : 's'}   `, BOLD + fg(P.text)],
+    [` ${plural(c.needs + c.working + c.done + c.idle, 'task')} · ${plural(c.monitors, 'monitor')}   `, BOLD + fg(P.text)],
     [`▲ ${c.needs} need you`, BOLD + fg(P.peach)],
     [`  ✻ ${c.working} working`, fg(P.blue)],
     [`  ✓ ${c.done} done`, fg(P.green)],
@@ -297,8 +298,9 @@ function monitorRows(w, h, y0) {
 }
 
 function footer(w) {
-  if (note && note.until > Date.now()) return render([[` ${note.text}`, fg(note.color)]], w)
+  // A question waiting for y or n comes first: it's what the next key answers.
   if (confirm) return render([[` ${confirm.text} `, BOLD + fg(P.peach)], ['y', fg(P.text)], [' yes  ', fg(P.sub)], ['n', fg(P.text)], [' no', fg(P.sub)]], w)
+  if (note && note.until > Date.now()) return render([[` ${note.text}`, fg(note.color)]], w)
   const keys = listMode()
     ? [['j/k', 'move'], ['↵', 'open'], peek ? ['ctrl+shift+b', 'board'] : ['esc', 'workspace'], ['a/d', 'allow/deny'], ['n', 'new']]
     : [['h/l', 'lane'], ['j/k', 'agent'], ['tab', 'monitors'], ['↵', 'open'], ['a/d', 'allow/deny'], ['e', 'reviewed'], ['o', 'go to tab'], ['x', 'close'], ['n', 'new'], ['/', 'filter']]
@@ -823,7 +825,9 @@ async function answer(allow) {
 
 async function goToTab() {
   const a = focused()
-  if (!a?.pane) return say('Only tab agents have a tab to go to', P.sub)
+  if (!a) return
+  if (!a.pane && a.jobId) return toTab(a)
+  if (!a.pane) return say(`${a.title} runs outside the layout's tabs`, P.sub)
   // By session as well: a bare window id picks whichever session used it last,
   // which can be the hub's own peek session.
   await tabs('select-window', '-t', `${a.pane.session}:${a.pane.window}`)
@@ -831,16 +835,37 @@ async function goToTab() {
   else say(`Switched ${a.title}'s tab in Ghostty window ${a.pane.win}`, P.sub)
 }
 
+// A background agent has no tab; o gives it one: a new tab in this window
+// that attaches to it, typed into the tab's shell so the shell stays after.
+async function toTab(a) {
+  if (!WIN) return say('Not in a Ghostty layout window, so there is no tab session to open a tab in', P.red)
+  const made = await tabs('new-window', '-t', `ghostty-${WIN}:`, '-c', a.cwd, '-P', '-F', '#{pane_id}')
+  if (!made.ok) return say(`Couldn't open a tab: ${made.err}`, P.red)
+  const pane = made.out.trim()
+  await tabs('send-keys', '-t', pane, '-l', `${CLAUDE.replace(/[^\w./-]/g, '\\$&')} attach ${a.jobId}`)
+  await tabs('send-keys', '-t', pane, 'Enter')
+  await outer('select-window', '-t', `layout-${WIN}:work`)
+}
+
+// x closes a done or idle agent: a tab agent's tab, or a background agent,
+// stopped with its conversation kept (`claude attach <id>` resumes it). The
+// footer says whether it worked; the card leaves once agentd sees it gone.
 function closeAgent() {
   const a = focused()
   if (!a) return
   if (a.state === 'working' || a.state === 'needs') return say('Only Done and Idle agents close from here', P.sub)
+  const done = (r, what) => say(r.ok ? what : `Couldn't close ${a.title}: ${clean(r.err).slice(0, 120)}`, r.ok ? P.green : P.red, 8000)
   if (a.pane)
     confirm = {
       text: `Close ${where(a)} (${a.title})?`,
-      yes: () => tabs('kill-window', '-t', a.pane.window),
+      yes: async () => done(await tabs('kill-window', '-t', a.pane.window), `Closed ${where(a)} (${a.title})`),
     }
-  else if (a.jobId) confirm = { text: `Stop background agent ${a.title}?`, yes: () => run([CLAUDE, 'stop', a.jobId]) }
+  else if (a.jobId)
+    confirm = {
+      text: `Stop background agent ${a.title}? Its conversation is kept.`,
+      yes: async () => done(await run([CLAUDE, 'stop', a.jobId]), `Stopped ${a.title}; claude attach ${a.jobId} resumes it`),
+    }
+  else say(`${a.title} runs outside the layout; close it where it runs`, P.sub)
 }
 
 function onKey(key) {
