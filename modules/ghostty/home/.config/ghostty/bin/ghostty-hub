@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+# The agent hub's processes, as the layout runs them (see hub/hub.mjs):
+#   ghostty-hub hub <window>              the hub, in the window's hub window
+#   ghostty-hub rail <window> <work|hub>  the rail down the left of either
+#   ghostty-hub peek <session> <window>   one tab's live session, beside the hub
+#   ghostty-hub attach <id>               a background agent's live session
+#   ghostty-hub setup [window]            adds the rail and the hub to a window
+#                                         opened before they existed
+# hub and rail start again a second after they exit, like btop, so a crash
+# doesn't leave a hole in the window.
+
+source "$(dirname "$(readlink -f "$0")")/ghostty-lib.sh"
+node=$(command -v node || cat "${XDG_CACHE_HOME:-$HOME/.cache}/ghostty-layout/node" 2>/dev/null)
+# Ghostty's own PATH may lack both; ghostty-claude-start saves where they are.
+AGENT_HUB_CLAUDE=$(command -v claude || cat "${XDG_CACHE_HOME:-$HOME/.cache}/ghostty-layout/claude" 2>/dev/null)
+export AGENT_HUB_CLAUDE=${AGENT_HUB_CLAUDE:-claude}
+export GHOSTTY_CONF
+
+forever() {
+  if [[ -z $node ]]; then
+    echo "The agent hub needs Node.js."
+    read -rsn1
+    exit 1
+  fi
+  while :; do
+    "$node" "$GHOSTTY_CONF/hub/$1" "${@:2}"
+    sleep 1
+  done
+}
+
+case ${1:-} in
+  hub)
+    export HUB_WIN=$2
+    forever hub.mjs
+    ;;
+  rail)
+    export HUB_WIN=$2
+    forever rail.mjs "$3"
+    ;;
+  peek)
+    # A session grouped with the tab session shares its tabs but has its own
+    # current tab, so showing one here leaves the workspace's tab alone. It's
+    # named after this pane, peek-<pane number>, so the hub can follow which
+    # tab it shows and the tab keys can switch it (layout.conf). It ends with
+    # this pane; one left from a pane that was just respawned goes first.
+    name="peek-${TMUX_PANE#%}"
+    unset TMUX TMUX_PANE
+    tmux -L "$TABS_SOCKET" kill-session -t "=$name" 2>/dev/null
+    exec tmux -L "$TABS_SOCKET" -f "$GHOSTTY_CONF/tmux.conf" \
+      new-session -t "$2" -s "$name" \; set destroy-unattached on \; select-window -t "$name:$3"
+    ;;
+  attach)
+    exec "$AGENT_HUB_CLAUDE" attach "$2"
+    ;;
+  setup)
+    win=${2:-}
+    if [[ -z $win ]]; then
+      session=$(tmux display -p '#S' 2>/dev/null)
+      win=${session#ghostty-}
+    fi
+    [[ $win =~ ^[0-9]+$ ]] || {
+      echo "Run this in a Ghostty layout window, or name the window number."
+      exit 1
+    }
+    add_hub "$win"
+    ;;
+  *)
+    sed -n '2,10s/^# \{0,1\}//p' "$0"
+    exit 1
+    ;;
+esac

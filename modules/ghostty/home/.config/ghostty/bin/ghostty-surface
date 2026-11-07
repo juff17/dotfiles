@@ -34,6 +34,9 @@ run_layout() {
   # back to its height after one. The window resizes on attach too, when the
   # window manager has maximized it since the size above was read.
   layout set-hook -t "$session" window-resized "resize-pane -t $top -y $TOP_ROWS"
+  # The rail and the hub window; this replaces the hook above with one that
+  # also keeps the rails' width.
+  add_hub "$win"
   setsid -f "$SELF" viewer "$win" "$PWD" >/dev/null 2>&1
   exec tmux -L "$LAYOUT_SOCKET" attach-session -t "$session"
 }
