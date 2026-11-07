@@ -142,7 +142,7 @@ may need to add.
 | `[manual]` | A blocking manual job, environment approval, or workflow approval is waiting | Notify: human needed |
 | `[stuck]` | A job has waited for a runner longer than `--stuck-after` | Notify: human needed |
 | `[stage]` | Every job in one stage finished. On GitLab a stage; on GitHub the part of the check name before ` / ` | Chat line only, no desktop notification |
-| `[pipeline]` | All checks for the head commit finished (passed or failed) | Notify with the result |
+| `[pipeline]` | All checks for the head commit finished: passed, failed, or canceled (none failed, at least one canceled) | Notify with the result |
 | `[behind]` | The base branch moved ahead; may say the host requires a rebase | [references/rebase.md](references/rebase.md) |
 | `[conflict]` | The branch conflicts with the base | [references/rebase.md](references/rebase.md) |
 | `[comment]` | New comment, inline note, or review summary | [references/feedback.md](references/feedback.md) |

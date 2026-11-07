@@ -196,6 +196,7 @@ Want me to move my commits onto `a41c0e2`?
 | Message | When | Desktop notification |
 |---------|------|----------------------|
 | `pipeline passed` | All checks passed. Body: progress line with duration | Yes |
+| `pipeline canceled` | Nothing failed, but a job was canceled. Body: progress line with duration | Yes |
 | `<stage> passed` | A stage finished (`[stage]`). Body: progress line | No |
 | `` `<job>` failed on <base> too `` | The same failure is on the base branch. One FYI item | Yes |
 | `already being watched by another session` | `[busy]` | Yes |

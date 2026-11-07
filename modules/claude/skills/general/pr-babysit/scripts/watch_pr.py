@@ -568,11 +568,12 @@ def report(snap, state, me, stuck_after):
             emit("stage", f"{g['name']} {g['status']} for {short} | {progress(groups, g['name'])}")
     if finished:
         failed = [c["name"] for c in blocking if c["status"] == "failed"]
-        result = "failed" if failed else "passed"
+        canceled = [c["name"] for c in blocking if c["status"] == "canceled"]
+        result, names = ("failed", failed) if failed else ("canceled", canceled) if canceled else ("passed", [])
         if once(state, f"{sha}:pipeline:{result}"):
-            detail = f": {', '.join(failed)}" if failed else ""
-            emit("pipeline", f"{result} for {short}{duration(blocking)}, {len(failed)} of "
-                             f"{len(blocking)} checks failed{detail}{tail}")
+            detail = f": {', '.join(names)}" if names else ""
+            emit("pipeline", f"{result} for {short}{duration(blocking)}, {len(names)} of "
+                             f"{len(blocking)} checks {result if names else 'failed'}{detail}{tail}")
 
     for r in snap["reviews"]:
         if r["author"] != me and once(state, f"review:{r['id']}"):
