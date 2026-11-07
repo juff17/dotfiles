@@ -235,23 +235,37 @@ function box(title, right, lines, w, border, fill) {
   const side = s => render([[s, b]], 1, LANE_BG)
   return [
     topRow,
-    ...lines.map(spans => side('│') + render([[' '], ...spans], w - 2, fill) + side('│')),
+    // A line is its spans, or { left, right } with right set flush right.
+    ...lines.map(
+      l => side('│') + (Array.isArray(l) ? render([[' '], ...l], w - 2, fill) : split([[' '], ...l.left], [...l.right, [' ', '']], w - 2, fill)) + side('│'),
+    ),
     render([[`╰${'─'.repeat(Math.max(0, w - 2))}╯`, b]], w, LANE_BG),
   ]
 }
 
+// A card leads with where the agent runs, its repo and branch (or worktree),
+// in the top border; its name takes the first line and what it's doing the
+// second, with its context size or the keys that answer it on the right.
 function card(name, a, hgt, w, on) {
   // A card a monitor raised is named after what it watches.
   const raised = a.need === 'monitor' ? a.monitors.find(m => m.state === 'action') : null
-  const title = [[` ${clean(raised ? `${raised.description} · ${a.repo}` : a.title)} `, BOLD + fg(on ? P.blue : P.text)]]
+  const label = clean(raised ? raised.description : a.title)
+  const place = a.worktree ? ` ⑂ ${a.worktree}` : a.branch ? ` ⎇ ${a.branch}` : ''
   const age = ago(name === 'working' ? a.stateSince : a.since)
   const cmd = clean(a.cmd)
   if (hgt === 1) {
     const fill = on ? SEL_BG : LANE_BG
-    if (name === 'done')
-      return [render([[on ? ' ▌' : '  ', fg(P.blue)], ['✓ ', fg(P.green)], [clean(a.title), fg(P.sub)], [` · ${cmd}`, fg(P.overlay1)]], w, fill)]
-    return [split([[on ? ' ▌' : '  ', fg(P.blue)], [clean(a.title), BOLD + fg(P.text)], [`  ${where(a)}`, fg(P.sub)]], [[`${age} `, fg(P.sub)]], w, fill)]
+    const done = name === 'done'
+    return [
+      split(
+        [[on ? ' ▌' : '  ', fg(P.blue)], ...(done ? [['✓ ', fg(P.green)]] : []), [clean(a.repo), fg(P.sub)], [` ${label}`, (done ? '' : BOLD) + fg(P.text)]],
+        [[done ? `  ${age} ` : `  ${where(a)} · ${age} `, fg(P.sub)]],
+        w,
+        fill,
+      ),
+    ]
   }
+  const title = [[` ${clean(a.repo)}`, BOLD + fg(on ? P.blue : P.text)], [`${clean(place)} `, fg(P.sub)]]
   const right = [[` ${where(a)} · ${age} `, fg(P.sub)]]
   const cmdColor = {
     needs: a.need === 'monitor' ? (/^\[(failed|error|crash|conflict)/.test(a.cmd) ? P.red : P.peach) : P.peach,
@@ -260,18 +274,21 @@ function card(name, a, hgt, w, on) {
     idle: P.sub,
   }[name]
   const toolAge = name === 'working' && a.cmd !== 'Thinking…' ? ` ${ago(a.since)}` : ''
-  const lines = [[[cmd, fg(cmdColor)], [toolAge, fg(P.sub)]]]
+  const doing = [[cmd, fg(cmdColor)], [toolAge, fg(P.sub)]]
+  let lines
   if (hgt >= 4) {
-    if (name === 'needs')
-      lines.push(
-        a.need === 'monitor'
-          ? [[`◉ from monitor · ${raised?.kind ?? 'monitor'}`, fg(P.teal)]]
+    const extra =
+      name !== 'needs'
+        ? a.ctx
+          ? [[`ctx ${kilo(a.ctx)}`, fg(P.overlay1)]]
+          : []
+        : a.need === 'monitor'
+          ? [[`◉ ${raised?.kind ?? 'monitor'}`, fg(P.teal)]]
           : a.need === 'permission'
             ? hint([['a', 'allow'], ['d', 'deny'], ['↵', 'open']])
-            : hint([['↵', a.need === 'question' ? 'answer' : 'open']]),
-      )
-    else lines.push([[[a.branch && `⎇ ${a.branch}`, a.ctx && `ctx ${kilo(a.ctx)}`].filter(Boolean).join(' · '), fg(P.sub)]])
-  }
+            : hint([['↵', a.need === 'question' ? 'answer' : 'open']])
+    lines = [[[label, BOLD + fg(P.text)]], { left: doing, right: [['  ', ''], ...extra] }]
+  } else lines = [[[label, BOLD + fg(P.text)], [' · ', fg(P.overlay1)], ...doing]]
   const border = on ? P.blue : a.need === 'monitor' ? P.teal : P.surface1
   return box(title, right, lines, w, border, on ? SEL_BG : CARD_BG)
 }
