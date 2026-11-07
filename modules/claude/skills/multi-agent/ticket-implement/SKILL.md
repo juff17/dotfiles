@@ -28,6 +28,33 @@ rule below explicitly says to.
   (questions that require in depth research, test runs, review validation) so the main thread stays focused. Subagents
   should return only the decision/summary needed — not raw dumps.
 
+## Code quality rules
+Apply these to code you add or change, including tests. Where the repo already has a
+clear convention that differs, the repo wins.
+
+- **Comments:** only where the code can't explain itself. Explain *why* (intent, gotchas),
+  not what. No notes about the ticket, the task, or what was just fixed.
+- **Modularization:** keep functions and files focused. Pull logic out when a function gets
+  hard to follow or the same logic is needed in more than one place.
+- **Pure functions where possible:** keep logic free of side effects and push I/O (network,
+  DB, files, clock) to the edges, so the logic can be tested without mocks.
+- **No magic numbers or strings:** use named constants, with units in the name when the type
+  doesn't carry them (`timeoutMs`, `maxRetries`).
+- **Enums and types:** a fixed set of values (statuses, kinds, modes) is an enum or union
+  type, never raw strings scattered through the code.
+- **Names:** name types and functions after the domain thing they represent, specific enough
+  that related names can sit beside them later. `FindingValue`, not `Value`, leaves room for
+  `FindingSeverity` and `FindingSource`.
+- **Errors:** never swallow an exception. Catch only what you can handle, and raise or return
+  errors that say what failed and with which input.
+- **Logging:** log at boundaries and failures, not every step. Use the right level, include
+  the identifiers needed to trace the event, and never log secrets or personal data. Remove
+  debug prints before finishing.
+- **Grouped tests:** cases that differ only by input and expected output go in one
+  table-driven test (`it.each`, `pytest.mark.parametrize`, or the language's equivalent).
+- **Fixtures:** reuse test setup through fixtures, factories, or `beforeEach` instead of
+  copying it into each test.
+
 ## Phase 0 — Understand the system
 1. Read `docs/system-overview` (and the notes within) for architecture and design
    principles. These can be stale — check each file's last-modified date against today and
@@ -84,7 +111,8 @@ Do all implementation in a Claude worktree.
    operator** — this often means a blocking ticket is missing or must land first.
 
 ## Phase 5 — Implement
-1. Build the minimal change that satisfies the ticket, following the conventions from Phase 3.
+1. Build the minimal change that satisfies the ticket, following the conventions from Phase 3
+   and the code quality rules above.
 2. **Run unit tests after the initial implementation.** Run tests in a **subagent** and have
    it return only what's needed to fix failures (failing test names, messages, root cause) —
    not the full log. Fix and re-run until green before moving on.
@@ -108,14 +136,19 @@ Do all implementation in a Claude worktree.
    note it in the report.
 4. **Run the tests again** (subagent) after cuts.
 
-### 6c. Comment cleanup
+### 6c. Code quality check
+1. On the main agent, read the branch diff against the code quality rules and fix any
+   breaches in code added or changed on this branch. Leave older code alone; note
+   worthwhile fixes there as deferred refactors.
+2. **Run the tests again** (subagent) if you changed anything.
+
+### 6d. Comment cleanup
 1. Run the code comment-cleanup skill if one is installed. (A dedicated cleanup/`log` skill
    may not exist on this machine yet — if it's absent, fall back to the
    `pr-review-toolkit:comment-analyzer` agent, and if that's unavailable, do it inline.
    Either way, continue — don't block.)
-2. Using the results, clean up only comments **added or modified on this branch**. Think
-   critically about each comment's value: remove low-signal AI boilerplate and comments that
-   restate the code; keep comments that explain *why*, non-obvious intent, or gotchas.
+2. Using the results, clean up only comments **added or modified on this branch**, judged
+   by the comments rule above. Remove low-signal AI boilerplate.
 
 ## Phase 7 — Final check & report
 1. Run the **full unit test suite one last time** (subagent) and confirm green.
