@@ -39,6 +39,7 @@ import os
 import re
 import subprocess
 import sys
+from urllib.parse import quote
 
 # ---------------------------------------------------------------------------
 # Provider registry — all provider-specific knowledge lives here.
@@ -120,7 +121,8 @@ def detect_host_type(host, override):
 
 def build_url(host, repo_path, host_type, ref, path, start, end):
     shapes = PROVIDERS[host_type]
-    blob = shapes["blob"].format(ref=ref, path=path)
+    # Escape each segment but keep "/", which branch names like feature/x use.
+    blob = shapes["blob"].format(ref=quote(ref, safe="/"), path=quote(path, safe="/"))
     if start is None:
         frag = ""
     elif end is None:

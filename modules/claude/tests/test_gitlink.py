@@ -271,11 +271,9 @@ class Paths(Repo):
         sha = self.git("rev-parse", "HEAD")
         self.assertEqual(self.one("app.py:1"), f"https://github.com/o/r/blob/{sha}/app.py#L1")
 
-    @unittest.expectedFailure
     def test_spaces_and_hash_signs_in_a_path_are_percent_escaped(self):
-        # Suspected bug: build_url drops the path into the URL raw. A space makes
-        # the link unclickable in most places, and a '#' in a filename starts the
-        # fragment early, so the host opens the wrong (missing) file.
+        # A raw space makes the link unclickable, and a raw '#' would start the
+        # fragment early so the host opens the wrong (missing) file.
         self.write("my notes/a#b.md")
         self.commit()
         self.assertEqual(self.one("--ref", "main", "my notes/a#b.md:2"),
