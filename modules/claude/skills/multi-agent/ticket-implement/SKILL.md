@@ -46,8 +46,8 @@ Apply these to code you add or change, including tests.
 - **Enums and types:** a fixed set of values (statuses, kinds, modes) is an enum or union
   type, never raw strings scattered through the code.
 - **Names:** name types and functions after the domain thing they represent, specific enough
-  that related names can sit beside them later. `FindingValue`, not `Value`, leaves room for
-  `FindingSeverity` and `FindingSource`.
+  that related names can sit beside them later. `FindingValue`, not `Value`, so later types
+  like `FindingSeverity` share the same prefix.
 - **Errors:** never swallow an exception. Catch only what you can handle, and raise or return
   errors that say what failed and with which input.
 - **Logging:** log at boundaries and failures, not every step. Use the right level, include
