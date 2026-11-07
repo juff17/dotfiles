@@ -287,12 +287,10 @@ export function handoffSpec(item, { runAs = 'tab', worktree = true, model = 'opu
   const prompt = [
     `Work on this item from my todo list (${about}): ${item.title.replace(/[.!?]+$/, '')}.`,
     item.note && item.note.trim().replace(/([^.!?])$/, '$1.'),
-    // Merging is the user's call: a prompt that only says how to merge reads
-    // as a step to take. A worktree session can't run git in the main
-    // checkout, so the agent leaves the worktree to merge. The worktree may
-    // still hold work the user wants, so the agent asks before removing it.
+    // Merging is the user's call, and the worktree may still hold work the
+    // user wants, so the agent asks before doing either.
     worktree &&
-      "When the work is ready, commit it in the worktree and ask me whether to merge it; never merge unasked. Once I say to merge, leave the worktree with ExitWorktree (action keep) and merge the branch from the main checkout. After it's merged, ask me whether to remove the worktree; never remove it unasked.",
+      "When the work is ready, commit it in the worktree and ask me whether to merge it; never merge unasked. After it's merged, ask me whether to remove the worktree; never remove it unasked.",
     `Once it's finished, mark it done: ~/.config/ghostty/bin/ghostty-todo done ${item.id}`,
   ]
     .filter(Boolean)
