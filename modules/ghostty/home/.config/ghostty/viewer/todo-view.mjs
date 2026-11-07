@@ -680,6 +680,8 @@ async function handOff(ids, how) {
   say(`Starting ${ids.length === 1 ? 'an agent' : `${ids.length} agents`}…`, P.peach)
   const started = []
   const failed = []
+  // Wanted a worktree but aren't in git, so run in their folder.
+  const loose = []
   for (const id of ids) {
     const item = items.find(i => i.id === id)
     if (!item) continue
@@ -687,10 +689,13 @@ async function handOff(ids, how) {
     const error = spec ? await startAgent(item, spec) : `${item.repo} is gone from disk`
     if (error) failed.push(`${item.title}: ${error}`)
     else started.push(item)
+    if (spec && how.worktree && !spec.worktree) loose.push(item)
   }
   for (const item of started) marked.delete(item.id)
   void refresh()
   if (failed.length) return say(`${started.length ? `Started ${started.length}; ` : ''}couldn't start ${failed.join('; ')}`, P.red)
+  if (loose.length)
+    return say(`Started ${started.length}; ${loose.map(i => `"${i.title}"`).join(', ')} isn't in a git repo, so it runs in its folder without a worktree`, P.peach)
   const where = how.runAs === 'tab' ? 'in new tabs' : 'in the background'
   say(started.length === 1 ? `Handed to an agent ${where === 'in new tabs' ? 'in a new tab' : where}: ${started[0].title}` : `Handed ${started.length} todos to agents ${where}`, P.green)
 }

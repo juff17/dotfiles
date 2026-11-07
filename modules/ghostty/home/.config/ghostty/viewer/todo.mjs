@@ -215,10 +215,13 @@ export async function repoOf(dir) {
 // would start a task: one agent per item, in the item's repo. In its own
 // worktree it starts from the main checkout; on the current branch, from the
 // worktree or folder the item was added in. Undefined when none of those is
-// on disk any more.
+// on disk any more. Outside git there is no worktree to make, so the spec
+// says worktree: false.
 export const HANDOFF_MODELS = ['opus', 'sonnet', 'haiku']
 
 export function handoffSpec(item, { runAs = 'tab', worktree = true, model = 'opus' } = {}, exists = existsSync) {
+  // claude -w needs a git repo; an item added outside one runs in its folder.
+  worktree = worktree && item.repo !== 'none' && exists(join(item.root ?? '', '.git'))
   const places = worktree ? [item.root, item.worktree, item.cwd] : [item.worktree, item.cwd, item.root]
   const cwd = places.find(d => d && exists(d))
   if (!cwd) return undefined
