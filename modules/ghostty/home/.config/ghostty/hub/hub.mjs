@@ -12,13 +12,13 @@
 // folder. State comes from agentd through client.mjs.
 
 import { execFile, spawn } from 'node:child_process'
-import { mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { RUN, follow, markReviewed } from './client.mjs'
 import { HUB_OPEN } from './tray.mjs'
-import { cardHeights, counts, lanes, launch, monitorsOf, scrollTo } from './model.mjs'
+import { cardHeights, counts, lanes, launch, monitorProcess, monitorsOf, scrollTo } from './model.mjs'
 import { POPUP } from './newagent.mjs'
 import { BOLD, CAP_L, CAP_R, ITALIC, MONITOR, P, STATE, ago, bar, bg, clean, enter, fg, leave, mix, paint, pill, render, split, tokens, width } from './term.mjs'
 
@@ -32,6 +32,9 @@ const TABS = ['-L', process.env.AGENT_HUB_TABS_SOCKET || 'ghostty']
 const HOME = homedir()
 const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR || join(HOME, '.claude')
 const RECENTS = join(process.env.XDG_CACHE_HOME || join(HOME, '.cache'), 'agent-hub', 'recents.json')
+// Choices that outlive the hub and a reboot, such as questions you said not
+// to ask again: state, not cache or the runtime folder, which a reboot clears.
+const PREFS = join(process.env.XDG_STATE_HOME || join(HOME, '.local', 'state'), 'agent-hub', 'prefs.json')
 const LANES = ['needs', 'working', 'done', 'idle']
 // Below this width the lanes get too narrow to read, so the hub draws the
 // list it shows beside an open session.
@@ -73,7 +76,7 @@ let filter = ''
 let filtering = false
 let peek = null // { pane, id }
 let listSel = null // id in the list beside an open session
-let confirm = null // { text, yes }
+let confirm = null // { text, yes, skip }: skip names a question you can stop being asked
 let note = null // { text, color, until }
 let hits = [] // clickable regions of the last frame
 
@@ -111,6 +114,12 @@ function current(lane) {
     selected[lane] = key(list[0])
   }
   return { list, i, item: list[i] ?? null }
+}
+
+// The monitor selected in the strip, or in the list beside an open session.
+function focusedMonitor() {
+  if (listMode()) return listItems().find(x => x.id === listSel)?.monitor ?? null
+  return focus === 4 ? current('monitors').item : null
 }
 
 function focused() {
@@ -340,11 +349,22 @@ function monitorRows(w, h, y0) {
 
 function footer(w) {
   // A question waiting for y or n comes first: it's what the next key answers.
-  if (confirm) return render([[` ${confirm.text} `, BOLD + fg(P.peach)], ['y', fg(P.text)], [' yes  ', fg(P.sub)], ['n', fg(P.text)], [' no', fg(P.sub)]], w)
+  if (confirm)
+    return render(
+      [
+        [` ${confirm.text} `, BOLD + fg(P.peach)],
+        ['y', fg(P.text)],
+        [' yes  ', fg(P.sub)],
+        ['n', fg(P.text)],
+        [' no', fg(P.sub)],
+        ...(confirm.skip ? [['  a', fg(P.text)], [" yes, don't ask again", fg(P.sub)]] : []),
+      ],
+      w,
+    )
   if (note && note.until > Date.now()) return render([[` ${note.text}`, fg(note.color)]], w)
   const keys = listMode()
     ? [['j/k', 'move'], ['↵', 'open'], ...(peek ? [['alt+s', 'session'], ['ctrl+shift+b', 'board']] : [['esc', 'workspace']]), ['a/d', 'allow/deny'], ['n', 'new']]
-    : [['h/l', 'lane'], ['j/k', 'agent'], ['tab', 'monitors'], ['↵', 'open'], ['a/d', 'allow/deny'], ['e', 'reviewed'], ['o', 'go to tab'], ['x', 'close'], ['n', 'new'], ['/', 'filter']]
+    : [['h/l', 'lane'], ['j/k', 'agent'], ['tab', 'monitors'], ['↵', 'open'], ['a/d', 'allow/deny'], ['e', 'reviewed'], ['o', 'go to tab'], ['x', focus === 4 ? 'stop monitor' : 'close'], ['n', 'new'], ['/', 'filter']]
   return render([[' '], ...hint(keys)], w)
 }
 
@@ -719,22 +739,86 @@ async function toTab(a) {
 // x closes a done or idle agent: a tab agent's tab, or a background agent,
 // stopped with its conversation kept (`claude attach <id>` resumes it). The
 // footer says whether it worked; the card leaves once agentd sees it gone.
+// Closing a session ends every monitor it armed, so the question says how
+// many.
 function closeAgent() {
   const a = focused()
   if (!a) return
   if (a.state === 'working' || a.state === 'needs') return say('Only Done and Idle agents close from here', P.sub)
   const done = (r, what) => say(r.ok ? what : `Couldn't close ${a.title}: ${clean(r.err).slice(0, 120)}`, r.ok ? P.green : P.red, 8000)
+  const live = a.monitors.filter(m => m.state !== 'ended').length
+  const also = live ? ` and its ${live === 1 ? 'monitor' : `${live} monitors`}` : ''
   if (a.pane)
     confirm = {
-      text: `Close ${where(a)} (${a.title})?`,
+      text: `Close ${where(a)} (${a.title})${also}?`,
       yes: async () => done(await tabs('kill-window', '-t', a.pane.window), `Closed ${where(a)} (${a.title})`),
     }
   else if (a.jobId)
     confirm = {
-      text: `Stop background agent ${a.title}? Its conversation is kept.`,
+      text: `Stop background agent ${a.title}${also}? Its conversation is kept.`,
       yes: async () => done(await run([CLAUDE, 'stop', a.jobId]), `Stopped ${a.title}; claude attach ${a.jobId} resumes it`),
     }
   else say(`${a.title} runs outside the layout; close it where it runs`, P.sub)
+}
+
+// The processes on the machine, for finding a monitor's: pid, parent,
+// process group, start time and command line. The fields after the command
+// name in /proc/<pid>/stat, which can itself hold spaces and parentheses.
+function processes() {
+  const list = []
+  for (const pid of readdirSync('/proc')) {
+    if (!/^\d+$/.test(pid)) continue
+    try {
+      const stat = readFileSync(`/proc/${pid}/stat`, 'utf8')
+      const f = stat.slice(stat.lastIndexOf(')') + 2).split(' ')
+      const cmdline = readFileSync(`/proc/${pid}/cmdline`, 'utf8').replaceAll('\0', ' ')
+      list.push({ pid: Number(pid), ppid: Number(f[1]), pgid: Number(f[2]), start: Number(f[19]), cmdline })
+    } catch {}
+  }
+  return list
+}
+
+// x on a monitor stops only that monitor: it ends the monitor's own process
+// group, which leaves the session and its other monitors running. The
+// session gets the exit as a task notification, so the monitor ends there
+// too.
+function stopMonitor(m) {
+  if (m.state === 'ended') return say(`${clean(m.description)} has already ended`, P.sub)
+  const kill = () => {
+    let p = null
+    try {
+      p = monitorProcess(processes(), m.agent.pid, m.command)
+    } catch {}
+    if (!p) return say(`Couldn't find the process for ${clean(m.description)}; it may have just ended`, P.peach, 8000)
+    try {
+      // A group of its own: the whole pipeline goes (tail, sleep, grep).
+      process.kill(p.pgid === p.pid ? -p.pid : p.pid, 'SIGTERM')
+      say(`Stopped ${clean(m.description)}; ${m.agent.title} keeps running`, P.green, 8000)
+    } catch (err) {
+      say(`Couldn't stop ${clean(m.description)}: ${err.code ?? err.message}`, P.red, 8000)
+    }
+  }
+  if (prefs().skip?.['stop-monitor']) return kill()
+  confirm = { text: `Stop monitor ${clean(m.description)}? ${m.agent.title} and its other monitors keep running.`, yes: kill, skip: 'stop-monitor' }
+}
+
+function prefs() {
+  try {
+    return JSON.parse(readFileSync(PREFS, 'utf8'))
+  } catch {
+    return {}
+  }
+}
+
+function dontAsk(name) {
+  const p = prefs()
+  p.skip = { ...p.skip, [name]: true }
+  try {
+    mkdirSync(dirname(PREFS), { recursive: true })
+    writeFileSync(PREFS, `${JSON.stringify(p, null, 2)}\n`)
+  } catch (err) {
+    say(`Couldn't save that choice: ${err.code ?? err.message}`, P.red, 8000)
+  }
 }
 
 function onKey(key) {
@@ -742,6 +826,10 @@ function onKey(key) {
     const c = confirm
     confirm = null
     if (key === 'y') void c.yes()
+    else if (key === 'a' && c.skip) {
+      dontAsk(c.skip)
+      void c.yes()
+    }
     return
   }
   if (filtering) {
@@ -769,7 +857,10 @@ function onKey(key) {
     },
     E: () => board().done.forEach(a => markReviewed(a.id)),
     o: () => goToTab(),
-    x: () => closeAgent(),
+    x: () => {
+      const m = focusedMonitor()
+      return m ? stopMonitor(m) : closeAgent()
+    },
     n: () => openDialog(),
     '/': () => ((filtering = true), (filter = '')),
     '\x1b': () => (peek ? closePeek() : outer('select-window', '-t', `layout-${WIN}:work`)),

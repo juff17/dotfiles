@@ -214,6 +214,22 @@ export function monitorKind(command) {
   return basename(String(command).trim().split(/\s+/).find(w => !/^(python3?|node|bash|sh|-u)$/.test(w)) ?? 'monitor')
 }
 
+// The process running a monitor, from a list of { pid, ppid, pgid, start,
+// cmdline }: Claude runs each one as a shell of its own, a child of the
+// session's claude process that leads its own process group, as
+// `eval '<command>'` (or `-c <command>` at the end, for other shells). The
+// whole command must match: a Bash call that only mentions it, also a child
+// of claude, mustn't be taken for it. The newest wins, as the strip shows
+// only the latest monitor of a name.
+export function monitorProcess(procs, sessionPid, command) {
+  const cmd = String(command ?? '')
+  if (!sessionPid || !cmd) return null
+  const evald = `eval '${cmd.replaceAll("'", `'"'"'`)}'`
+  const runs = line => line.includes(evald) || line.trimEnd().endsWith(` -c ${cmd}`)
+  const mine = procs.filter(p => p.ppid === sessionPid && runs(p.cmdline))
+  return mine.sort((a, b) => b.start - a.start)[0] ?? null
+}
+
 // A worktree session runs in <repo>/.claude/worktrees/<name>.
 export function repoOf(cwd) {
   const m = cwd.match(/^(.*)\/\.claude\/worktrees\/([^/]+)/)
@@ -292,6 +308,7 @@ export function classify({ session, t, pane, reviewedAt = 0, alive = () => null,
       task: m.task,
       description: m.description,
       kind: monitorKind(m.command),
+      command: m.command,
       state: mstate,
       busy: status === 'busy',
       event,

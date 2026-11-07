@@ -1,7 +1,7 @@
 // node --test modules/ghostty/home/.config/ghostty/hub/hub.test.mjs
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { addEntry, cardHeights, classify, counts, describeTool, emptyTranscript, lanes, launch, monitorsOf, parseNotification, repoOf, scrollTo } from './model.mjs'
+import { addEntry, cardHeights, classify, counts, describeTool, emptyTranscript, lanes, launch, monitorProcess, monitorsOf, parseNotification, repoOf, scrollTo } from './model.mjs'
 import { clean, render, width } from './term.mjs'
 
 const ts = s => new Date(Date.UTC(2026, 10, 7, 12, 0, s)).toISOString()
@@ -144,6 +144,10 @@ test('a monitor needs action when its last event needs a person', () => {
 test('a monitor whose command is gone is stale; an expired one ends', () => {
   let a = classify({ session: session('idle'), t: feed(babysit), alive: () => false, now: at(10) })
   assert.equal(a.monitors[0].state, 'stale')
+  assert.match(a.monitors[0].command, /watch_pr\.py/, 'the hub finds its process by its command')
+  const exited = '<task-notification>\n<task-id>b5sky</task-id>\n<status>failed</status>\n<summary>Monitor "PR #1 pipeline" exited with code 143</summary>\n</task-notification>'
+  a = classify({ session: session('idle'), t: feed([...babysit, user(9, exited)]), now: at(10) })
+  assert.equal(a.monitors[0].state, 'ended', 'a monitor the hub stopped ends')
   const t = feed([...babysit, user(9, notification('b5sky', '[Monitor expired after 30m]'))])
   a = classify({ session: session('idle'), t, alive: () => false, now: at(10) })
   assert.equal(a.monitors[0].state, 'ended')
@@ -162,6 +166,24 @@ test('a re-armed monitor shows once', () => {
   const a = classify({ session: session('idle'), t, alive: () => true, now: at(12) })
   assert.equal(a.monitors.length, 1)
   assert.equal(a.monitors[0].task, 'c7')
+})
+
+test('a monitor\'s process is the newest shell under its session running its command', () => {
+  const cmd = `tail -f app.log | grep --line-buffered 'ERROR'`
+  const evald = c => `/usr/bin/zsh -c source snap.sh && eval '${c.replaceAll("'", `'"'"'`)}' && pwd -P`
+  const procs = [
+    { pid: 10, ppid: 1, pgid: 10, start: 100, cmdline: evald(cmd) },
+    { pid: 11, ppid: 1, pgid: 11, start: 200, cmdline: evald(cmd) },
+    { pid: 12, ppid: 2, pgid: 12, start: 300, cmdline: evald(cmd) }, // another session's
+    { pid: 13, ppid: 1, pgid: 13, start: 400, cmdline: evald('while true; do sleep 60; done') },
+    { pid: 14, ppid: 11, pgid: 11, start: 210, cmdline: 'tail -f app.log' }, // the pipeline, not the shell
+    { pid: 15, ppid: 1, pgid: 15, start: 500, cmdline: evald(`pgrep -f "${cmd}"`) }, // a Bash call that mentions it
+  ]
+  assert.equal(monitorProcess(procs, 1, cmd).pid, 11)
+  assert.equal(monitorProcess(procs, 2, cmd).pid, 12)
+  assert.equal(monitorProcess(procs, 1, 'python3 watch.py'), null)
+  assert.equal(monitorProcess(procs, 0, cmd), null)
+  assert.equal(monitorProcess([{ pid: 20, ppid: 1, pgid: 20, start: 1, cmdline: `bash -c ${cmd}` }], 1, cmd).pid, 20)
 })
 
 test('worktree sessions know their repo and worktree', () => {
