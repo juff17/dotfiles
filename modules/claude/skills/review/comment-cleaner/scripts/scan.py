@@ -183,9 +183,24 @@ AI_TOOL_MARKER = re.compile(
 # ============================================================================
 def run_git(repo_root, args):
     """Run a git command in `repo_root` and return stdout. Raises on failure."""
+    # quotePath=false: git would otherwise print non-ASCII paths as "caf\303\251.js".
     return subprocess.run(
-        ["git", *args], cwd=repo_root, capture_output=True, text=True, check=True
+        ["git", "-c", "core.quotePath=false", *args],
+        cwd=repo_root, capture_output=True, text=True, check=True
     ).stdout
+
+
+def git_paths(repo_root, args):
+    """Run a path-listing git command with -z and return the paths."""
+    return [f for f in run_git(repo_root, [*args[:1], "-z", *args[1:]]).split("\0") if f]
+
+
+def unquote_path(path):
+    """Undo git's C-style quoting ("a\\"b.js"), which quotePath=false still uses
+    for names holding a quote, backslash or control character."""
+    if len(path) < 2 or not (path[0] == path[-1] == '"'):
+        return path
+    return path[1:-1].encode("utf-8").decode("unicode_escape").encode("latin-1").decode("utf-8")
 
 
 def lang_for(rel_path):
@@ -252,7 +267,7 @@ def parse_added_lines(diff):
     current = None
     for line in diff.split("\n"):
         if line.startswith("+++ "):
-            path = line[4:].strip()
+            path = unquote_path(line[4:].rstrip("\t\r\n"))
             current = None if path == "/dev/null" else re.sub(r"^b/", "", path)
         elif line.startswith("@@") and current:
             hunk = re.search(r"\+(\d+)(?:,(\d+))?", line)
@@ -270,7 +285,7 @@ def scope_files(repo_root, mode):
     base_label = None
 
     if mode == "full":
-        files = [f for f in run_git(repo_root, ["ls-files", "--", *globs]).split("\n") if f]
+        files = git_paths(repo_root, ["ls-files", "--", *globs])
     else:
         base_ref = default_base_ref(repo_root)
         diff_base = "HEAD"
@@ -279,8 +294,7 @@ def scope_files(repo_root, mode):
                 diff_base = run_git(repo_root, ["merge-base", "HEAD", base_ref]).strip()
             except subprocess.CalledProcessError:
                 pass
-        names = run_git(repo_root, ["diff", "--name-only", "--diff-filter=d", diff_base, "--", *globs])
-        files = [f for f in names.split("\n") if f]
+        files = git_paths(repo_root, ["diff", "--name-only", "--diff-filter=d", diff_base, "--", *globs])
         added_lines = parse_added_lines(run_git(repo_root, ["diff", "--unified=0", diff_base, "--", *globs]))
         base_label = f"{base_ref} (merge-base)" if base_ref else "HEAD (uncommitted only)"
 

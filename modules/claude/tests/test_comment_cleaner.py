@@ -322,12 +322,8 @@ class FullMode(Repo):
         p = self.run_scan("full")
         self.assertEqual(self.flagged(p), [("keep.js", "// AC#1 kept")])
 
-    @unittest.expectedFailure
     def test_a_file_with_a_non_ascii_name_is_scanned(self):
-        # Suspected bug: git quotes non-ASCII paths in `ls-files` / `diff
-        # --name-only` output by default (core.quotePath), e.g. "caf\303\251.js"
-        # with the quotes, so the extension reads as `.js"` and the file is
-        # silently skipped. Passing -z (or -c core.quotePath=false) would fix it.
+        # By default git prints such a path quoted, as "caf\303\251.js".
         self.write("café.js", "// AC#1 here\nf();\n")
         self.commit()
         self.assertEqual(self.flagged(self.run_scan("full")), [("café.js", "// AC#1 here")])
@@ -349,6 +345,14 @@ class BranchMode(Repo):
         p = self.run_scan("branch")
         self.assertEqual((p["mode"], p["base"], p["filesScanned"]), ("branch", "main (merge-base)", 2))
         self.assertEqual(self.flagged(p), [("new.py", "# feel free to tweak"), ("old.js", "// Step 1: new step")])
+
+    def test_files_with_non_ascii_or_quoted_names_are_scanned(self):
+        self.write("café.js", "// Get the old thing\nold();\n// AC#1 here\nf();\n")
+        self.write('say "hi".js', "// AC#2 quoted\nf();\n")
+        self.commit()
+        self.assertEqual(self.flagged(self.run_scan("branch")),
+                         [("café.js", "// AC#1 here"), ("café.js", "// Get the old thing"),
+                          ('say "hi".js', "// AC#2 quoted")])
 
     def test_uncommitted_edits_to_tracked_files_are_in_scope(self):
         self.write("old.js", "// Get the old thing\nold();\n// AC#3 wip\nwip();\n")
