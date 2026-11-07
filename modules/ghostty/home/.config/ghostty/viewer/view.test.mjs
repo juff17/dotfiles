@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { MAX_GRID, clampView, home, panBy, placement, zoomAt } from './view.mjs'
+import { MAX_GRID, clampView, fitChips, home, panBy, placement, zoomAt } from './view.mjs'
 
 const image = { width: 1200, height: 2000 }
 const region = { cols: 60, rows: 40, cw: 10, ch: 20 }
@@ -45,4 +45,17 @@ test('zoom stops where the grid would outgrow the diacritics', () => {
   const at = placement(image, region, clampView(image, region, { zoom: 16, cx: 600, cy: 1000 }))
   assert.ok(at.gridCols <= MAX_GRID && at.gridRows <= MAX_GRID)
   assert.equal(Math.max(at.gridCols, at.gridRows), MAX_GRID)
+})
+
+test('the chips start at the first one while the current one fits', () => {
+  assert.deepEqual(fitChips([10, 10, 10, 10], 1, 25), { start: 0, end: 2 })
+  assert.deepEqual(fitChips([10, 10], 0, 100), { start: 0, end: 2 })
+})
+
+test('the chips scroll just far enough to show the current one', () => {
+  assert.deepEqual(fitChips([10, 10, 10, 10], 3, 25), { start: 2, end: 4 })
+})
+
+test('a current chip wider than the row still shows', () => {
+  assert.deepEqual(fitChips([10, 40, 10], 1, 25), { start: 1, end: 2 })
 })
