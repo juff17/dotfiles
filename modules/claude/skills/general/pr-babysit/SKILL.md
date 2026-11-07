@@ -107,15 +107,19 @@ one; it may be the user's or another babysitter's.
    - Fork (the `[watch]` line says "from a fork"): `git fetch <remote> <base>`
      plus `pull/<number>/head` on GitHub or `merge-requests/<number>/head` on
      GitLab.
-2. `git worktree add -b babysit/<number> .claude/worktrees/babysit-<number> <head sha>`.
+2. Keep the worktree out of the user's `git status`. If
+   `git check-ignore -q .claude/worktrees/babysit-<number>` fails, append
+   `.claude/worktrees/` to `$(git rev-parse --git-common-dir)/info/exclude`.
+   That file is local to the clone, so no tracked file changes.
+3. `git worktree add -b babysit/<number> .claude/worktrees/babysit-<number> <head sha>`.
    If that path or branch already exists from an earlier run, check that it
    has no uncommitted changes and no commits outside the PR, then reuse it
    after `git -C <worktree> reset --hard <head sha>`; otherwise ask the user.
-3. Confirm `git -C <worktree> rev-parse HEAD` equals the head sha. If not,
+4. Confirm `git -C <worktree> rev-parse HEAD` equals the head sha. If not,
    stop and tell the user.
-4. Record the head sha as `lease_sha`. It is what the user's push compares
+5. Record the head sha as `lease_sha`. It is what the user's push compares
    against, so nobody else's pushes get overwritten.
-5. Find the repo's lint and unit test commands (Makefile, package.json,
+6. Find the repo's lint and unit test commands (Makefile, package.json,
    pyproject, CI config). Every fix and rebase is checked with them.
 
 Then tell the user in 2 or 3 bullets: which PR, which worktree, what is watched.
