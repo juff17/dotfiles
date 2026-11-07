@@ -18,7 +18,7 @@ import { existsSync, mkdirSync, readFileSync, watch } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 
-import { CATEGORIES, DEFAULT_CATEGORY, STORE, add, age, arrange, change, colorOf, load, remove, repoOf, stamp } from './todo.mjs'
+import { CATEGORIES, DEFAULT_CATEGORY, STORE, TYPES, add, age, arrange, change, colorOf, load, remove, repoOf, stamp, typeColorOf } from './todo.mjs'
 
 const DIR = process.argv[2] || process.cwd()
 const [TABS_SOCKET, TABS_SESSION] = process.env.DV_TABS?.split(':') ?? [process.env.AGENT_HUB_TABS_SOCKET || 'ghostty', '']
@@ -228,13 +228,16 @@ function itemRow(item, selected) {
   // ☑ has an emoji form that some fonts draw two cells wide; ✓ stays one.
   const box = item.done ? `${C.green}✓${C.reset}${back}` : '☐'
   const right = `${item.repo} · ${age(Date.now() - (item.done || item.created))}`
-  const room = Math.max(4, width() - 4 - right.length - 3)
+  // The type leads the right side, in its own color.
+  const type = item.type ? `${item.type} · ` : ''
+  const room = Math.max(4, width() - 4 - type.length - right.length - 3)
   const fitted = fit(item.title, room)
   const words = fitted.trimEnd()
   const title = item.done
     ? `${C.sub}${C.strike}${words}${C.reset}${back}${fitted.slice(words.length)}`
     : `${selected ? C.bold : ''}${fitted}`
-  return `${back}  ${box} ${title}${C.reset}${back} ${C.sub}${right} ${C.reset}`
+  const typed = item.type ? `${fg(typeColorOf(item.type))}${item.type}${C.sub} · ` : ''
+  return `${back}  ${box} ${title}${C.reset}${back} ${C.sub}${typed}${right} ${C.reset}`
 }
 
 const visible = text => [...text.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '')].length
@@ -253,7 +256,7 @@ function cardRows(item) {
   const rows = [pad(`${C.sub}${fit(`added by ${by} ${where}`, w).trimEnd()}${C.reset}`)]
   if (item.note) for (const line of wrap(item.note, w)) rows.push(pad(`${C.text}${line}${C.reset}`))
   const go = !item.pane ? '' : panes.has(item.pane) ? 'go to tab' : 'reopen'
-  const keys = [...(go ? [['↵', go]] : []), ['e', 'edit'], ['c', 'category'], ['space', item.done ? 'reopen' : 'done']]
+  const keys = [...(go ? [['↵', go]] : []), ['e', 'edit'], ['c', 'category'], ['t', 'type'], ['space', item.done ? 'reopen' : 'done']]
   rows.push(pad(hint(keys)))
   return rows
 }
@@ -382,6 +385,15 @@ function cycleCategory() {
   const at = CATEGORIES.findIndex(c => c.name === item.cat)
   const cat = CATEGORIES[(at + 1) % CATEGORIES.length].name
   write(() => change(item.id, { cat }))
+}
+
+// Through each type, then none, then round again.
+function cycleType() {
+  const item = cursorItem()
+  if (!item) return
+  const at = TYPES.findIndex(t => t.name === item.type)
+  const type = at === TYPES.length - 1 ? null : TYPES[at + 1].name
+  write(() => change(item.id, { type }))
 }
 
 function startAdd() {
@@ -572,6 +584,7 @@ function onKey(key) {
     a: startAdd,
     e: startEdit,
     c: cycleCategory,
+    t: cycleType,
     x: startDelete,
     f: () => {
       only = !only

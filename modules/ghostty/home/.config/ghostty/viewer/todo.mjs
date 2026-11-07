@@ -24,6 +24,15 @@ export const CATEGORIES = [
 export const DEFAULT_CATEGORY = 'follow-up'
 const ALIASES = { fix: 'bug', feat: 'feature', follow: 'follow-up', followup: 'follow-up', doc: 'docs', ask: 'question', q: 'question', misc: 'other' }
 
+// What kind of work an item is, beside its category: finding something out,
+// doing something, or upkeep. Optional, so an item can have none.
+export const TYPES = [
+  { name: 'research', color: '#fab387' },
+  { name: 'action', color: '#a6e3a1' },
+  { name: 'chore', color: '#9399b2' },
+]
+const TYPE_ALIASES = { do: 'action', act: 'action', task: 'action' }
+
 // Done items stay this long, then a write drops them.
 export const KEEP_DONE_MS = 7 * 24 * 60 * 60 * 1000
 
@@ -36,7 +45,20 @@ export function category(input) {
   return matches.length === 1 ? matches[0].name : undefined
 }
 
-export const colorOf = name => CATEGORIES.find(c => c.name === name)?.color ?? '#cdd6f4'
+// A type from what someone typed, as category() reads one; none gives null,
+// which clears it.
+export function taskType(input) {
+  const word = String(input ?? '').trim().toLowerCase()
+  if (!word) return undefined
+  if (word === 'none') return null
+  if (TYPE_ALIASES[word]) return TYPE_ALIASES[word]
+  const matches = TYPES.filter(t => t.name.startsWith(word))
+  return matches.length === 1 ? matches[0].name : undefined
+}
+
+export const typeColorOf = name => TYPES.find(t => t.name === name)?.color ?? '#a6adc8'
+
+export const colorOf =name => CATEGORIES.find(c => c.name === name)?.color ?? '#cdd6f4'
 
 export function newId(items, random = Math.random) {
   const taken = new Set(items.map(i => i.id))

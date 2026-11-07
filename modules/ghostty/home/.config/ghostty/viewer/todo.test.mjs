@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
-import { KEEP_DONE_MS, add, age, arrange, category, change, find, load, newId, prune, remove, repoOf } from './todo.mjs'
+import { KEEP_DONE_MS, add, age, arrange, category, change, find, load, newId, prune, remove, repoOf, taskType } from './todo.mjs'
 
 const now = new Date(2026, 10, 7, 15, 0).getTime()
 const item = (id, cat, root, created, done = null) => ({ id, cat, root, repo: root.split('/').pop(), title: id, created, done })
@@ -19,6 +19,16 @@ test('categories by name, alias or unique prefix', () => {
   assert.equal(category('o'), 'other')
   assert.equal(category('nope'), undefined)
   assert.equal(category(''), undefined)
+})
+
+test('types by name, alias or unique prefix, and none clears one', () => {
+  assert.equal(taskType('research'), 'research')
+  assert.equal(taskType('R'), 'research')
+  assert.equal(taskType('do'), 'action')
+  assert.equal(taskType('ch'), 'chore')
+  assert.equal(taskType('none'), null)
+  assert.equal(taskType('nope'), undefined)
+  assert.equal(taskType(''), undefined)
 })
 
 test('a folder outside any repo is labelled none', async () => {
