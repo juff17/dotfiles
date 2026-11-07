@@ -84,15 +84,20 @@ git clone <jstack-remote> ~/projects/jstack
 
 `config/core/settings.json` installs as `~/.claude/settings.json` and registers
 the hooks in `hooks/core/` by their installed path (`$HOME/.claude/hooks/...`).
-Plugin files are machine-local (`~/.claude/plugins/`), so `enabledPlugins` only
-turns on plugins already installed. On a new machine, install them once:
 
-```
-/plugin install skill-creator@claude-plugins-official
-/plugin install pr-review-toolkit@claude-plugins-official
-/plugin install frontend-design@claude-plugins-official
-/plugin install playwright@claude-plugins-official
-```
+Third-party pieces are downloaded rather than linked, so `./setup` installs
+them for Claude after linking, skipping what is already there:
+
+- **Marketplaces** listed in `extraKnownMarketplaces`, via `claude plugin marketplace add`.
+- **Plugins** turned on in `enabledPlugins`, via `claude plugin install <id> --scope user`.
+- **Mod packages**: `npm ci` in each mod with a `package-lock.json`, when
+  `node_modules` is missing or older than the lockfile. Puppeteer's Chrome
+  download is skipped; diagram-pane renders with `/usr/bin/google-chrome`.
+
+To add a plugin, add it to `enabledPlugins` (and its marketplace to
+`extraKnownMarketplaces`) and re-run `./setup`. A failed install is reported
+with the command to retry. `--uninstall` leaves plugins and `node_modules` in
+place. This step needs the `claude` CLI, `python3`, and `npm` on `PATH`.
 
 Claude sends no desktop notifications. What needs you (a permission prompt, a
 question, a finished agent, a failed pipeline) shows in the Agents panel

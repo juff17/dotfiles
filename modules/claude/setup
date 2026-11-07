@@ -15,6 +15,9 @@
 #   ./setup --copy                copy instead of symlink (force, any platform)
 #   ./setup --force               also replace or remove items jstack did not install
 #
+# For Claude, setup then installs the plugins and marketplaces settings.json
+# names and each mod's npm packages, skipping what is already there.
+#
 # Setup only replaces or removes what it installed: a symlink into this repo,
 # or a copy listed in .installed. Anything else at a target path is skipped with
 # a warning. Links and copies whose source was renamed or deleted are removed.
@@ -25,6 +28,8 @@ JSTACK_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$JSTACK_DIR/lib/link.sh"
 # shellcheck source=lib/targets.sh
 source "$JSTACK_DIR/lib/targets.sh"
+# shellcheck source=lib/extras.sh
+source "$JSTACK_DIR/lib/extras.sh"
 
 TYPES="skills commands agents hooks mods config"
 
@@ -38,7 +43,7 @@ SKIPPED=0
 # but copies can't, so this is how ownership of a copy is known.
 MANIFEST="$JSTACK_DIR/.installed"
 
-usage() { sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'; }
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -215,6 +220,7 @@ install_type() {
         [ -d "$item" ] || continue
         local name; name="$(basename "$item")"
         do_item "$item" "$destroot/$name" "$vendor:$category ${type%s}/$name"
+        [ "$type" = mods ] && install_extras mod_packages "$item" "$destroot/$name"
       done ;;
     agents)   # each agent is a single .md; install flat
       for item in "$srcroot"/*.md; do
@@ -233,8 +239,23 @@ install_type() {
         [ -f "$item" ] || continue
         local name; name="$(basename "$item")"
         do_item "$item" "$destroot/$name" "$vendor:$category ${type%s}/$name"
+        [ "$vendor/$name" = claude/settings.json ] && install_extras claude_plugins "$item" "$destroot/$name"
       done ;;
   esac
+  return 0
+}
+
+# install_extras FN SRC DST — run an extras.sh step for an item just installed.
+# It reads DST, or SRC in a dry run, where DST may not exist yet. Items setup
+# skipped or is removing get nothing.
+install_extras() {
+  local fn="$1" src="$2" dst="$3"
+  [ "$UNINSTALL" -eq 0 ] || return 0
+  if [ "$DRY_RUN" -eq 1 ] && ! [ -e "$dst" ]; then
+    "$fn" "$src"
+  elif owned "$dst"; then
+    "$fn" "$dst"
+  fi
 }
 
 # ─── Main ─────────────────────────────────────────────────────
@@ -258,6 +279,10 @@ echo
 if [ "$SKIPPED" -gt 0 ]; then
   echo "Done, with $SKIPPED item(s) skipped because something not installed by jstack is in the way." >&2
   echo "Move those aside, or re-run with --force to replace them." >&2
-else
+fi
+if [ "$EXTRAS_FAILED" -gt 0 ]; then
+  echo "$EXTRAS_FAILED plugin or package install(s) failed. Run the command shown beside each to see why." >&2
+fi
+if [ "$SKIPPED" -eq 0 ] && [ "$EXTRAS_FAILED" -eq 0 ]; then
   echo "Done."
 fi
