@@ -100,3 +100,20 @@ test('dismissed items leave the list until they change', () => {
   assert.equal(trayItems([done], new Set(), new Set([id])).items.length, 0)
   assert.equal(trayItems([{ ...done, since: 9000 }], new Set(), new Set([id])).items.length, 1)
 })
+
+test('a note from a session is a ▲ row that goes to that session', () => {
+  const babysit = agent('s1', 'idle', { pane: { pane: '%7', tab: 4 }, repo: 'jstack' })
+  const notes = [
+    { file: '1', title: 'jstack !123', message: 'Fix ready · 1 file, push it', session: 's1', pane: '', at: 3000 },
+    { file: '2', title: 'gad !9', message: 'Rebase finished', session: 'gone', pane: '', at: 4000 },
+  ]
+  const t = trayItems([babysit], new Set(), new Set(), notes)
+  assert.deepEqual(
+    t.items.map(i => [i.section, i.id, i.title, i.meta, i.actions]),
+    [
+      ['you', 'n:1', 'Fix ready · 1 file, push it', 'jstack !123 · jstack · tab 4', ['go', 'dismiss']],
+      ['you', 'n:2', 'Rebase finished', 'gad !9', ['dismiss']],
+    ],
+  )
+  assert.equal(t.alert, true)
+})

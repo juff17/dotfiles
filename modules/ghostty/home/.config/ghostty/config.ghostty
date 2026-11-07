@@ -27,3 +27,6 @@ keybind = ctrl+shift+b=csi:9008~
 # Claude Code writes the clipboard three times per copy inside tmux, so the
 # "Copied to clipboard" popup would show three times.
 app-notifications = no-clipboard-copy
+# No desktop pop-ups from programs in the terminal either, Claude Code's
+# included: the Agents panel widget is where an agent tells you it needs you.
+desktop-notifications = false

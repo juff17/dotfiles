@@ -35,10 +35,11 @@ The theme is Catppuccin Mocha.
 
 ## Agents widget
 
-A Plasma panel widget puts the hub's agents beside the clock, in place of desktop pop-ups:
+A Plasma panel widget puts the hub's agents beside the clock. It is the only alert: Claude sends no desktop pop-ups (jstack has no notification hook, and Ghostty's `desktop-notifications` is off):
 
 - **In the panel:** a glyph and count per kind: ▲ needs you, ✗ broke (a monitor saw a failed job, an error, a crash or a conflict), ✻ working, ◉ watching (◌ gone quiet) and ✓ done; ○ when nothing runs. A new ▲ or ✗ fills it with its colour for two seconds, and a ring stays around it until you open the inbox.
 - **The inbox** (click it, or the shortcut you give it): every item in those sections, needs-you first, each with its buttons. **Allow** and **Deny** answer a permission prompt, only while it's on screen, as in the hub; **Go** switches to the agent's tab and brings Ghostty to the front, or opens a background agent in the hub; **Open hub ↗** shows the hub. Keys: `j` / `k` move, `↵` goes, `1` / `2` press the first two buttons, `x` dismisses an item until it changes, `esc` closes. Done items fold into one line until shown, and leave once you open them.
+- **Notes:** a session can post something only it knows needs you, a fix ready to push or a finished rebase, as a ▲ item: pr-babysit's `notify.sh` writes it to `$XDG_RUNTIME_DIR/agent-hub/notes/`. Go takes you to that session; Go or `x` clears it, and it's dropped after a day.
 - It reads and acts through `ghostty-hub tray` (`hub/tray.mjs`), the same agents the hub shows, so handling an item in one clears it in the other. It keeps agentd running while it's in the panel.
 
 ## Install

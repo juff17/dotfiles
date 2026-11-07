@@ -60,8 +60,8 @@ folder under `modules/` and add it to `ORDER` in `install.sh`.
 ## Claude Code config
 The `claude` module installs Claude Code itself (native installer, skipped if already present). Its
 settings, hooks, skills, commands and agents live in [jstack](https://github.com/juff17/jstack), not here:
-clone it and run its `./setup`. Its desktop notifications use the icon and `claude-code` desktop entry
-this module links, which also list Claude Code in System Settings > Notifications.
+clone it and run its `./setup`. Claude Code sends no desktop notifications: what needs you shows in the
+Agents panel widget from the `ghostty` module (see [docs/ghostty.md](docs/ghostty.md#agents-widget)).
 
 ## Machine-local shell settings
 `.zshrc` sources `~/.zshrc.local` last if it exists. Put anything specific to one machine there (CA bundle

@@ -7,6 +7,10 @@
 //   ✻ work    task agents working
 //   ◉ watch   monitors watching, or gone quiet
 //   ✓ done    finished and not yet looked at
+// A session can also post a note for something only it knows needs you (a
+// fix ready to push, a finished rebase): pr-babysit's notify.sh writes one
+// JSON file per note to notes/ ({ title, message, session, pane, at }). A note
+// is a ▲ row until you go to it or dismiss it, and is dropped after a day.
 // An item is new until `seen` records it, which is how the widget keeps its
 // ring until you open the inbox.
 //   tray.mjs snapshot           print the items once; keeps agentd running
@@ -16,7 +20,7 @@
 //   tray.mjs watch              print a snapshot on every change, for testing
 
 import { execFile, spawn } from 'node:child_process'
-import { mkdirSync, readFileSync, utimesSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, readdirSync, unlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -26,6 +30,8 @@ import { lanes, monitorsOf } from './model.mjs'
 const HERE = dirname(fileURLToPath(import.meta.url))
 const SEEN = join(RUN, 'tray-seen.json')
 const DISMISSED = join(RUN, 'tray-dismissed.json')
+const NOTES = join(RUN, 'notes')
+const NOTE_TTL_MS = 24 * 60 * 60 * 1000
 // The file the hub reads when asked to open an agent (hub.mjs OPEN_AGENT_KEY).
 export const HUB_OPEN = join(RUN, 'hub-open')
 const OPEN_AGENT_KEY = '\x1b[9102~'
@@ -45,9 +51,9 @@ const place = a => (a.worktree ? `${a.repo} ⑂ ${a.worktree}` : a.repo)
 // One inbox row. `actions` are what its buttons do; the first is the usual
 // answer. `id` stays the same while the row is about the same thing, so the
 // widget can tell new rows from ones it has shown.
-const row = (section, glyph, id, agent, title, meta, since, actions) => ({ section, glyph, id, agent: agent.id, title, meta, since, actions })
+const row = (section, glyph, id, agent, title, meta, since, actions) => ({ section, glyph, id, agent: agent?.id ?? '', title, meta, since, actions })
 
-export function trayItems(agents, seen = new Set(), dismissed = new Set()) {
+export function trayItems(agents, seen = new Set(), dismissed = new Set(), notes = []) {
   const l = lanes(agents)
   const items = []
   for (const a of l.needs) {
@@ -61,6 +67,12 @@ export function trayItems(agents, seen = new Set(), dismissed = new Set()) {
       items.push(row('you', '▲', `p:${a.id}:${a.since}`, a, a.cmd, `${place(a)} · ${where(a)}`, a.since, ['allow', 'deny', 'go']))
     else if (a.need === 'question') items.push(row('you', '?', `q:${a.id}:${a.since}`, a, a.cmd, `${place(a)} · ${where(a)}`, a.since, ['go']))
     else items.push(row('you', '▲', `i:${a.id}:${a.since}`, a, a.cmd, `${place(a)} · ${where(a)}`, a.since, ['go']))
+  }
+  for (const n of notes) {
+    // The session that wrote it, by id, else by its tmux pane.
+    const a = agents.find(x => n.session && x.id === n.session) ?? agents.find(x => n.pane && x.pane?.pane === n.pane)
+    const meta = [n.title, a && place(a), a && where(a)].filter(Boolean).join(' · ')
+    items.push(row('you', '▲', `n:${n.file}`, a, n.message, meta, n.at, a ? ['go', 'dismiss'] : ['dismiss']))
   }
   for (const a of l.working) items.push(row('work', '✻', `w:${a.id}`, a, a.title, `${place(a)} · ${a.cmd}`, a.stateSince, ['go']))
   for (const m of monitorsOf(agents)) {
@@ -85,6 +97,31 @@ export function trayItems(agents, seen = new Set(), dismissed = new Set()) {
   }
 }
 
+// The notes still due, oldest first; ones older than a day are removed.
+export function readNotes(now = Date.now()) {
+  let files = []
+  try {
+    files = readdirSync(NOTES).filter(f => f.endsWith('.json'))
+  } catch {
+    return []
+  }
+  const notes = []
+  for (const file of files.sort()) {
+    try {
+      const n = JSON.parse(readFileSync(join(NOTES, file), 'utf8'))
+      if (now - (Number(n.at) || 0) > NOTE_TTL_MS) unlinkSync(join(NOTES, file))
+      else notes.push({ ...n, file: file.replace(/\.json$/, ''), at: Number(n.at) || 0 })
+    } catch {}
+  }
+  return notes
+}
+
+const dropNote = item => {
+  try {
+    if (item.id.startsWith('n:')) unlinkSync(join(NOTES, `${item.id.slice(2)}.json`))
+  } catch {}
+}
+
 function readSet(path) {
   try {
     return new Set(JSON.parse(readFileSync(path, 'utf8')))
@@ -107,7 +144,7 @@ function keepAlive() {
   if (!alivePid(pid)) spawn(process.execPath, [join(HERE, 'agentd.mjs')], { detached: true, stdio: 'ignore' }).unref()
 }
 
-const snapshot = state => ({ at: state?.at ?? 0, ...trayItems(state?.agents ?? [], readSet(SEEN), readSet(DISMISSED)) })
+const snapshot = state => ({ at: state?.at ?? 0, ...trayItems(state?.agents ?? [], readSet(SEEN), readSet(DISMISSED), readNotes()) })
 
 // ------------------------------------------------------------ actions
 
@@ -179,10 +216,13 @@ export async function showHub() {
 }
 
 export async function act(action, id, agents = readState()?.agents ?? []) {
-  const it = trayItems(agents, new Set(), readSet(DISMISSED)).items.find(i => i.id === id)
+  const it = trayItems(agents, new Set(), readSet(DISMISSED), readNotes()).items.find(i => i.id === id)
   if (!it) return { ok: false, message: 'That item is gone' }
+  // A note leaves once you go to it or dismiss it.
+  if (it.id.startsWith('n:') && (action === 'go' || action === 'dismiss')) dropNote(it)
+  if (it.id.startsWith('n:') && action === 'dismiss') return { ok: true, message: 'Dismissed' }
   const a = agents.find(x => x.id === it.agent)
-  if (!a) return { ok: false, message: 'That agent is gone' }
+  if (!a) return action === 'dismiss' ? { ok: true, message: 'Dismissed' } : { ok: false, message: 'The session that sent this is gone' }
   if (action === 'dismiss') {
     // Kept only while those items are still listed, so the file stays small.
     const live = new Set(trayItems(agents).items.map(i => i.id))
@@ -209,7 +249,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
     keepAlive()
     process.stdout.write(`${JSON.stringify(snapshot(readState()))}\n`)
   } else if (cmd === 'seen') {
-    const ids = trayItems(readState()?.agents ?? []).items.map(it => it.id)
+    const ids = trayItems(readState()?.agents ?? [], new Set(), new Set(), readNotes()).items.map(it => it.id)
     mkdirSync(RUN, { recursive: true })
     writeFileSync(SEEN, JSON.stringify(ids))
   } else if (cmd === 'act') {
