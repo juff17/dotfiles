@@ -85,7 +85,7 @@ turns on plugins already installed. On a new machine, install them once:
 `hooks/core/agent-notify.sh` sends the desktop notifications, on `Stop` and on
 the `Notification` events. Permission prompts and background sessions waiting
 on input are critical, so they stay up until dismissed. In tmux, a notification
-names the tab and is skipped while that tab is in front of you. Its icon and the `claude-code` desktop entry are in dotfiles.
+names the tab and is skipped while that tab is in front of you. Its icon and the `claude-code` desktop entry are in dotfiles. While dotfiles' Agents panel widget runs, it shows these instead and the hook stays quiet; so does pr-babysit's `notify.sh`.
 
 ## Vendor support
 

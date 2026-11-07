@@ -13,6 +13,14 @@
 # The icon and the claude-code desktop entry (for per-app settings in System
 # Settings > Notifications) come from dotfiles, under ~/.local/share.
 
+# While the Agents panel widget runs (dotfiles' ghostty module), it is the
+# alert: it touches clients/tray every few seconds, and lists these events
+# itself. Pop-ups come back on their own if it stops.
+tray=${XDG_RUNTIME_DIR:-/tmp}/agent-hub/clients/tray
+if [[ -f $tray ]] && (($(date +%s) - $(stat -c %Y "$tray") < 15)); then
+  exit 0
+fi
+
 input=$(cat)
 event=$(jq -r '.hook_event_name // ""' <<<"$input")
 type=$(jq -r '.notification_type // ""' <<<"$input")
