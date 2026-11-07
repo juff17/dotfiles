@@ -15,6 +15,7 @@ My [Ghostty](https://ghostty.org) configuration, in [`modules/ghostty/home/.conf
 - **Top:** btop, showing only its CPU box. If btop isn't installed, htop runs instead.
 - **Bottom right:** a tmux session with its tab bar at the top. Ghostty's tab keys drive tmux tabs.
 - **Left:** opens with the window, in Files (the yazi file manager, which previews documents). Each Claude start or resume in the window points Files at that Claude's folder: straight away if Files is showing, otherwise the next time you switch to it. Tab switches it to Diagrams, the diagram viewer (`dv`), which shows the diagrams Claude draws. A header row shows both modes; click one to switch.
+- **Todo:** a mode of the left pane, after Diff. It shows every repo's open todos grouped by category (bug, feature, follow-up, docs, question), with the active tab's repo first in each group. The selected one opens under its row: who added it, from which tab and branch, and its note. `enter` goes back to the tab that added it, even in another Ghostty window. If that tab is gone, a second `enter` opens a new tab in the item's worktree running `claude --resume` on the session that added it. Items come from the `/todo` skill, which has Claude run `bin/ghostty-todo` (Claude adds them only when you ask), or from `a` in the pane. Done items stay under "done today" and are dropped after a week. The list is one file, `~/.local/state/ghostty-layout/todos.json` (`$XDG_STATE_HOME`), so every window shows the same list.
 - **Diff:** a mode of the left pane, beside Files. It shows the uncommitted changes of the repository your active tmux tab is in, against the last commit (staged, unstaged and new files): a summary of what changed, a row per file with its added and removed lines, and one file open in place under its row with its diff. It checks git every second, so it empties once you commit.
 - **Ping:** when Claude finishes or asks for permission in a tab you're not on, that tab turns red and a desktop notification names the tab and its project. The notification comes from jstack's `agent-notify.sh`.
 - **Rail:** a strip down the far left. **work** and **hub** switch the window between this workspace and the agent hub, the counts under them are the agents that need you (▲), are working (✻), are done (✓) and are idle (○), and **+ new** starts an agent. The hub button gets an orange dot while anything needs you. A tab running Claude carries the same glyph in the tab bar.
@@ -63,8 +64,8 @@ Diagrams come from jstack's diagram-pane mod, which renders each one to a PNG an
 | `ctrl+tab` / `ctrl+shift+tab` | Next / previous tmux tab |
 | `ctrl+shift+→` / `ctrl+shift+←` | Next / previous tmux tab |
 | click `×` on a tab | Close that tab |
-| `tab` in the viewer | Next mode: Diagrams → Files → Diff → Diagrams. Click the viewer first to focus it. |
-| click `Diagrams` / `Files` / `Diff` in the viewer | Switch to that mode |
+| `tab` in the viewer | Next mode: Diagrams → Files → Diff → Todo → Diagrams. Click the viewer first to focus it. |
+| click `Diagrams` / `Files` / `Diff` / `Todo` in the viewer | Switch to that mode |
 | `j` / `k` in Diff | Move between changed files |
 | `enter` or click in Diff | Open that file's diff in place, or close it |
 | `J` / `K`, `PgDn` / `PgUp`, scroll in Diff | Scroll (`g` / `G`: top / bottom) |
@@ -72,6 +73,12 @@ Diagrams come from jstack's diagram-pane mod, which renders each one to a PNG an
 | `q` in dv | Close the viewer |
 | `q` in yazi | Switch to Diagrams |
 | `q` in Diff | Switch to Files |
+| `j` / `k`, scroll in Todo | Move between todos (`g` / `G`: first / last) |
+| `enter` in Todo | Go to the tab that added it; a second `enter` reopens a closed one |
+| `space` in Todo | Mark done, or reopen a done one |
+| `a` / `e` / `c` / `x` in Todo | Add (then pick its category with `1`–`5`), edit the title, next category, delete (`x` twice) |
+| `f` / `d` in Todo | This repo only or every repo / show what's done today |
+| `q` in Todo | Switch to Files |
 | `ctrl+shift+n` (default) | New window with the layout |
 | `ctrl+shift+a`, or **work** / **hub** on the rail | Switch between the workspace and the agent hub |
 | `alt+n` anywhere in the window, **+ new** on the rail, or `n` in the hub | New agent |
@@ -101,8 +108,9 @@ The scripts in `bin/`:
 
 - **`ghostty-surface`** is Ghostty's `command`, so it runs in every new split. In the first split of a new window, it builds that window's outer session at the window's size, then attaches to it. Any other split gets your shell. It also runs the outer panes: `ghostty-surface top` runs btop and `ghostty-surface tabs` runs the tab session. `ghostty-surface viewer` opens the viewer once the new window is attached.
 - **Keeping btop's height:** tmux shares a window resize out between the panes, so a `window-resized` hook puts btop back to `GHOSTTY_TOP_ROWS` after one. That includes the resize on attach, when KDE maximizes a new window while its layout is being built.
-- **`ghostty-claude-start`** sends the viewer's yazi to Claude's folder with `ya emit-to` (yazi runs with a client id per window), and leaves the folder in a file that Files reads when it next starts. It never moves focus. If you closed the viewer, it opens a new one. It also saves where Node.js is, which Diff and Diagrams need and Ghostty's own PATH lacks. The viewer gets `DV_TABS` so Diagrams and Diff know which tab session to follow; `tmux.conf` touches `$XDG_RUNTIME_DIR/ghostty-layout/tab-changed` when the active tab changes, so both switch with it.
-- **`ghostty-viewer`** runs the left pane's three modes in turn, starting with `yazi`: `yazi` (Files), `viewer/diff-view.mjs` (Diff) and `dv` (`viewer/diagram-view.mjs`, Diagrams). Diff and Diagrams exit with the code of the mode to show next (`GV_*_EXIT`, `DV_TAB_EXIT`, `DV_DIFF_EXIT`). `yazi` can't choose an exit code, so it says where to go by whether it writes its `--cwd-file`: Tab and the Diff tab do, `q` and the Diagrams tab don't. `yazi/init.lua` and `yazi/theme.toml` lay yazi out like the design: the mode header, a file list beside a wide preview, and a short status bar. `dv` draws images through tmux with kitty Unicode placeholders, so panning moves in whole cells.
+- **`ghostty-claude-start`** sends the viewer's yazi to Claude's folder with `ya emit-to` (yazi runs with a client id per window), and leaves the folder in a file that Files reads when it next starts. It never moves focus. If you closed the viewer, it opens a new one. It also saves where Node.js is, which Diff, Todo and Diagrams need and Ghostty's own PATH lacks. The viewer gets `DV_TABS` so Diagrams, Diff and Todo know which tab session to follow; `tmux.conf` touches `$XDG_RUNTIME_DIR/ghostty-layout/tab-changed` when the active tab changes, so they switch with it.
+- **`ghostty-viewer`** runs the left pane's four modes in turn, starting with `yazi`: `yazi` (Files), `viewer/diff-view.mjs` (Diff), `viewer/todo-view.mjs` (Todo) and `dv` (`viewer/diagram-view.mjs`, Diagrams). Diff, Todo and Diagrams exit with the code of the mode to show next (`GV_*_EXIT`, `TD_*_EXIT`, `DV_TAB_EXIT`, `DV_DIFF_EXIT`, `DV_TODO_EXIT`). `yazi` can't choose an exit code, so it says where to go by whether it writes its `--cwd-file`: Tab and the Diff and Todo tabs do, `q` and the Diagrams tab don't. The Todo tab also creates the file `GV_TODO_MARK` names first. `yazi/init.lua` and `yazi/theme.toml` lay yazi out like the design: the mode header, a file list beside a wide preview, and a short status bar. `dv` draws images through tmux with kitty Unicode placeholders, so panning moves in whole cells.
+- **`ghostty-todo`** is the todo list's command line: `add`, `list`, `done`, `undo`, `edit` and `rm` (`ghostty-todo help`). `add` records the repo (the main checkout, so a worktree's items count as its repo's), the branch and worktree, the tab's tmux pane, and the Claude session it runs under, found from its parent processes. It records only the pane, since a window shows in the hub's sessions too; Todo looks up the window's own session when it goes there. `viewer/todo.mjs` holds the store both share. Each write takes a lock folder beside the file and replaces the file whole.
 - **Tab keys:** Ghostty sends them as escape codes, and the outer tmux runs the matching command in the tab session, whichever pane has focus; in a session the hub opened, they act on that pane's own session (`peek-<pane number>`) instead. `Ctrl+Shift+A` is one of them too, and switches the outer session's window.
 - **The hub's windows:** `add_hub` in `ghostty-lib.sh` gives each outer session a second window, `hub`, and a rail (`hub/rail.mjs`) down the left of both. Clicks on a rail pass through to it without selecting its pane, and it never keeps focus, like btop. It puts its own width back after a resize. `ghostty-hub setup` adds the rail and the hub to a window opened before they existed.
 - **`hub/agentd.mjs`** is the one process that watches the sessions, so every rail and hub together cost one. Once a second it reads the session files, the new lines of each transcript and the tab server's panes, writes `$XDG_RUNTIME_DIR/agent-hub/state.json`, and sets each Claude tab's `@agent` glyph, which `tmux.conf` draws. The hub and the rails start it when it isn't running and register in `clients/`; it exits a little after the last of them. `hub/model.mjs` holds the logic that turns a session into a card, and `hub/hub.mjs` and `hub/rail.mjs` draw.
@@ -136,10 +144,10 @@ If the chip shows **"Sorry! There was an error loading dev.dotfiles.agents … p
 
 ## Tests
 
-`dv`'s zoom and pan math, the agent hub's model (reading transcripts and monitor events, sorting agents into lanes, fitting a full lane, the commands a new agent runs) and the Agents widget's items (sections, what's new, dismissing) have tests. They use only Node's built-in test runner:
+`dv`'s zoom and pan math, the todo store (categories, grouping, pruning, writes), the agent hub's model (reading transcripts and monitor events, sorting agents into lanes, fitting a full lane, the commands a new agent runs) and the Agents widget's items (sections, what's new, dismissing) have tests. They use only Node's built-in test runner:
 
 ```bash
-node --test modules/ghostty/home/.config/ghostty/viewer/view.test.mjs modules/ghostty/home/.config/ghostty/hub/hub.test.mjs modules/ghostty/home/.config/ghostty/hub/tray.test.mjs
+node --test modules/ghostty/home/.config/ghostty/viewer/view.test.mjs modules/ghostty/home/.config/ghostty/viewer/todo.test.mjs modules/ghostty/home/.config/ghostty/hub/hub.test.mjs modules/ghostty/home/.config/ghostty/hub/tray.test.mjs
 ```
 
 ## Limits
