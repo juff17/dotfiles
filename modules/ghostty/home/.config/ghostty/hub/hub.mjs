@@ -325,6 +325,7 @@ function footer(w) {
 }
 
 function drawBoard() {
+  keepFocus()
   const W = cols()
   const H = rows()
   const c = counts(visible())
@@ -523,8 +524,26 @@ function pickMonitor(key) {
   selected.monitors = key
 }
 
+// Whether lane i (4: the monitors strip) has anything to select.
+const filled = i => (i === 4 ? strip() : board()[LANES[i]]).length > 0
+
+// h/l and the arrows step to the next lane with cards in it, skipping empty
+// ones, where nothing would show as selected.
 function moveLane(n) {
-  focus = (focus + n + 5) % 5
+  for (let step = 1; step < 5; step++) {
+    const next = (((focus + n * step) % 5) + 5) % 5
+    if (filled(next)) return (focus = next)
+  }
+}
+
+// When the focused lane is empty (at start, or its last card moved on),
+// focus goes to the next lane that has cards.
+function keepFocus() {
+  if (filled(focus)) return
+  for (let step = 1; step < 5; step++) {
+    const next = (focus + step) % 5
+    if (filled(next)) return (focus = next)
+  }
 }
 
 function moveIn(n) {
