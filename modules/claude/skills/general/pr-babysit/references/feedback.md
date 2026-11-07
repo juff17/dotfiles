@@ -39,3 +39,9 @@ If you are between Yes and Unsure, it is Unsure.
    [briefing.md](briefing.md).
 
 One commit per comment lets the user drop any fix they disagree with.
+
+## When a fix is dropped
+
+If the user drops a fix, or it is lost in a rebase where they chose the other
+side, the reviewer's comment is still open. Show it again under its old number
+as a **Reply** saying why the change was not made.
