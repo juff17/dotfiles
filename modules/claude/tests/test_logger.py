@@ -154,6 +154,10 @@ class Dedup(Watch):
         self.assertEqual(wl.normalize("job 3f2a9c1e-1b2c-4d5e-8f90-a1b2c3d4e5f6 sha deadbeefcafe01 took 31ms"),
                          "job <uuid> sha <hex> took <n>ms")
 
+    def test_normalize_collapses_short_hashes_but_not_words_or_numbers(self):
+        self.assertEqual(wl.normalize("deploy abc1234 trace 9f8e7d6c failed"), "deploy <hex> trace <hex> failed")
+        self.assertEqual(wl.normalize("deadbeef accepted after 1234567ms"), "deadbeef accepted after <n>ms")
+
     def test_after_the_window_a_repeated_message_is_reported_with_its_count(self):
         filt = self.feed("ERROR timeout after 1ms")
         self.clock.t += 1

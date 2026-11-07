@@ -91,6 +91,9 @@ def normalize(text):
     """Collapse ids, numbers and timestamps so repeats of one message match."""
     text = re.sub(r"\b[0-9a-f]{8}-[0-9a-f-]{27}\b", "<uuid>", text, flags=re.I)
     text = re.sub(r"\b[0-9a-f]{12,}\b", "<hex>", text, flags=re.I)
+    # Short hashes and ids (git's 7-char abbrevs, 8-char trace ids) only when
+    # they mix letters and digits, so plain words and numbers are left alone.
+    text = re.sub(r"\b(?=[0-9a-f]*[a-f])(?=[0-9a-f]*\d)[0-9a-f]{7,11}\b", "<hex>", text, flags=re.I)
     text = re.sub(r"\d+", "<n>", text)
     return text
 
