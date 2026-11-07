@@ -4,7 +4,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
-import { FILING_TIMEOUT_MS, KEEP_DONE_MS, add, age, arrange, category, change, fill, filingState, find, load, newId, prune, remove, repoOf } from './todo.mjs'
+import { launch } from '../hub/model.mjs'
+import { FILING_TIMEOUT_MS, KEEP_DONE_MS, add, age, arrange, category, change, fill, filingState, find, handoffSpec, load, newId, prune, remove, repoOf } from './todo.mjs'
 
 const now = new Date(2026, 10, 7, 15, 0).getTime()
 const item = (id, cat, root, created, done = null) => ({ id, cat, root, repo: root.split('/').pop(), title: id, created, done })
@@ -118,4 +119,21 @@ test('fill turns a filing item into a real one, once', () => {
   assert.equal(fill(placeholder.id, { title: 'again' }, file), undefined)
   assert.equal(fill(plain.id, { title: 'not filing' }, file), undefined)
   assert.equal(fill('missing', { title: 'x' }, file), undefined)
+})
+
+test('a hand-off starts one task agent per item, in its repo', () => {
+  const it = { id: 'k2x', title: 'Make todo edit show title and notes', cat: 'feature', repo: 'dot', root: '/r/dot', worktree: '/r/dot/.claude/worktrees/w', cwd: '/r/dot/.claude/worktrees/w', branch: 'wt', note: 'Show every\nfield.' }
+  const all = () => true
+  const spec = handoffSpec(it, {}, all)
+  assert.equal(spec.cwd, '/r/dot', 'a worktree agent starts from the main checkout')
+  assert.equal(spec.name, 'make-todo-edit-show-k2x')
+  assert.equal(spec.prompt, "Work on this item from my todo list (todo k2x, a feature in dot, added on wt): Make todo edit show title and notes. Show every field. Once it's finished, mark it done: ~/.config/ghostty/bin/ghostty-todo done k2x")
+  assert.match(spec.prompt, /ghostty-todo done k2x$/)
+  assert.equal(launch(spec).line.split(' ').slice(0, 9).join(' '), 'claude -w make-todo-edit-show-k2x --model opus --permission-mode auto --effort medium')
+  assert.equal(handoffSpec(it, { worktree: false }, all).cwd, '/r/dot/.claude/worktrees/w', 'on the current branch, where it was added')
+  assert.equal(handoffSpec(it, { worktree: false }, d => d === '/r/dot').cwd, '/r/dot', 'falls back when its worktree is gone')
+  assert.equal(handoffSpec(it, {}, () => false), undefined)
+  const bg = launch(handoffSpec({ ...it, note: '' }, { runAs: 'bg', model: 'sonnet' }, all))
+  assert.deepEqual(bg.argv.slice(0, 6), ['claude', '--bg', '-w', 'make-todo-edit-show-k2x', '--name', 'make-todo-edit-show-k2x'])
+  assert.doesNotMatch(bg.argv.at(-1), /\. {2}|\n/, 'no gap for a missing note, no newline')
 })

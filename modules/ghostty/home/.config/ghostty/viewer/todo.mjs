@@ -4,9 +4,11 @@
 // viewer never reads half a write.
 
 import { execFile } from 'node:child_process'
-import { mkdirSync, readFileSync, renameSync, rmdirSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, renameSync, rmdirSync, statSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
+
+import { slug } from '../hub/model.mjs'
 
 export const STORE =
   process.env.TODO_FILE || join(process.env.XDG_STATE_HOME || join(homedir(), '.local/state'), 'ghostty-layout/todos.json')
@@ -207,4 +209,31 @@ export async function repoOf(dir) {
   const root = basename(common) === '.git' ? dirname(common) : top
   const branch = (await git(['branch', '--show-current'], top)) || (await git(['rev-parse', '--short', 'HEAD'], top))
   return { root, repo: basename(root), worktree: top === root ? '' : top, branch }
+}
+
+// How the viewer hands an item to an agent, as the hub's New agent form
+// would start a task: one agent per item, in the item's repo. In its own
+// worktree it starts from the main checkout; on the current branch, from the
+// worktree or folder the item was added in. Undefined when none of those is
+// on disk any more.
+export const HANDOFF_MODELS = ['opus', 'sonnet', 'haiku']
+
+export function handoffSpec(item, { runAs = 'tab', worktree = true, model = 'opus' } = {}, exists = existsSync) {
+  const places = worktree ? [item.root, item.worktree, item.cwd] : [item.worktree, item.cwd, item.root]
+  const cwd = places.find(d => d && exists(d))
+  if (!cwd) return undefined
+  // The id keeps two agents on similar titles from sharing a worktree.
+  const name = slug(`${slug(item.title).split('-').slice(0, 4).join(' ')} ${item.id}`)
+  const about = [`todo ${item.id}`, `a ${item.cat} in ${item.repo}`, item.branch && `added on ${item.branch}`].filter(Boolean).join(', ')
+  // One line: a tab agent's command is typed into a shell, where a newline
+  // would run it early.
+  const prompt = [
+    `Work on this item from my todo list (${about}): ${item.title.replace(/[.!?]+$/, '')}.`,
+    item.note && item.note.trim().replace(/([^.!?])$/, '$1.'),
+    `Once it's finished, mark it done: ~/.config/ghostty/bin/ghostty-todo done ${item.id}`,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .replace(/\s*\n\s*/g, ' ')
+  return { kind: 'task', cwd, name, prompt, runAs, worktree, model, mode: 'auto', effort: 'medium' }
 }

@@ -6,7 +6,9 @@
 // start Claude there again when that tab is gone. Items come from
 // bin/ghostty-todo (the /todo skill) and from here: a hands a message to
 // Claude Haiku (ghostty-todo file), which writes the item; Shift+A adds one
-// by hand, a title, a category and a note.
+// by hand, a title, a category and a note. m marks items and w hands the
+// marked ones, or the selected one, to agents: one Claude each, started as
+// the hub's New agent starts a task, in a tab or the background.
 //   todo-view.mjs [dir]
 // DV_TABS names the window's tab session as `socket:session`
 // (bin/ghostty-claude-start); without it, dir is the folder.
@@ -21,7 +23,8 @@ import { homedir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { CATEGORIES, DEFAULT_CATEGORY, STORE, add, age, arrange, change, colorOf, fill, filingState, load, remove, repoOf, stamp } from './todo.mjs'
+import { launch } from '../hub/model.mjs'
+import { CATEGORIES, DEFAULT_CATEGORY, HANDOFF_MODELS, STORE, add, age, arrange, change, colorOf, fill, filingState, handoffSpec, load, remove, repoOf, stamp } from './todo.mjs'
 
 const TODO_CLI = join(dirname(fileURLToPath(import.meta.url)), '../bin/ghostty-todo')
 
@@ -95,9 +98,11 @@ let panes = new Map()
 let only = false
 let showDone = false
 let cursorId = ''
+// The ids m marked, for w to hand off together.
+let marked = new Set()
 let scroll = 0
 // What the status row is asking for: a message for Claude; a title, a
-// category and a note; changes to an item; or a yes.
+// category and a note; changes to an item; how to hand items off; or a yes.
 let prompt = null
 let said = null
 // The body rows last drawn, for clicks.
@@ -218,9 +223,9 @@ const hint = pairs => pairs.map(([key, what]) => `${C.blue}${key}${C.sub} ${what
 const hintWidth = pairs => pairs.map(([key, what]) => `${key} ${what}`).join('  ').length
 
 // Where an item's tab is now, in words.
-function tabOf(item) {
-  if (!item.pane) return ''
-  const at = panes.get(item.pane)
+function tabOf(pane) {
+  if (!pane) return ''
+  const at = panes.get(pane)
   if (!at) return 'a tab now closed'
   const tab = at.hub ? 'a hub tab' : `tab ${at.index}`
   return at.win === WIN || !WIN ? tab : `w${at.win} · ${tab}`
@@ -245,14 +250,17 @@ function itemRow(item, selected) {
   const back = selected ? C.cursorBg : ''
   // ☑ has an emoji form that some fonts draw two cells wide; ✓ stays one.
   const box = item.done ? `${C.green}✓${C.reset}${back}` : '☐'
+  const mark = marked.has(item.id) ? `${C.mauve}▌${C.reset}${back}` : ' '
+  // ✻, as the hub marks a Claude at work: it's been handed to an agent.
+  const agent = item.handoff ? `${C.blue}✻ ${C.reset}${back}` : ''
   const right = `${item.repo} · ${age(Date.now() - (item.done || item.created))}`
-  const room = Math.max(4, width() - 4 - right.length - 3)
+  const room = Math.max(4, width() - 4 - right.length - (agent ? 2 : 0) - 3)
   const fitted = fit(item.title, room)
   const words = fitted.trimEnd()
   const title = item.done
     ? `${C.sub}${C.strike}${words}${C.reset}${back}${fitted.slice(words.length)}`
     : `${selected ? C.bold : ''}${fitted}`
-  return `${back}  ${box} ${title}${C.reset}${back} ${C.sub}${right} ${C.reset}`
+  return `${back}${mark} ${box} ${title}${C.reset}${back} ${agent}${C.sub}${right} ${C.reset}`
 }
 
 const visible = text => [...text.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '')].length
@@ -271,11 +279,16 @@ function cardRows(item) {
   // The repo is on the item's row already; the branch goes last, where a
   // long one can be cut.
   const by = item.by === 'claude' ? 'Claude' : 'you'
-  const where = [tabOf(item) && `in ${tabOf(item)}`, `at ${clock(item.created)}`, item.branch && `on ${item.branch}`].filter(Boolean).join(' ')
+  const where = [tabOf(item.pane) && `in ${tabOf(item.pane)}`, `at ${clock(item.created)}`, item.branch && `on ${item.branch}`].filter(Boolean).join(' ')
   const rows = [pad(`${C.sub}${fit(`added by ${by} ${where}`, w).trimEnd()}${C.reset}`)]
   if (prompt?.kind === 'edit' && prompt.id === item.id) return [...rows, ...editRows(w)]
+  if (item.handoff) {
+    const { name, where: ran, pane, at } = item.handoff
+    const place = ran === 'bg' ? 'in the background' : `in ${tabOf(pane) || 'a tab'}`
+    rows.push(pad(`${C.blue}✻ ${C.sub}${fit(`handed to ${name} ${place} at ${clock(at)}`, w - 2).trimEnd()}${C.reset}`))
+  }
   if (item.note) for (const line of wrap(item.note, w)) rows.push(pad(`${C.text}${line}${C.reset}`))
-  const go = !item.pane ? '' : panes.has(item.pane) ? 'go to tab' : 'reopen'
+  const go = agentPane(item) ? 'go to agent' : !item.pane ? '' : panes.has(item.pane) ? 'go to tab' : 'reopen'
   const keys = [...(go ? [['↵', go]] : []), ['e', 'edit'], ['c', 'category'], ['space', item.done ? 'reopen' : 'done']]
   rows.push(pad(hint(keys)))
   return rows
@@ -438,10 +451,24 @@ function statusRow(list, current) {
     const side = trail('cat')
     return width() - used - side.width > 2 ? `${line}\x1b[${width() - side.width + 1}G${side.text}` : line
   }
+  if (prompt?.kind === 'handoff') {
+    const n = prompt.ids.length
+    const choice = (key, value) => `${C.blue}${key}${C.reset} ${C.text}${C.bold}${value}${C.reset}`
+    const choices = [
+      choice('t', prompt.runAs === 'tab' ? 'tab' : 'background'),
+      choice('b', prompt.worktree ? 'worktree' : 'this branch'),
+      choice('m', prompt.model),
+    ].join('  ')
+    const lead = `${C.claudeBg}${C.crust}${C.bold} HAND OFF ${C.reset} ${C.sub}${n} ${n === 1 ? 'todo' : 'todos'} →${C.reset} ${choices}`
+    const used = 11 + `${n} todos → `.length + 't background  b this branch  m sonnet'.length
+    return width() - used > 20 ? `${lead}  ${hint([['↵', 'start'], ['esc', 'cancel']])}` : lead
+  }
   if (prompt?.kind === 'confirm') return `${fg(P.peach)}${prompt.text}${C.reset}`
   if (said && Date.now() < said.until) return `${fg(said.color)}${fit(said.text, width() - 1)}${C.reset}`
-  const pairs = [['space', 'done'], ['a', 'add'], ['shift+a', 'by hand'], ['x', 'delete'], ['f', only ? 'all repos' : 'this repo']]
-  const position = list.length ? `${list.indexOf(current) + 1}/${list.length} ` : ''
+  const pairs = marked.size
+    ? [['w', 'hand off'], ['m', 'mark'], ['shift+m', 'clear'], ['space', 'done']]
+    : [['space', 'done'], ['a', 'add'], ['shift+a', 'by hand'], ['m', 'mark'], ['w', 'hand off'], ['f', only ? 'all repos' : 'this repo']]
+  const position = list.length ? `${marked.size ? `${marked.size} marked · ` : ''}${list.indexOf(current) + 1}/${list.length} ` : ''
   const fits = 8 + hintWidth(pairs) + position.length < width()
   const left = `${C.pillBg}${C.crust}${C.bold} TODO ${C.reset}  ${fits ? hint(pairs) : hint(pairs.slice(0, 2))}`
   return position ? `${left}\x1b[${width() - position.length + 1}G${C.text}${position}${C.reset}` : left
@@ -454,6 +481,7 @@ function draw() {
   const list = selectable(view)
   const current = cursorItem(list)
   if (current) cursorId = current.id
+  for (const id of marked) if (!list.some(i => i.id === id && !i.done && !i.filing)) marked.delete(id)
   const height = bodyHeight()
   let rows
   if (!view.groups.length && !view.filing.length && !(showDone && view.doneToday.length)) {
@@ -600,6 +628,106 @@ function onEditKey(key) {
   draw()
 }
 
+function toggleMark() {
+  const item = realItem()
+  if (!item) return
+  if (item.done) return say('It’s done; space reopens it')
+  if (!marked.delete(item.id)) marked.add(item.id)
+  moveCursor(1)
+}
+
+// The marked items, in the list's order, or else the selected one.
+function startHandoff() {
+  let ids = selectable()
+    .filter(i => marked.has(i.id))
+    .map(i => i.id)
+  if (!ids.length) {
+    const item = realItem()
+    if (!item) return
+    if (item.done) return say('It’s done; space reopens it')
+    ids = [item.id]
+  }
+  // Without a layout window there is no tab session to open tabs in.
+  prompt = { kind: 'handoff', ids, runAs: WIN ? 'tab' : 'bg', worktree: true, model: HANDOFF_MODELS[0] }
+  draw()
+}
+
+function onHandoffKey(key) {
+  if (key === 't') {
+    if (!WIN) return say('Not in a Ghostty layout window, so agents can only run in the background')
+    prompt.runAs = prompt.runAs === 'tab' ? 'bg' : 'tab'
+  } else if (key === 'b') prompt.worktree = !prompt.worktree
+  else if (key === 'm') prompt.model = HANDOFF_MODELS[(HANDOFF_MODELS.indexOf(prompt.model) + 1) % HANDOFF_MODELS.length]
+  else if (key === '\r') {
+    const { ids, ...how } = prompt
+    prompt = null
+    return void handOff(ids, how)
+  }
+  draw()
+}
+
+function claudePath() {
+  try {
+    return readFileSync(CLAUDE_FILE, 'utf8').trim() || 'claude'
+  } catch {
+    return 'claude'
+  }
+}
+
+// Starts one agent per item, one after another so the tabs open in order,
+// and records on each item who has it.
+async function handOff(ids, how) {
+  say(`Starting ${ids.length === 1 ? 'an agent' : `${ids.length} agents`}…`, P.peach)
+  const started = []
+  const failed = []
+  for (const id of ids) {
+    const item = items.find(i => i.id === id)
+    if (!item) continue
+    const spec = handoffSpec(item, how)
+    const error = spec ? await startAgent(item, spec) : `${item.repo} is gone from disk`
+    if (error) failed.push(`${item.title}: ${error}`)
+    else started.push(item)
+  }
+  for (const item of started) marked.delete(item.id)
+  void refresh()
+  if (failed.length) return say(`${started.length ? `Started ${started.length}; ` : ''}couldn't start ${failed.join('; ')}`, P.red)
+  const where = how.runAs === 'tab' ? 'in new tabs' : 'in the background'
+  say(started.length === 1 ? `Handed to an agent ${where === 'in new tabs' ? 'in a new tab' : where}: ${started[0].title}` : `Handed ${started.length} todos to agents ${where}`, P.green)
+}
+
+// '' once the agent is running, or what went wrong.
+async function startAgent(item, spec) {
+  const plan = launch(spec)
+  const claude = claudePath()
+  let pane = ''
+  if (plan.where === 'tab') {
+    // -d: the tabs open behind the one you're on.
+    const made = await tabs('new-window', '-d', '-t', `ghostty-${WIN}:`, '-c', spec.cwd, '-P', '-F', '#{pane_id}')
+    if (!made.ok) return `couldn't open a tab: ${made.err}`
+    pane = made.out.trim()
+    // Typed into the tab's shell, so the shell stays when Claude exits.
+    await tabs('send-keys', '-t', pane, '-l', `${shellQuote(claude)}${plan.line.slice('claude'.length)}`)
+    await tabs('send-keys', '-t', pane, 'Enter')
+  } else {
+    // claude --bg prints its id and returns once the agent is running.
+    const error = await new Promise(done => {
+      let output = ''
+      const child = spawn(claude, plan.argv.slice(1), { cwd: spec.cwd, detached: true, stdio: ['ignore', 'pipe', 'pipe'] })
+      child.stdout.on('data', b => (output += b))
+      child.stderr.on('data', b => (output += b))
+      child.on('error', e => done(`couldn't start claude: ${e.message}`))
+      child.on('close', code => done(code ? `claude --bg failed: ${tidy(output).trim().slice(0, 120)}` : ''))
+      child.unref()
+    })
+    if (error) return error
+  }
+  write(() => change(item.id, { handoff: { name: plan.name, where: plan.where, pane, at: Date.now() } }))
+  return ''
+}
+
+// The tab of the agent the item was handed to, while it's open.
+const agentPane = item => (item.handoff?.pane && panes.has(item.handoff.pane) ? item.handoff.pane : '')
+
 function confirm(text, yes, key) {
   prompt = { kind: 'confirm', text, yes, key }
   draw()
@@ -646,6 +774,7 @@ function onPromptKey(key) {
     return draw()
   }
   if (prompt.kind === 'edit') return onEditKey(key)
+  if (prompt.kind === 'handoff') return onHandoffKey(key)
   if (prompt.kind === 'cat') {
     const picked = key === '\r' ? prompt.cat : CATEGORIES[Number(key) - 1]?.name
     if (!picked) return
@@ -684,14 +813,19 @@ function onPromptKey(key) {
 
 const shellQuote = text => text.replace(/[^\w./-]/g, '\\$&')
 
-// The tab that added the item, in this window or another; or, once that
-// tab is gone, a new tab running Claude there, resuming the item's session.
+// The tab of the agent it was handed to, or else the tab that added it, in
+// this window or another; or, once that tab is gone, a new tab running
+// Claude there, resuming the item's session.
 async function goTo() {
   const item = realItem()
   if (!item) return
-  if (!item.pane) return say(item.by === 'you' ? 'You added this one here, so it has no tab to go to' : 'This one was added outside the layout’s tabs')
   panes = await readPanes()
-  const at = panes.get(item.pane)
+  const pane = agentPane(item) || item.pane
+  if (!pane) {
+    if (item.handoff?.where === 'bg') return say(`${item.handoff.name} runs in the background: open it in the hub`)
+    return say(item.by === 'you' ? 'You added this one here, so it has no tab to go to' : 'This one was added outside the layout’s tabs')
+  }
+  const at = panes.get(pane)
   if (at?.hub) {
     // The hub opens its tabs itself, beside its board.
     if (at.win === WIN && WIN) await outer('select-window', '-t', `layout-${WIN}:hub`)
@@ -700,7 +834,7 @@ async function goTo() {
   }
   if (at) {
     await tabs('select-window', '-t', `${at.session}:${at.window}`)
-    await tabs('select-pane', '-t', item.pane)
+    await tabs('select-pane', '-t', pane)
     if (at.win !== WIN && WIN) return say(`Switched to tab ${at.index} in Ghostty window ${at.win}`)
     if (WIN) {
       const tabsPane = (await outer('show', '-t', `layout-${WIN}`, '-v', '@tabs')).out.trim()
@@ -717,10 +851,7 @@ async function goTo() {
 }
 
 async function reopen(item, dir) {
-  let claude = 'claude'
-  try {
-    claude = readFileSync(CLAUDE_FILE, 'utf8').trim() || claude
-  } catch {}
+  const claude = claudePath()
   const made = await tabs('new-window', '-t', `ghostty-${WIN}:`, '-c', dir, '-P', '-F', '#{pane_id}')
   if (!made.ok) return say(`Couldn't open a tab: ${made.err}`, P.red)
   const pane = made.out.trim()
@@ -797,6 +928,12 @@ function onKey(key) {
     e: startEdit,
     c: cycleCategory,
     x: startDelete,
+    m: toggleMark,
+    M: () => {
+      marked.clear()
+      draw()
+    },
+    w: startHandoff,
     f: () => {
       only = !only
       draw()

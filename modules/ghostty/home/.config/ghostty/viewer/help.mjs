@@ -82,7 +82,7 @@ export const SECTIONS = [
     where: 'the Todo mode and the Alt+T popup',
     keys: [
       ['j / k  g / G', 'Move, first / last'],
-      ['↵', 'Go to the tab that added it'],
+      ['↵', 'Go to its agent’s tab, or the tab that added it'],
       ['↵ ↵', 'Reopen its tab with claude --resume when it’s closed', true],
       ['space', 'Mark done, or reopen'],
       ['a', 'Add with Claude: describe it and Haiku files it'],
@@ -90,6 +90,8 @@ export const SECTIONS = [
       ['r', 'Retry a filing Claude couldn’t finish', true],
       ['e', 'Edit: title, category and note in one form; tab moves, ↵ saves'],
       ['c', 'Next category', true],
+      ['m  shift+m', 'Mark for hand-off, clear the marks'],
+      ['w', 'Hand the marked todos, or this one, to agents: t tab or background, b worktree or branch, m model', true],
       ['x x', 'Delete, or drop a filing (press twice)', true],
       ['f', 'This repo only / every repo', true],
       ['d', 'Show what’s done today', true],
