@@ -12,11 +12,11 @@
 // folder. State comes from agentd through client.mjs.
 
 import { execFile, spawn } from 'node:child_process'
-import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { follow, markReviewed } from './client.mjs'
+import { RUN, follow, markReviewed } from './client.mjs'
 import { cardHeights, counts, lanes, launch, monitorsOf, scrollTo } from './model.mjs'
 import { BOLD, ITALIC, MONITOR, P, STATE, ago, bar, bg, clean, enter, fg, leave, mix, paint, pill, render, split, tokens, width } from './term.mjs'
 
@@ -62,7 +62,6 @@ let filter = ''
 let filtering = false
 let peek = null // { pane, id }
 let listSel = null // id in the list beside an open session
-let dialog = null
 let confirm = null // { text, yes }
 let note = null // { text, color, until }
 let hits = [] // clickable regions of the last frame
@@ -403,23 +402,17 @@ function drawList() {
   return lines.slice(0, H)
 }
 
-// ------------------------------------------------------------ dialog
+// ------------------------------------------------------------ new agent
 
-const KINDS = [
-  { id: 'task', glyph: '✻', color: P.blue, label: 'Task', sub: 'a worker with a prompt' },
-  { id: 'pr', glyph: '◉', color: P.teal, label: 'Babysit a PR', sub: 'monitor until it merges' },
-  { id: 'logs', glyph: '◉', color: P.teal, label: 'Watch logs', sub: 'monitor a service' },
-]
-const RUN_AS = [
-  { id: 'tab', label: 'New tab', sub: 'in this window' },
-  { id: 'worktree', label: 'Worktree + new tab', sub: 'on its own branch' },
-  { id: 'bg', label: 'Background', sub: 'no tab; lives in the hub' },
-]
-const CHOICES = {
-  model: ['default', 'opus', 'sonnet', 'haiku'],
-  mode: ['default', 'auto', 'acceptEdits', 'plan'],
-  effort: ['default', 'low', 'medium', 'high', 'xhigh'],
-}
+// The form runs in a tmux popup over the whole window (newagent.mjs), sized
+// to it, so it has room beside an open session as well as over the board.
+// It writes what you chose to a file; the hub starts the agent from that.
+// Its width follows the window's; its height is the form's, which doesn't
+// grow with more room.
+const POPUP_SHARE = 0.7
+const POPUP_WIDTH = { min: 84, max: 140 }
+const POPUP_HEIGHT = 23
+let asking = false
 
 function recents() {
   let saved = []
@@ -441,267 +434,65 @@ function remember(dir) {
   } catch {}
 }
 
-const tilde = p => (p.startsWith(HOME) ? `~${p.slice(HOME.length)}` : p)
-const expand = p => (p.startsWith('~') ? HOME + p.slice(1) : p)
+const shq = s => `'${String(s).replace(/'/g, `'\\''`)}'`
+const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n))
 
-function openDialog() {
-  const r = recents()
-  const base = focused()?.cwd ?? r[0] ?? join(HOME, 'projects')
-  const root = base.match(/^(.*)\/\.claude\/worktrees\//)?.[1] ?? base
-  dialog = {
-    kind: 0,
-    runAs: 0,
-    model: 0,
-    mode: 0,
-    effort: 0,
-    recent: Math.max(0, r.indexOf(root)),
-    field: 'prompt',
-    folder: { text: tilde(root), at: tilde(root).length },
-    prompt: { text: '', at: 0 },
-    target: { text: '', at: 0 },
-    busy: false,
-  }
-  draw()
-}
-
-function fields() {
-  const k = KINDS[dialog.kind].id
-  return ['kind', 'folder', 'recent', k === 'task' ? 'prompt' : 'target', ...(k === 'task' ? ['runAs'] : []), 'model', 'mode', 'effort', 'start']
-}
-
-function input(field, w, on) {
-  const { text, at } = dialog[field]
-  const shown = clean(text)
-  if (!on) return render([[shown || ' ', fg(P.text)]], w)
-  // Keep the cursor in view on a long line.
-  const start = Math.max(0, at - w + 2)
-  const before = shown.slice(start, at)
-  const cur = shown[at] ?? ' '
-  const after = shown.slice(at + 1)
-  return render([[before, fg(P.text)], [cur, '\x1b[7m'], [after, fg(P.text)]], w)
-}
-
-function drawDialog(base) {
-  const W = cols()
-  const H = rows()
-  const w = Math.min(84, W - 4)
-  const d = dialog
-  const kind = KINDS[d.kind].id
-  const body = []
-  const label = (name, f) => [[` ${name.padEnd(9)}`, fg(d.field === f ? P.blue : P.sub)]]
-  const row = (f, spans) => body.push({ f, line: spans })
-  row(null, [[' New agent', BOLD + fg(P.blue)]])
-  row(null, [])
-  row('kind', [
-    ...label('Kind', 'kind'),
-    ...KINDS.flatMap((x, i) => [
-      [` ${i === d.kind ? '●' : '○'} `, fg(x.color)],
-      [x.label, i === d.kind ? BOLD + fg(P.text) : fg(P.sub)],
-      ['  ', ''],
-    ]),
-  ])
-  row(null, [[`            ${KINDS[d.kind].sub}`, fg(P.overlay1)]])
-  row('folder', [...label('Folder', 'folder'), [' ', ''], { input: 'folder' }])
-  const r = recents()
-  row('recent', [
-    ...label('Recent', 'recent'),
-    ...r.flatMap((p, i) => [[` ${p.split('/').pop()} `, i === d.recent && d.field === 'recent' ? fg(P.crust) + bg(P.blue) : fg(P.text) + bg(P.surface0)], [' ', '']]),
-  ])
-  row(null, [])
-  if (kind === 'task') row('prompt', [...label('Task', 'prompt'), [' ', ''], { input: 'prompt' }])
-  else row('target', [...label(kind === 'pr' ? 'PR link' : 'Watch', 'target'), [' ', ''], { input: 'target' }])
-  if (kind === 'pr') row(null, [['            starts /pr-babysit in the background; it lands in Monitors', fg(P.overlay1)]])
-  if (kind === 'logs') row(null, [['            a command or service, e.g. docker compose logs api; runs /logger', fg(P.overlay1)]])
-  if (kind === 'task') {
-    row(null, [])
-    row('runAs', [
-      ...label('Run as', 'runAs'),
-      ...RUN_AS.flatMap((x, i) => [[` ${i === d.runAs ? '●' : '○'} `, fg(P.blue)], [x.label, i === d.runAs ? BOLD + fg(P.text) : fg(P.sub)], [' ', '']]),
-    ])
-    row(null, [[`            ${RUN_AS[d.runAs].sub}`, fg(P.overlay1)]])
-  }
-  row(null, [])
-  for (const f of ['model', 'mode', 'effort'])
-    row(f, [...label(f[0].toUpperCase() + f.slice(1), f), [` ‹ ${CHOICES[f][d[f]]} › `, d.field === f ? fg(P.text) + bg(P.surface0) : fg(P.text)]])
-  row(null, [])
-  const lands =
-    kind !== 'task' ? 'lands in Monitors, as a background session' : RUN_AS[d.runAs].id === 'bg' ? 'lands in Working, no tab' : 'opens its session here'
-  row('start', [
-    ['  ', ''],
-    [d.busy ? ' Starting… ' : ' Start ', BOLD + (d.field === 'start' ? fg(P.crust) + bg(P.blue) : fg(P.blue) + bg(P.surface0))],
-    ['  ctrl+s', fg(P.sub)],
-    [`   ${lands}`, fg(P.overlay1)],
-  ])
-  row(null, [[' ↑/↓ field  ←/→ choose  tab complete folder  esc cancel', fg(P.overlay1)]])
-  const h = body.length + 2
-  const x0 = Math.floor((W - w) / 2)
-  const y0 = Math.max(0, Math.floor((H - h) / 2))
-  const box = bg(P.base)
-  const lines = [...base]
-  const edge = fg(P.blue)
-  lines[y0] = place(lines[y0], x0, `${edge}╭${'─'.repeat(w - 2)}╮\x1b[0m`, w)
-  body.forEach((b, i) => {
-    const spans = b.line.flatMap(s => (s.input ? [] : [s]))
-    const inp = b.line.find(s => s.input)
-    let inner
-    if (inp) {
-      const lw = spans.reduce((n, [t]) => n + width(t), 0)
-      inner = render(spans, lw, box) + input(inp.input, w - 2 - lw - 1, d.field === b.f) + render([], 1, box)
-    } else inner = render(spans, w - 2, box)
-    const y = y0 + 1 + i
-    if (b.f) hits.push({ x1: x0 + 1, x2: x0 + w, y1: y + 1, y2: y + 1, act: () => ((d.field = b.f), b.f === 'start' && start(), draw()) })
-    lines[y] = place(lines[y], x0, `${edge}│\x1b[0m${inner}${edge}│\x1b[0m`, w)
-  })
-  lines[y0 + h - 1] = place(lines[y0 + h - 1], x0, `${edge}╰${'─'.repeat(w - 2)}╯\x1b[0m`, w)
-  return lines
-}
-
-// Puts `piece` (w cells) on a row at column x0. The rest of a row the dialog
-// covers is left blank rather than spliced from the board behind, since
-// cutting styled text by cells is fiddly and none of it needs reading.
-function place(_line, x0, piece, w) {
-  return `\x1b[0m${fg(P.surface1)}${' '.repeat(x0)}\x1b[0m${piece}${' '.repeat(Math.max(0, cols() - x0 - w))}`
-}
-
-function dialogKey(key, paste) {
-  const d = dialog
-  const fs = fields()
-  const at = fs.indexOf(d.field)
-  const move = n => (d.field = fs[Math.min(fs.length - 1, Math.max(0, at + n))])
-  if (paste !== undefined) {
-    if (['folder', 'prompt', 'target'].includes(d.field)) insert(d[d.field], paste.replace(/\s*\n\s*/g, ' '))
-    return
-  }
-  const text = ['folder', 'prompt', 'target'].includes(d.field) ? d[d.field] : null
-  const choice = { kind: [KINDS.length, 'kind'], runAs: [RUN_AS.length, 'runAs'], recent: [recents().length, 'recent'] }[d.field] ??
-    (CHOICES[d.field] ? [CHOICES[d.field].length, d.field] : null)
-  if (key === '\x1b') return (dialog = null)
-  if (key === '\x13') return start()
-  if (key === '\x1b[A' || key === '\x1b[Z') return move(-1)
-  if (key === '\x1b[B') return move(1)
-  if (key === '\r') return d.field === 'start' ? start() : move(1)
-  if (key === '\t') {
-    if (d.field === 'folder') return complete()
-    return move(1)
-  }
-  if (choice && (key === '\x1b[C' || key === '\x1b[D' || key === ' ')) {
-    const [n, prop] = choice
-    if (!n) return
-    d[prop] = (d[prop] + (key === '\x1b[D' ? n - 1 : 1)) % n
-    if (prop === 'recent') {
-      const p = tilde(recents()[d.recent] ?? '')
-      d.folder = { text: p, at: p.length }
-    }
-    if (prop === 'kind' && !fields().includes(d.field)) d.field = 'kind'
-    return
-  }
-  if (!text) return
-  if (key === '\x1b[D') text.at = Math.max(0, text.at - 1)
-  else if (key === '\x1b[C') text.at = Math.min(text.text.length, text.at + 1)
-  else if (key === '\x1b[H' || key === '\x01') text.at = 0
-  else if (key === '\x1b[F' || key === '\x05') text.at = text.text.length
-  else if (key === '\x7f' || key === '\b') {
-    if (text.at > 0) {
-      text.text = text.text.slice(0, text.at - 1) + text.text.slice(text.at)
-      text.at--
-    }
-  } else if (key === '\x15') {
-    text.text = text.text.slice(text.at)
-    text.at = 0
-  } else if (key === '\x17') {
-    const head = text.text.slice(0, text.at).replace(/\S+\s*$/, '')
-    text.text = head + text.text.slice(text.at)
-    text.at = head.length
-  } else if (key.length >= 1 && !key.startsWith('\x1b') && key >= ' ') insert(text, key)
-}
-
-function insert(text, s) {
-  const c = clean(s)
-  text.text = text.text.slice(0, text.at) + c + text.text.slice(text.at)
-  text.at += c.length
-}
-
-// Tab in Folder: the longest common start of the folders that match.
-function complete() {
-  const f = dialog.folder
-  const full = expand(f.text)
-  const dir = full.endsWith('/') ? full : dirname(full)
-  const part = full.endsWith('/') ? '' : full.slice(dir.length + (dir.endsWith('/') ? 0 : 1))
-  let names = []
+async function openDialog() {
+  if (asking) return
+  if (!process.env.TMUX) return say('The hub is not running in tmux, so it has nowhere to show New agent', P.red)
+  asking = true
+  const result = join(RUN, `new-agent-${process.pid}.json`)
   try {
-    names = readdirSync(dir, { withFileTypes: true })
-      .filter(e => e.isDirectory() && e.name.startsWith(part) && (part.startsWith('.') || !e.name.startsWith('.')))
-      .map(e => e.name)
-  } catch {}
-  if (!names.length) return
-  let common = names[0]
-  for (const n of names) while (!n.startsWith(common)) common = common.slice(0, -1)
-  const next = tilde(join(dir, common)) + (names.length === 1 ? '/' : '')
-  dialog.folder = { text: next, at: next.length }
+    try {
+      unlinkSync(result)
+    } catch {}
+    const [W, H] = (await outer('display', '-p', '-t', process.env.TMUX_PANE, '#{window_width} #{window_height}')).out.trim().split(' ').map(Number)
+    const w = clamp(Math.round(W * POPUP_SHARE), Math.min(POPUP_WIDTH.min, W - 2), Math.min(POPUP_WIDTH.max, W - 2))
+    const h = Math.min(POPUP_HEIGHT, H - 2)
+    const opts = JSON.stringify({ folder: focused()?.cwd ?? '', recents: recents() })
+    const cmd = [process.execPath, join(HERE, 'newagent.mjs'), result, opts].map(shq).join(' ')
+    // display-popup returns once the popup closes.
+    const shown = await outer(
+      'display-popup', '-E', '-t', process.env.TMUX_PANE, '-w', String(w), '-h', String(h),
+      '-b', 'rounded', '-S', `fg=${P.blue}`, '-s', `bg=${P.base}`, '-T', `#[fg=${P.blue},bold] New agent `, cmd,
+    )
+    if (!shown.ok) return say(`Couldn't show New agent: ${clean(shown.err).slice(0, 120)}`, P.red)
+    let spec = null
+    try {
+      spec = JSON.parse(readFileSync(result, 'utf8'))
+      unlinkSync(result)
+    } catch {}
+    if (spec) await start(spec)
+  } finally {
+    asking = false
+  }
 }
 
-async function start() {
-  const d = dialog
-  if (!d || d.busy) return
-  const kind = KINDS[d.kind].id
-  const cwd = expand(d.folder.text.trim()).replace(/\/+$/, '') || HOME
-  try {
-    if (!statSync(cwd).isDirectory()) throw new Error()
-  } catch {
-    d.field = 'folder'
-    return say(`No folder ${tilde(cwd)}`, P.red)
-  }
-  const spec = {
-    kind,
-    cwd,
-    prompt: d.prompt.text,
-    target: d.target.text,
-    runAs: RUN_AS[d.runAs].id,
-    model: CHOICES.model[d.model],
-    mode: CHOICES.mode[d.mode],
-    effort: CHOICES.effort[d.effort],
-  }
-  if (kind === 'task' && !spec.prompt.trim()) {
-    d.field = 'prompt'
-    return say('Give the task a first prompt', P.peach)
-  }
-  if (kind !== 'task' && !spec.target.trim()) {
-    d.field = 'target'
-    return say(kind === 'pr' ? 'Paste the PR or MR link' : 'Say what to watch', P.peach)
-  }
+async function start(spec) {
   const plan = launch(spec)
-  d.busy = true
-  draw()
-  remember(cwd)
+  remember(spec.cwd)
   if (plan.where === 'bg') {
-    const child = spawn(CLAUDE, plan.argv.slice(1), { cwd, detached: true, stdio: ['ignore', 'pipe', 'pipe'] })
+    say(`Starting ${plan.name} in the background…`, P.sub, 30000)
+    const child = spawn(CLAUDE, plan.argv.slice(1), { cwd: spec.cwd, detached: true, stdio: ['ignore', 'pipe', 'pipe'] })
     let outText = ''
     child.stdout.on('data', b => (outText += b))
     child.stderr.on('data', b => (outText += b))
     child.on('error', err => say(`Couldn't start claude: ${err.message}`, P.red))
     child.on('close', code => {
-      dialog = null
       say(code === 0 ? `Started ${plan.name} in the background ${clean(outText).trim().slice(0, 60)}` : `claude --bg failed: ${clean(outText).trim().slice(0, 120)}`, code === 0 ? P.green : P.red, 8000)
     })
     child.unref()
     return
   }
   const session = WIN ? `ghostty-${WIN}` : null
-  if (!session) {
-    d.busy = false
-    return say('Not in a Ghostty layout window, so there is no tab session to open a tab in', P.red)
-  }
-  const made = await tabs('new-window', '-d', '-t', `${session}:`, '-c', cwd, '-P', '-F', '#{window_id} #{pane_id}')
-  if (!made.ok) {
-    d.busy = false
-    return say(`Couldn't open a tab: ${made.err}`, P.red)
-  }
+  if (!session) return say('Not in a Ghostty layout window, so there is no tab session to open a tab in', P.red)
+  const made = await tabs('new-window', '-d', '-t', `${session}:`, '-c', spec.cwd, '-P', '-F', '#{window_id} #{pane_id}')
+  if (!made.ok) return say(`Couldn't open a tab: ${made.err}`, P.red)
   const [window, pane] = made.out.trim().split(' ')
   // The shell reads this once its prompt is up; typing it rather than running
   // claude as the tab's command keeps the shell when Claude exits.
   await tabs('send-keys', '-t', pane, '-l', plan.line)
   await tabs('send-keys', '-t', pane, 'Enter')
-  dialog = null
   await openSession({ id: `new:${pane}`, title: plan.name, pane: { session, window, pane, win: WIN } })
 }
 
@@ -916,12 +707,7 @@ function onMouse({ button, x, y, up }) {
 
 function draw() {
   hits = []
-  let lines = listMode() ? drawList() : drawBoard()
-  if (dialog) {
-    hits = []
-    lines = drawDialog(lines)
-  }
-  paint(lines)
+  paint(listMode() ? drawList() : drawBoard())
 }
 
 // Follows the open session: drops it once its pane is gone, and when you
@@ -953,12 +739,7 @@ if (!process.stdin.isTTY) {
 process.stdin.setRawMode(true)
 process.stdin.on('data', data => {
   for (const t of tokens(data.toString('utf8'))) {
-    if (t.mouse) {
-      if (dialog && !t.mouse.up && !(t.mouse.button & 64)) {
-        const h = hits.find(r => t.mouse.x >= r.x1 && t.mouse.x <= r.x2 && t.mouse.y >= r.y1 && t.mouse.y <= r.y2)
-        void h?.act()
-      } else if (!dialog) onMouse(t.mouse)
-    } else if (dialog) dialogKey(t.key ?? '', t.paste)
+    if (t.mouse) onMouse(t.mouse)
     else if (t.key) onKey(t.key)
   }
   draw()
