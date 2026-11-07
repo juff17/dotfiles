@@ -278,10 +278,6 @@ class Since(unittest.TestCase):
     def test_a_utc_timestamp_is_kept(self):
         self.assertEqual(wl.rfc3339(wl.parse_since("2026-10-08T12:30:00Z")), "2026-10-08T12:30:00Z")
 
-    # Suspected bug: rfc3339() formats the wall time and appends "Z" without
-    # converting to UTC first, so a --since with an offset starts the stream
-    # at the wrong time (two hours late here).
-    @unittest.expectedFailure
     def test_a_timestamp_with_an_offset_is_converted_to_utc(self):
         self.assertEqual(wl.rfc3339(wl.parse_since("2026-10-08T14:30:00+02:00")), "2026-10-08T12:30:00Z")
 

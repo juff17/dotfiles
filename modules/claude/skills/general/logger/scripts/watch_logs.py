@@ -73,7 +73,8 @@ def now_utc():
 
 
 def rfc3339(dt):
-    return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+    # A timestamp with no offset is taken as local time, as astimezone() does.
+    return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def parse_since(value):
