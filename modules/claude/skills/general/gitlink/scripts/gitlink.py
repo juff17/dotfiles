@@ -94,12 +94,17 @@ def parse_remote(url):
     url = url.strip()
     # scp-like SSH: git@github.com:owner/repo.git
     m = re.match(r"^[\w.+-]+@([^:/]+):(.+)$", url)
-    if not m:
+    if m:
+        host, path = m.groups()
+    else:
         # ssh://git@host[:port]/path  or  https://host[:port]/path
-        m = re.match(r"^[a-zA-Z][\w+.-]*://(?:[^@/]+@)?([^:/]+)(?::\d+)?/(.+)$", url)
-    if not m:
-        die(f"could not parse remote URL: {url!r}")
-    host, path = m.group(1), m.group(2)
+        m = re.match(r"^([a-zA-Z][\w+.-]*)://(?:[^@/]+@)?([^:/]+)(:\d+)?/(.+)$", url)
+        if not m:
+            die(f"could not parse remote URL: {url!r}")
+        scheme, host, port, path = m.groups()
+        # An http(s) port is where the web UI is served; an ssh port is not.
+        if port and scheme.lower() in ("http", "https"):
+            host += port
     path = re.sub(r"\.git/?$", "", path).strip("/")
     return host, path
 

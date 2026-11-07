@@ -98,11 +98,8 @@ class ParseRemote(unittest.TestCase):
                 with mock.patch("sys.stderr"):
                     g.parse_remote(url)
 
-    @unittest.expectedFailure
     def test_an_https_port_is_kept_because_the_web_ui_is_served_there(self):
-        # Suspected bug: the port is stripped for every scheme. That is right for
-        # ssh:// (the SSH port is not the web port) but an https:// remote on
-        # :8443 means the web UI lives on :8443 too, so the link loses it.
+        # Unlike an ssh:// port, an https:// port is where the web UI lives too.
         self.assertEqual(g.parse_remote("https://git.example.com:8443/team/svc.git"),
                          ("git.example.com:8443", "team/svc"))
 
