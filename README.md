@@ -61,7 +61,8 @@ folder under `modules/` and add it to `ORDER` in `install.sh`.
 The `claude` module installs Claude Code itself (native installer, skipped if already present). Its
 settings, hooks, skills, commands and agents live in [jstack](https://github.com/juff17/jstack), not here:
 clone it and run its `./setup`. The one skill here is `/todo`, which adds to the Ghostty viewer's todo list
-through that module's `ghostty-todo`, so it's linked from `modules/claude/home/`. Claude Code sends no desktop notifications: what needs you shows in the
+through that module's `ghostty-todo`, so it's linked from `modules/claude/home/`, with a
+`keybindings.json` that turns off Claude's `alt+t` (thinking on or off), which the layout uses for Todo. Claude Code sends no desktop notifications: what needs you shows in the
 Agents panel widget from the `ghostty` module (see [docs/ghostty.md](docs/ghostty.md#agents-widget)).
 
 ## Machine-local shell settings
