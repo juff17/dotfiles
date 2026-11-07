@@ -93,3 +93,10 @@ test('seen items drop the ring; a new prompt on the same agent rings again', () 
   assert.equal(t2.unseen, true)
   assert.equal(t2.alert, true)
 })
+
+test('dismissed items leave the list until they change', () => {
+  const done = agent('d', 'done', { cmd: 'Merged.', since: 7000 })
+  const id = trayItems([done]).items[0].id
+  assert.equal(trayItems([done], new Set(), new Set([id])).items.length, 0)
+  assert.equal(trayItems([{ ...done, since: 9000 }], new Set(), new Set([id])).items.length, 1)
+})

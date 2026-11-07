@@ -9,19 +9,28 @@
 //   ✓ done    finished and not yet looked at
 // An item is new until `seen` records it, which is how the widget keeps its
 // ring until you open the inbox.
-//   tray.mjs snapshot   print the items once; keeps agentd running
-//   tray.mjs seen       mark every current item as seen
-//   tray.mjs watch      print a snapshot on every change, for testing
+//   tray.mjs snapshot           print the items once; keeps agentd running
+//   tray.mjs seen               mark every current item as seen
+//   tray.mjs act <action> <id>  allow, deny, go or dismiss; prints the result
+//   tray.mjs watch              print a snapshot on every change, for testing
 
-import { spawn } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
 import { mkdirSync, readFileSync, utimesSync, writeFileSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { RUN, alivePid, follow, readState } from './client.mjs'
+import { RUN, alivePid, follow, markReviewed, readState } from './client.mjs'
 import { lanes, monitorsOf } from './model.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const SEEN = join(RUN, 'tray-seen.json')
+const DISMISSED = join(RUN, 'tray-dismissed.json')
+// The file the hub reads when asked to open an agent (hub.mjs OPEN_AGENT_KEY).
+export const HUB_OPEN = join(RUN, 'hub-open')
+const OPEN_AGENT_KEY = '\x1b[9102~'
+const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude')
+const TABS = ['-L', process.env.AGENT_HUB_TABS_SOCKET || 'ghostty']
+const LAYOUT = ['-L', process.env.GHOSTTY_LAYOUT_SOCKET || 'ghostty-layout']
 // The client file the widget keeps fresh by asking for snapshots; agentd
 // counts it while it was touched in the last few seconds (agentd.mjs).
 export const TRAY_CLIENT = 'tray'
@@ -37,7 +46,7 @@ const place = a => (a.worktree ? `${a.repo} ⑂ ${a.worktree}` : a.repo)
 // widget can tell new rows from ones it has shown.
 const row = (section, glyph, id, agent, title, meta, since, actions) => ({ section, glyph, id, agent: agent.id, title, meta, since, actions })
 
-export function trayItems(agents, seen = new Set()) {
+export function trayItems(agents, seen = new Set(), dismissed = new Set()) {
   const l = lanes(agents)
   const items = []
   for (const a of l.needs) {
@@ -61,6 +70,9 @@ export function trayItems(agents, seen = new Set()) {
     items.push(row('watch', glyph, `m:${m.key}:${m.event?.at ?? 0}`, m.agent, title, meta, m.event?.at ?? m.startedAt, ['go']))
   }
   for (const a of l.done) items.push(row('done', '✓', `d:${a.id}:${a.since}`, a, a.title, `${place(a)} · ${a.cmd}`, a.since, ['go']))
+  const shown = items.filter(it => !dismissed.has(it.id))
+  items.length = 0
+  items.push(...shown)
   for (const it of items) it.new = it.section !== 'work' && !seen.has(it.id)
   const count = s => items.filter(it => it.section === s).length
   return {
@@ -72,9 +84,9 @@ export function trayItems(agents, seen = new Set()) {
   }
 }
 
-function readSeen() {
+function readSet(path) {
   try {
-    return new Set(JSON.parse(readFileSync(SEEN, 'utf8')))
+    return new Set(JSON.parse(readFileSync(path, 'utf8')))
   } catch {
     return new Set()
   }
@@ -94,7 +106,88 @@ function keepAlive() {
   if (!alivePid(pid)) spawn(process.execPath, [join(HERE, 'agentd.mjs')], { detached: true, stdio: 'ignore' }).unref()
 }
 
-const snapshot = state => ({ at: state?.at ?? 0, ...trayItems(state?.agents ?? [], readSeen()) })
+const snapshot = state => ({ at: state?.at ?? 0, ...trayItems(state?.agents ?? [], readSet(SEEN), readSet(DISMISSED)) })
+
+// ------------------------------------------------------------ actions
+
+const run = args =>
+  new Promise(resolve =>
+    execFile(args[0], args.slice(1), { encoding: 'utf8' }, (err, out, errOut) =>
+      resolve({ ok: !err, out: out ?? '', err: (errOut || err?.message || '').trim() }),
+    ),
+  )
+
+// Allow or deny a permission prompt by pressing its key in the agent's pane:
+// 1 for Yes, Esc for No. As in the hub, only while Claude says it is waiting
+// and the prompt's first choice is at the bottom of the screen, so a key
+// never lands in Claude's input box or cancels a turn the inbox was behind on.
+async function answer(a, allow) {
+  if (!a.pane) return { ok: false, message: `Open ${a.title} to answer it` }
+  let waiting = false
+  try {
+    waiting = JSON.parse(readFileSync(join(CLAUDE_DIR, 'sessions', `${a.pid}.json`), 'utf8')).status === 'waiting'
+  } catch {}
+  const screen = await run(['tmux', ...TABS, 'capture-pane', '-p', '-t', a.pane.pane])
+  const bottom = screen.out.split('\n').filter(l => l.trim()).slice(-15).join('\n')
+  if (!waiting || !/❯\s*1\.\s*Yes/.test(bottom)) return { ok: false, message: `${a.title} isn't showing a permission prompt right now` }
+  const sent = await run(['tmux', ...TABS, 'send-keys', '-t', a.pane.pane, allow ? '1' : 'Escape'])
+  if (!sent.ok) return { ok: false, message: `Couldn't answer: ${sent.err}` }
+  return { ok: true, message: `${allow ? 'Allowed' : 'Denied'} ${a.cmd.replace(/^Allow |\?$/g, '')}` }
+}
+
+// Takes you to the agent: its tab in the workspace, or for a background
+// agent, its session opened in the hub. `raise` asks the widget to bring
+// Ghostty to the front, which only the panel can do.
+async function go(a) {
+  if (a.pane) {
+    const tab = await run(['tmux', ...TABS, 'select-window', '-t', `${a.pane.session}:${a.pane.window}`])
+    if (!tab.ok) return { ok: false, message: `Couldn't switch to ${a.title}: ${tab.err}` }
+    if (a.pane.win) await run(['tmux', ...LAYOUT, 'select-window', '-t', `layout-${a.pane.win}:work`])
+    return { ok: true, raise: true, message: `${a.title}, tab ${a.pane.tab}` }
+  }
+  if (a.jobId) {
+    const sessions = (await run(['tmux', ...LAYOUT, 'list-sessions', '-F', '#{session_attached} #{session_name}'])).out
+    const layout = sessions
+      .split('\n')
+      .filter(Boolean)
+      .sort()
+      .reverse()
+      .map(l => l.split(' ')[1])[0]
+    if (!layout) return { ok: false, message: 'No Ghostty layout window is open to show it in' }
+    const hub = (await run(['tmux', ...LAYOUT, 'show', '-v', '-t', layout, '@hub'])).out.trim()
+    if (!hub) return { ok: false, message: 'The hub is not running' }
+    writeFileSync(HUB_OPEN, a.id)
+    await run(['tmux', ...LAYOUT, 'select-window', '-t', `${layout}:hub`])
+    await run(['tmux', ...LAYOUT, 'send-keys', '-t', hub, '-l', OPEN_AGENT_KEY])
+    return { ok: true, raise: true, message: `${a.title}, in the hub` }
+  }
+  return { ok: false, message: `${a.title} runs outside the layout, so there's nowhere to take you` }
+}
+
+export async function act(action, id, agents = readState()?.agents ?? []) {
+  const it = trayItems(agents, new Set(), readSet(DISMISSED)).items.find(i => i.id === id)
+  if (!it) return { ok: false, message: 'That item is gone' }
+  const a = agents.find(x => x.id === it.agent)
+  if (!a) return { ok: false, message: 'That agent is gone' }
+  if (action === 'dismiss') {
+    // Kept only while those items are still listed, so the file stays small.
+    const live = new Set(trayItems(agents).items.map(i => i.id))
+    const keep = [...readSet(DISMISSED)].filter(x => live.has(x))
+    mkdirSync(RUN, { recursive: true })
+    writeFileSync(DISMISSED, JSON.stringify([...keep, id]))
+    if (it.section !== 'work') markReviewed(a.id)
+    return { ok: true, message: 'Dismissed' }
+  }
+  if (action === 'allow' || action === 'deny') {
+    if (!it.actions.includes(action)) return { ok: false, message: 'Only a permission prompt takes allow or deny' }
+    return answer(a, action === 'allow')
+  }
+  if (action === 'go') {
+    if (it.section !== 'work') markReviewed(a.id)
+    return go(a)
+  }
+  return { ok: false, message: `Unknown action ${action}` }
+}
 
 const cmd = process.argv[2]
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
@@ -105,10 +198,12 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
     const ids = trayItems(readState()?.agents ?? []).items.map(it => it.id)
     mkdirSync(RUN, { recursive: true })
     writeFileSync(SEEN, JSON.stringify(ids))
+  } else if (cmd === 'act') {
+    act(process.argv[3], process.argv[4]).then(r => process.stdout.write(`${JSON.stringify(r)}\n`))
   } else if (cmd === 'watch') {
     follow(state => process.stdout.write(`${JSON.stringify(snapshot(state), null, 2)}\n`))
   } else {
-    process.stderr.write('tray.mjs snapshot | seen | watch\n')
+    process.stderr.write('tray.mjs snapshot | seen | act <allow|deny|go|dismiss> <id> | watch\n')
     process.exit(1)
   }
 }

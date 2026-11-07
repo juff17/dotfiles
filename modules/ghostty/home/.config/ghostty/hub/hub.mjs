@@ -17,6 +17,7 @@ import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { RUN, follow, markReviewed } from './client.mjs'
+import { HUB_OPEN } from './tray.mjs'
 import { cardHeights, counts, lanes, launch, monitorsOf, scrollTo } from './model.mjs'
 import { POPUP } from './newagent.mjs'
 import { BOLD, CAP_L, CAP_R, ITALIC, MONITOR, P, STATE, ago, bar, bg, clean, enter, fg, leave, mix, paint, pill, render, split, tokens, width } from './term.mjs'
@@ -49,6 +50,9 @@ const NEW_AGENT_KEY = '\x1b[9100~'
 // What Ctrl+Shift+B and Ctrl+] send just before they close the open session,
 // so the hub draws the board, not the list, once its pane widens.
 const PEEK_CLOSING_KEY = '\x1b[9101~'
+// What the tray sends to have the hub open an agent's session, after writing
+// the agent's id to HUB_OPEN (tray.mjs): a background agent has no tab to go to.
+const OPEN_AGENT_KEY = '\x1b[9102~'
 
 const run = (args, opts = {}) =>
   new Promise(resolve =>
@@ -834,6 +838,14 @@ process.stdin.on('data', data => {
       confirm = null
       filtering = false
       void openDialog()
+    } else if (t.key === OPEN_AGENT_KEY) {
+      let id = ''
+      try {
+        id = readFileSync(HUB_OPEN, 'utf8').trim()
+        unlinkSync(HUB_OPEN)
+      } catch {}
+      const a = agents.find(x => x.id === id)
+      if (a) void openSession(a)
     } else if (t.key === PEEK_CLOSING_KEY) {
       if (peek) {
         peek = null
