@@ -19,9 +19,10 @@ export const CATEGORIES = [
   { name: 'follow-up', short: 'follow', color: '#cba6f7' },
   { name: 'docs', short: 'docs', color: '#94e2d5' },
   { name: 'question', short: 'ask', color: '#f9e2af' },
+  { name: 'other', short: 'other', color: '#a6adc8' },
 ]
 export const DEFAULT_CATEGORY = 'follow-up'
-const ALIASES = { fix: 'bug', feat: 'feature', follow: 'follow-up', followup: 'follow-up', doc: 'docs', ask: 'question', q: 'question' }
+const ALIASES = { fix: 'bug', feat: 'feature', follow: 'follow-up', followup: 'follow-up', doc: 'docs', ask: 'question', q: 'question', misc: 'other' }
 
 // Done items stay this long, then a write drops them.
 export const KEEP_DONE_MS = 7 * 24 * 60 * 60 * 1000
@@ -171,7 +172,9 @@ const git = (args, cwd) =>
 // folder stands in for the repo.
 export async function repoOf(dir) {
   const top = await git(['rev-parse', '--show-toplevel'], dir)
-  if (!top) return { root: resolve(dir), repo: basename(resolve(dir)), worktree: '', branch: '' }
+  // Outside a repo the folder still scopes "this repo", but its name would
+  // read as a repo, so it is labelled none.
+  if (!top) return { root: resolve(dir), repo: 'none', worktree: '', branch: '' }
   const common = resolve(top, await git(['rev-parse', '--git-common-dir'], top))
   const root = basename(common) === '.git' ? dirname(common) : top
   const branch = (await git(['branch', '--show-current'], top)) || (await git(['rev-parse', '--short', 'HEAD'], top))

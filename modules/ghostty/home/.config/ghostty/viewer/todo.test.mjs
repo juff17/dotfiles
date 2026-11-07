@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
-import { KEEP_DONE_MS, add, age, arrange, category, change, find, load, newId, prune, remove } from './todo.mjs'
+import { KEEP_DONE_MS, add, age, arrange, category, change, find, load, newId, prune, remove, repoOf } from './todo.mjs'
 
 const now = new Date(2026, 10, 7, 15, 0).getTime()
 const item = (id, cat, root, created, done = null) => ({ id, cat, root, repo: root.split('/').pop(), title: id, created, done })
@@ -15,8 +15,15 @@ test('categories by name, alias or unique prefix', () => {
   assert.equal(category('fix'), 'bug')
   assert.equal(category('fo'), 'follow-up')
   assert.equal(category('q'), 'question')
+  assert.equal(category('misc'), 'other')
+  assert.equal(category('o'), 'other')
   assert.equal(category('nope'), undefined)
   assert.equal(category(''), undefined)
+})
+
+test('a folder outside any repo is labelled none', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'todo-norepo-'))
+  assert.deepEqual(await repoOf(dir), { root: dir, repo: 'none', worktree: '', branch: '' })
 })
 
 test('ids are new and lengthen once short ones run out', () => {
