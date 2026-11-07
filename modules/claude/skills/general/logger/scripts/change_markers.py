@@ -51,7 +51,11 @@ def base_ref(cwd, base):
 
 def added_lines(cwd, base):
     """Yield (file, line_no, text) for each added line from base to the working tree."""
-    _, diff = git(cwd, "diff", "--unified=0", "--no-color", base)
+    # Explicit options so the user's diff settings (noprefix, mnemonicPrefix,
+    # relative, color, external tools) cannot change the output parsed below.
+    _, diff = git(cwd, "-c", "core.quotePath=false", "diff", "--unified=0", "--no-color",
+                  "--no-ext-diff", "--no-textconv", "--no-relative",
+                  "--src-prefix=a/", "--dst-prefix=b/", base)
     path, line_no = None, 0
     for raw in diff.splitlines():
         if raw.startswith("+++ "):

@@ -760,14 +760,17 @@ class Markers(Repo):
         self.write("app.py", APP + 'logger.info(\n    "settlement batch posted to the bank"\n)\n')
         self.assertEqual(self.texts(), ["settlement batch posted to the bank"])
 
-    # Suspected bug: the diff parser only accepts "+++ b/" paths. With the
-    # common setting diff.mnemonicPrefix (or diff.noprefix) git writes
-    # "+++ w/app.py" or "+++ app.py" and every added line is silently dropped.
-    @unittest.expectedFailure
-    def test_a_users_diff_prefix_settings_do_not_hide_changes(self):
-        self.git("config", "diff.mnemonicPrefix", "true")
+    # The diff parser expects "+++ b/" paths, which diff.mnemonicPrefix
+    # ("+++ w/app.py") or diff.noprefix ("+++ app.py") would otherwise change.
+    def test_a_users_diff_settings_do_not_hide_changes(self):
         self.write("app.py", APP + 'logger.info("only on the feature branch")\n')
-        self.assertEqual(self.texts(), ["only on the feature branch"])
+        for setting in ("diff.mnemonicPrefix", "diff.noprefix", "color.diff", "diff.relative"):
+            with self.subTest(setting):
+                self.git("config", setting, "always" if setting == "color.diff" else "true")
+                try:
+                    self.assertEqual(self.texts(), ["only on the feature branch"])
+                finally:
+                    self.git("config", "--unset", setting)
 
 
 class AddedLines(Repo):
