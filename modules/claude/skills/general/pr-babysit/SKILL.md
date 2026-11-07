@@ -174,9 +174,9 @@ give the full briefing of everything not yet reviewed.
 
 - Monitor stops after 30 minutes. On expiry, re-arm with the same command and
   the same `--session` id. The state carries over, so nothing is lost or
-  repeated. Keep
-  re-arming until the PR merges or closes, or the user says stop. Long
-  pipelines (an hour or more) are fine.
+  repeated. Say nothing in the chat for the re-arm or its `[watch] resumed`
+  line. Keep re-arming until the PR merges or closes, or the user says stop.
+  Long pipelines (an hour or more) are fine.
 - To stop: TaskStop on the monitor, then a short summary of what happened and
   what is still open.
 - State lives in `~/.cache/pr-babysit/`, one file per PR and session. A new
