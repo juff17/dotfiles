@@ -83,7 +83,7 @@ export const SECTIONS = [
     where: 'the Todo mode and the Alt+T popup',
     keys: [
       ['j / k  g / G', 'Move, first / last'],
-      ['↵', 'Go to its agent’s tab, or the tab that added it'],
+      ['↵', 'Open its agent in the hub, or go to the tab that added it'],
       ['↵ ↵', 'Reopen its tab with claude --resume when it’s closed', true],
       ['space', 'Mark done, or reopen'],
       ['a', 'Add with Claude: describe it and Haiku files it'],

@@ -2,8 +2,9 @@
 // The viewer pane's Todo mode, as the canvas's T1 draws it with T3's jump
 // back: every repo's open todos grouped by category, the active tab's repo
 // first in each group, and the selected one opened under its row with its
-// note and where it came from. ↵ goes to the tab that added it, or offers to
-// start Claude there again when that tab is gone. Items come from
+// note and where it came from. ↵ opens the agent it was handed to in the
+// hub, beside the hub's list, or else goes to the tab that added it, or
+// offers to start Claude there again when that tab is gone. Items come from
 // bin/ghostty-todo (the /todo skill) and from here: a hands a message to
 // Claude Haiku (ghostty-todo file), which writes the item; Shift+A adds one
 // by hand, a title, a category and a note. m marks items and w hands the
@@ -23,7 +24,9 @@ import { homedir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { readState } from '../hub/client.mjs'
 import { launch } from '../hub/model.mjs'
+import { go as openInHub } from '../hub/tray.mjs'
 import { CATEGORIES, DEFAULT_CATEGORY, HANDOFF_MODELS, STORE, TYPES, add, age, arrange, change, colorOf, fill, filingState, handoffPlace, handoffSpec, inGit, load, remove, repoOf, stamp, typeColorOf } from './todo.mjs'
 
 const TODO_CLI = join(dirname(fileURLToPath(import.meta.url)), '../bin/ghostty-todo')
@@ -95,6 +98,8 @@ let loadError = ''
 let here = { root: '', repo: '' }
 // Where each tab-session pane is now: its window's own session, window and index.
 let panes = new Map()
+// Every agent the hub knows of, from agentd's state.
+let agents = []
 let only = false
 let showDone = false
 let cursorId = ''
@@ -168,6 +173,7 @@ async function refresh() {
     const folder = await activeFolder()
     if (folder !== here.folder) here = { folder, ...(await repoOf(folder)) }
     panes = await readPanes()
+    agents = readState()?.agents ?? []
   } finally {
     refreshing = false
     draw()
@@ -291,7 +297,7 @@ function cardRows(item) {
     rows.push(pad(`${C.blue}✻ ${C.sub}${fit(`handed to ${name} ${place} at ${clock(at)}`, w - 2).trimEnd()}${C.reset}`))
   }
   if (item.note) for (const line of wrap(item.note, w)) rows.push(pad(`${C.text}${line}${C.reset}`))
-  const go = agentPane(item) ? 'go to agent' : !item.pane ? '' : panes.has(item.pane) ? 'go to tab' : 'reopen'
+  const go = hubAgent(item) || agentPane(item) ? 'go to agent' : !item.pane ? '' : panes.has(item.pane) ? 'go to tab' : 'reopen'
   const keys = [...(go ? [['↵', go]] : []), ['e', 'edit'], ['c', 'category'], ['t', 'type'], ['space', item.done ? 'reopen' : 'done']]
   rows.push(pad(hint(keys)))
   return rows
@@ -778,6 +784,15 @@ async function startAgent(item, spec) {
   return ''
 }
 
+// The agent the item was handed to, while the hub knows it: a tab agent by
+// its pane, a background one by the name it was started with (launch in
+// hub/model.mjs), which its card shows.
+function hubAgent(item) {
+  const { pane, name } = item.handoff ?? {}
+  if (!pane && !name) return null
+  return agents.find(a => (pane ? a.pane?.pane === pane : a.kind === 'bg' && a.title === name)) ?? null
+}
+
 // The tab of the agent the item was handed to, while it's open.
 const agentPane = item => (item.handoff?.pane && panes.has(item.handoff.pane) ? item.handoff.pane : '')
 
@@ -866,16 +881,25 @@ function onPromptKey(key) {
 
 const shellQuote = text => text.replace(/[^\w./-]/g, '\\$&')
 
-// The tab of the agent it was handed to, or else the tab that added it, in
-// this window or another; or, once that tab is gone, a new tab running
-// Claude there, resuming the item's session.
+// The agent it was handed to, opened in the hub beside its list as the
+// tray's Go does: a tab agent through a session of its own, so the
+// workspace stays on its tab, a background one with claude attach. Without
+// one, the tab that added it, in this window or another; or, once that tab
+// is gone, a new tab running Claude there, resuming the item's session.
 async function goTo() {
   const item = realItem()
   if (!item) return
   panes = await readPanes()
+  agents = readState()?.agents ?? []
+  const agent = hubAgent(item)
+  if (agent) {
+    const went = await openInHub(agent, WIN ? `layout-${WIN}` : '')
+    if (!went.ok) return say(went.message, P.red)
+    return POPUP ? quit() : draw()
+  }
   const pane = agentPane(item) || item.pane
   if (!pane) {
-    if (item.handoff?.where === 'bg') return say(`${item.handoff.name} runs in the background: open it in the hub`)
+    if (item.handoff?.where === 'bg') return say(`${item.handoff.name} ran in the background and the hub no longer lists it`)
     return say(item.by === 'you' ? 'You added this one here, so it has no tab to go to' : 'This one was added outside the layout’s tabs')
   }
   const at = panes.get(pane)
