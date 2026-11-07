@@ -25,7 +25,7 @@ git clone https://github.com/juff17/dotfiles && cd dotfiles
 | `dev` | Docker, uv |
 | `ghostty` | Ghostty, tmux, btop, yazi and the layout config (requires `node`), see [`docs/ghostty.md`](./docs/ghostty.md) |
 | `dolphin` | Dolphin settings, Filelight |
-| `claude` | Claude Code, and its notification icon + desktop entry |
+| `claude` | Claude Code, plus its settings, hooks, skills, commands and mods (see [`modules/claude`](./modules/claude/README.md)) |
 
 A full install runs them in that order. `kde` goes first because `base` leaves out what
 `kubuntu-desktop` already pulls in (curl, vim, htop, unzip, dolphin, ark, ...).
@@ -58,12 +58,13 @@ folder under `modules/` and add it to `ORDER` in `install.sh`.
 - Overrides: `DOTFILES_TARGET=/path` (link target, for a dry run) · `DOTFILES_BACKUP=/path` (backup root).
 
 ## Claude Code config
-The `claude` module installs Claude Code itself (native installer, skipped if already present). Its
-settings, hooks, skills, commands and agents live in [jstack](https://github.com/juff17/jstack), not here:
-clone it and run its `./setup`. The one skill here is `/todo`, which adds to the Ghostty viewer's todo list
-through that module's `ghostty-todo`, so it's linked from `modules/claude/home/`, with a
-`keybindings.json` that turns off Claude's `alt+t` (thinking on or off), which the layout uses for Todo. Claude Code sends no desktop notifications: what needs you shows in the
-Agents panel widget from the `ghostty` module (see [docs/ghostty.md](docs/ghostty.md#agents-widget)).
+The `claude` module installs Claude Code itself (native installer, skipped if already present), then runs
+its own `setup`, which links the module's settings, hooks, skills, commands, agents and mods into
+`~/.claude/` and installs the plugins they name. It has its own linker rather than a `home/` folder
+because skills and commands are grouped by category in the repo but flat (or namespaced) once installed.
+See [modules/claude/README.md](modules/claude/README.md). Run it from the main checkout, not a worktree.
+Claude Code sends no desktop notifications: what needs you shows in the Agents panel widget from the
+`ghostty` module (see [docs/ghostty.md](docs/ghostty.md#agents-widget)).
 
 ## Machine-local shell settings
 `.zshrc` sources `~/.zshrc.local` last if it exists. Put anything specific to one machine there (CA bundle

@@ -1,18 +1,16 @@
-# jstack
+# claude module
 
-Personal home for coding-agent tooling — skills, slash commands, subagents, hooks,
-and Claude Code settings —
-organized by **category** and installed onto any machine with one command.
-
-The point: on a new PC, `git clone` this repo and run `./setup`. Your agent
-tools land in the right place for whichever agent(s) you have installed. No
-marketplaces, no per-repo sprawl.
+Coding-agent tooling (skills, slash commands, subagents, hooks, and Claude Code
+settings), organized by **category**. `./install.sh claude` from the dotfiles
+root installs Claude Code and then runs `./setup` here, which puts every tool in
+the right place for whichever agent(s) you have installed.
 
 ## Layout
 
 ```
-jstack/
-  setup                 # the entrypoint your dotfiles call
+modules/claude/
+  install.sh            # dotfiles install step: Claude Code, then ./setup
+  setup                 # links the folders below into each agent
   lib/
     link.sh             # symlink-or-copy helper
     targets.sh          # the only vendor-specific file: vendor -> install dirs
@@ -58,9 +56,9 @@ python3 -m unittest discover -s tests
 ./setup --host claude     # only Claude Code
 ./setup --category docify # only the docify category
 ./setup --dry-run         # show what would happen, change nothing
-./setup --uninstall       # remove everything jstack installed
+./setup --uninstall       # remove everything setup installed
 ./setup --copy            # copy instead of symlink (Windows / forced)
-./setup --force           # also replace items jstack did not install
+./setup --force           # also replace items setup did not install
 ```
 
 Setup only replaces or removes what it installed (a symlink into this repo, or
@@ -72,13 +70,14 @@ Installs are **symlinks** on macOS/Linux, so edits here are live and
 `git pull` updates every machine. Re-run `./setup` only after adding or
 removing tools, or on a fresh machine. It is idempotent.
 
-**This repo must live at a stable path** (symlinks point back into it). Keep it
-at `~/projects/jstack`. Your dotfiles bootstrap is then just:
+**Run setup from the main dotfiles checkout, never from a worktree.** The
+links point back into the folder setup ran from, so a worktree's links break
+once it is removed. `./install.sh --links` doesn't run setup (it also installs
+plugins and npm packages); run `modules/claude/setup` yourself after adding or
+removing a tool.
 
-```sh
-git clone <jstack-remote> ~/projects/jstack
-~/projects/jstack/setup
-```
+`config/core/keybindings.json` turns off Claude's `alt+t` (thinking on or off),
+which the Ghostty layout uses for Todo.
 
 ## Claude Code settings and plugins
 
@@ -101,7 +100,7 @@ place. This step needs the `claude` CLI, `python3`, and `npm` on `PATH`.
 
 Claude sends no desktop notifications. What needs you (a permission prompt, a
 question, a finished agent, a failed pipeline) shows in the Agents panel
-widget from dotfiles' `ghostty` module, which reads every session itself; no
+widget from the `ghostty` module, which reads every session itself; no
 hook is needed. pr-babysit's `notify.sh` adds what only it knows (a fix ready
 to push, a finished rebase) to that tray as a note.
 

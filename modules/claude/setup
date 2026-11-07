@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# jstack setup — install agent tooling (skills, commands, agents, hooks, config)
+# Claude module setup — install agent tooling (skills, commands, agents, hooks, config)
 # into whatever coding agents live on this machine.
 #
 # Idempotent: safe to re-run. This is also the update path — `git pull && ./setup`.
@@ -11,9 +11,9 @@
 #   ./setup --host claude         install only into Claude Code
 #   ./setup --category docify     install only the docify category
 #   ./setup --dry-run             show what would happen, change nothing
-#   ./setup --uninstall           remove everything jstack installed
+#   ./setup --uninstall           remove everything setup installed
 #   ./setup --copy                copy instead of symlink (force, any platform)
-#   ./setup --force               also replace or remove items jstack did not install
+#   ./setup --force               also replace or remove items setup did not install
 #
 # For Claude, setup then installs the plugins and marketplaces settings.json
 # names and each mod's npm packages, skipping what is already there.
@@ -105,7 +105,7 @@ manifest_field() {
 }
 
 # owned_copy DST KIND SRC — true if DST, which is not a symlink, is a copy
-# jstack made. A recorded link that is now a plain file or folder is the
+# setup made. A recorded link that is now a plain file or folder is the
 # user's own. An old line without KIND counts only while DST still matches SRC.
 owned_copy() {
   local dst="$1" kind="$2" src="$3"
@@ -116,7 +116,7 @@ owned_copy() {
   esac
 }
 
-# owned DST — true if jstack installed DST.
+# owned DST — true if setup installed DST.
 owned() {
   local dst="$1"
   if [ -L "$dst" ]; then
@@ -134,7 +134,7 @@ do_item() {
   { [ -e "$dst" ] || [ -L "$dst" ]; } && present=1
 
   if [ "$present" -eq 1 ] && [ "$FORCE" -eq 0 ] && ! owned "$dst"; then
-    echo "  skipped  $label  ($dst exists and was not installed by jstack)" >&2
+    echo "  skipped  $label  ($dst exists and was not installed by setup)" >&2
     SKIPPED=$((SKIPPED + 1))
     return 0
   fi
@@ -182,7 +182,7 @@ prune_stale() {
       [ "$DRY_RUN" -eq 1 ] || manifest_drop "$dst"
       continue
     fi
-    # Not a copy jstack made (the user put their own file where a link was):
+    # Not a copy setup made (the user put their own file where a link was):
     # leave it and forget it.
     if ! owned_copy "$dst" "$kind" "$src"; then
       [ "$DRY_RUN" -eq 1 ] || manifest_drop "$dst"
@@ -259,7 +259,7 @@ install_extras() {
 }
 
 # ─── Main ─────────────────────────────────────────────────────
-[ "$UNINSTALL" -eq 1 ] && echo "Uninstalling jstack" || echo "Installing jstack from $JSTACK_DIR"
+[ "$UNINSTALL" -eq 1 ] && echo "Uninstalling agent tooling" || echo "Installing agent tooling from $JSTACK_DIR"
 echo "  vendors: $VENDORS"
 echo "  categories: $CATEGORIES"
 [ "$DRY_RUN" -eq 1 ] && echo "  (dry run — no changes)"
@@ -277,7 +277,7 @@ done
 
 echo
 if [ "$SKIPPED" -gt 0 ]; then
-  echo "Done, with $SKIPPED item(s) skipped because something not installed by jstack is in the way." >&2
+  echo "Done, with $SKIPPED item(s) skipped because something not installed by setup is in the way." >&2
   echo "Move those aside, or re-run with --force to replace them." >&2
 fi
 if [ "$EXTRAS_FAILED" -gt 0 ]; then

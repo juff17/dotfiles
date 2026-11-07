@@ -4,7 +4,7 @@
 # mod's npm packages. Sourced by setup, which provides DRY_RUN.
 #
 # Each step installs only what is missing, so re-runs are quick. Uninstall
-# leaves all of it in place: plugins may be in use outside jstack, and a mod's
+# leaves all of it in place: plugins may be in use outside this setup, and a mod's
 # node_modules lives in this repo, git-ignored.
 
 EXTRAS_FAILED=0

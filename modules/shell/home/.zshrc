@@ -29,7 +29,7 @@ if [ -d "$FNM_PATH" ]; then
   eval "$(fnm env --shell zsh)"
 fi
 
-# Diagram viewer for the jstack diagram-pane mod (lives in the Ghostty config)
+# Diagram viewer for the claude module's diagram-pane mod (lives in the Ghostty config)
 alias dv="$HOME/.config/ghostty/viewer/diagram-view.mjs"
 
 # Machine-local settings, not tracked

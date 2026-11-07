@@ -10,7 +10,7 @@ paths, for example `rm /tmp/claude-1000/<project>/<session>/scratchpad/probe.txt
 - Write paths out in full: no `$VAR`, `~`, globs, quotes or `.`/`..` as a target.
 - Run the rest of the work in a separate call before or after.
 
-Why: the rm-guard hook (`hooks/core/rm-guard.sh` in jstack) approves an `rm` on
+Why: the rm-guard hook (`modules/claude/hooks/core/rm-guard.sh` in dotfiles) approves an `rm` on
 its own only when it is a single plain command and every target is inside
 Claude's scratchpad or a linked git worktree. Any other form makes the user
 approve it by hand, and those prompts were most of the user's manual approvals.

@@ -201,7 +201,7 @@ class NotOurs(Setup):
     def test_items_in_the_way_are_skipped_with_a_warning(self):
         self.put_user_files()
         _, out, err = self.setup()
-        self.assertIn(f"skipped  claude:alpha config/settings.json  ({self.claude}/settings.json exists and was not installed by jstack)", err)
+        self.assertIn(f"skipped  claude:alpha config/settings.json  ({self.claude}/settings.json exists and was not installed by setup)", err)
         self.assertIn("skipped  claude:alpha skill/skill-a", err)
         self.assertIn("skipped  claude:alpha command/alpha:cmd-a", err)
         self.assertIn("3 item(s) skipped", err)
@@ -371,7 +371,7 @@ class OldRecord(Setup):
         (self.claude / "settings.json").unlink()
         (self.claude / "settings.json").write_text("user settings")
         _, _, err = self.setup()
-        self.assertIn(f"({self.claude}/settings.json exists and was not installed by jstack)", err)
+        self.assertIn(f"({self.claude}/settings.json exists and was not installed by setup)", err)
         self.setup("--uninstall")
         self.assertEqual((self.claude / "settings.json").read_text(), "user settings")
 

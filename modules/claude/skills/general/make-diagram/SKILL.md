@@ -29,7 +29,7 @@ source into chat, and never repeat in chat what the picture already shows.
    terminal's own colors. If the tool is not listed, tell the user to run
    `/diagram-pane` to check the mod is loaded, and give the source in a
    ```mermaid fence instead. If it fails with `mmdc` missing, tell the user to
-   re-run jstack's `./setup`, which installs the mod's npm packages.
+   re-run `modules/claude/setup` in dotfiles, which installs the mod's npm packages.
 4. **On a syntax error**, the tool's result names it. Fix the source and call
    again. Don't explain the error to the user.
 5. **Write the chat part**: 2 to 5 bullets in the order the eye follows the

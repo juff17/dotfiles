@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# targets.sh — the ONLY vendor-specific knowledge in jstack.
+# targets.sh — the ONLY vendor-specific knowledge in the claude module.
 #
 # For each vendor and tool type, where does the tool install? An empty result
 # means "this vendor has no equivalent" and that type is skipped for it — this

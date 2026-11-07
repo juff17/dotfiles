@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// dv: shows the diagrams that jstack's diagram-pane mod draws, in the viewer
+// dv: shows the diagrams that the claude module's diagram-pane mod draws, in the viewer
 // pane of the Ghostty layout. The mod renders each to a PNG and lists a
 // session's tabs in a file per tmux pane beside the PNGs (panes/); dv shows the
 // file of the window's active tab, so it runs outside Claude Code. Closing a

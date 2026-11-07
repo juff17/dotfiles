@@ -17,7 +17,7 @@ My [Ghostty](https://ghostty.org) configuration, in [`modules/ghostty/home/.conf
 - **Left:** opens with the window, in Files (the yazi file manager, which previews documents). Each Claude start or resume in the window points Files at that Claude's folder: straight away if Files is showing, otherwise the next time you switch to it. Tab switches it to Diagrams, the diagram viewer (`dv`), which shows the diagrams Claude draws. A header row shows both modes; click one to switch.
 - **Todo:** a mode of the left pane, after Diff. It shows every repo's open todos grouped by category (bug, feature, follow-up, docs, question, other), with the active tab's repo first in each group. The selected one opens under its row: who added it, from which tab and branch, and its note. `enter` goes back to the tab that added it, even in another Ghostty window. If that tab is gone, a second `enter` opens a new tab in the item's worktree running `claude --resume` on the session that added it. Items come from the `/todo` skill, which has Claude run `bin/ghostty-todo` (Claude adds them only when you ask), or from `a` in the pane. Done items stay under "done today" and are dropped after a week. The list is one file, `~/.local/state/ghostty-layout/todos.json` (`$XDG_STATE_HOME`), so every window shows the same list. An item added outside a git repo shows `none` as its repo.
 - **Diff:** a mode of the left pane, beside Files. It shows the uncommitted changes of the repository your active tmux tab is in, against the last commit (staged, unstaged and new files): a summary of what changed, a row per file with its added and removed lines, and one file open in place under its row with its diff. It checks git every second, so it empties once you commit.
-- **Ping:** when Claude finishes or asks for permission in a tab you're not on, that tab turns red and a desktop notification names the tab and its project. The notification comes from jstack's `agent-notify.sh`.
+- **Ping:** when Claude finishes or asks for permission in a tab you're not on, that tab turns red. Claude sends no desktop notification; the Agents widget below shows it
 - **Rail:** a strip down the far left. **work** and **hub** switch the window between this workspace and the agent hub, the counts under them are the agents that need you (▲), are working (✻), are done (✓) and are idle (○), and **+ new** starts an agent. The hub button gets an orange dot while anything needs you. A tab running Claude carries the same glyph in the tab bar.
 
 ## Agent hub
@@ -37,7 +37,7 @@ The theme is Catppuccin Mocha.
 
 ## Agents widget
 
-A Plasma panel widget puts the hub's agents beside the clock. It is the only alert: Claude sends no desktop pop-ups (jstack has no notification hook, and Ghostty's `desktop-notifications` is off):
+A Plasma panel widget puts the hub's agents beside the clock. It is the only alert: Claude sends no desktop pop-ups (the claude module has no notification hook, and Ghostty's `desktop-notifications` is off):
 
 - **In the panel:** a glyph and count per kind: ▲ needs you, ✗ broke (a monitor saw a failed job, an error, a crash or a conflict), ✻ working, ◉ watching (◌ gone quiet) and ✓ done; ○ when nothing runs. A new ▲ or ✗ fills it with its colour for two seconds, and a ring stays around it until you open the inbox.
 - **The inbox** (click it, or the shortcut you give it): every item in those sections, needs-you first, each with its buttons. **Allow** and **Deny** answer a permission prompt, only while it's on screen, as in the hub; **Go** opens the agent's live session in the hub, beside the list of the rest, and brings Ghostty to the front (the workspace stays on its tab); **Open hub ↗** shows the hub. Keys: `j` / `k` move, `↵` goes, `1` / `2` press the first two buttons, `x` dismisses an item until it changes, `esc` closes. Done items fold into one line until shown, and leave once you open them.
@@ -50,11 +50,11 @@ A Plasma panel widget puts the hub's agents beside the clock. It is the only ale
 
 `./install.sh --links ghostty` symlinks each file in `modules/ghostty/home/.config/ghostty/` into `~/.config/ghostty/`, so edits here apply live. A file already in the way is moved to `.dotfiles-backup/`. Windows that are open during install keep their layout (the module's `after-link.sh` records them); new windows get the new one.
 
-The Claude Code hooks live in jstack's `config/core/settings.json`:
+The Claude Code hooks live in the claude module's `modules/claude/config/core/settings.json`:
 - **SessionStart:** `bin/ghostty-claude-start` points the viewer at Claude's folder.
 - **Stop** and the `permission_prompt` notification: `bin/ghostty-claude-ping` rings the tab's bell.
 
-Diagrams come from jstack's diagram-pane mod, which renders each one to a PNG and writes each session's tabs to a file for its tmux pane, under `~/.cache/claude-diagram-pane/panes/`. `dv` shows the file of the window's active tab, and closes a diagram by rewriting it; the format is in the mod's README. A new Claude session starts with no diagrams, and a resumed one gets its own back.
+Diagrams come from the claude module's diagram-pane mod (`modules/claude/mods/general/diagram-pane`), which renders each one to a PNG and writes each session's tabs to a file for its tmux pane, under `~/.cache/claude-diagram-pane/panes/`. `dv` shows the file of the window's active tab, and closes a diagram by rewriting it; the format is in the mod's README. A new Claude session starts with no diagrams, and a resumed one gets its own back.
 
 ## Keys
 
