@@ -8,8 +8,9 @@
 //   diff-view.mjs [dir]
 // DV_TABS names the window's tab session as `socket:session`
 // (bin/ghostty-claude-start); without it, dir is the folder.
-// GV_FILES_EXIT and GV_DIAGRAMS_EXIT are the exit codes that switch the pane
-// to Files or Diagrams (bin/ghostty-viewer); Tab goes to Diagrams, q to Files.
+// GV_FILES_EXIT, GV_TODO_EXIT and GV_DIAGRAMS_EXIT are the exit codes that
+// switch the pane to Files, Todo or Diagrams (bin/ghostty-viewer); Tab goes
+// to Todo, q to Files.
 
 import { execFile } from 'node:child_process'
 import { readFileSync, statSync, watch } from 'node:fs'
@@ -22,7 +23,8 @@ const [TABS_SOCKET, TABS_SESSION] = (process.env.DV_TABS ?? '').split(':')
 const TAB_CHANGED = `${process.env.XDG_RUNTIME_DIR || '/tmp'}/ghostty-layout/tab-changed`
 const FILES_EXIT = Number(process.env.GV_FILES_EXIT) || 0
 const DIAGRAMS_EXIT = Number(process.env.GV_DIAGRAMS_EXIT) || 0
-const MODES = [' Diagrams ', ' Files ', ' Diff ']
+const TODO_EXIT = Number(process.env.GV_TODO_EXIT) || 0
+const MODES = [' Diagrams ', ' Files ', ' Diff ', ...(TODO_EXIT ? [' Todo '] : [])]
 // The empty tree, to diff against in a repository with no commits yet.
 const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904'
 const REFRESH_MS = 1000
@@ -458,6 +460,7 @@ function onMouse(button, x, y, released) {
     const mode = modeAt(x)
     if (mode === 0 && DIAGRAMS_EXIT) return quit(DIAGRAMS_EXIT)
     if (mode === 1 && FILES_EXIT) return quit(FILES_EXIT)
+    if (mode === 3) return quit(TODO_EXIT)
     return
   }
   if (message || y < TOP || y >= TOP + bodyHeight()) return
@@ -470,7 +473,7 @@ function onKey(key) {
   const actions = {
     q: () => quit(FILES_EXIT),
     '\x03': () => quit(FILES_EXIT),
-    '\t': () => DIAGRAMS_EXIT && quit(DIAGRAMS_EXIT),
+    '\t': () => (TODO_EXIT || DIAGRAMS_EXIT) && quit(TODO_EXIT || DIAGRAMS_EXIT),
     j: () => moveCursor(cursor + 1),
     k: () => moveCursor(cursor - 1),
     '\x1b[B': () => moveCursor(cursor + 1),
