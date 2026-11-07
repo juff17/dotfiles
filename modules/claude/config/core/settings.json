@@ -99,12 +99,6 @@
         "source": "github",
         "repo": "anthropics/claude-plugins-official"
       }
-    },
-    "docify": {
-      "source": {
-        "source": "github",
-        "repo": "juff17/docify"
-      }
     }
   },
   "viewMode": "default",
