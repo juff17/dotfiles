@@ -442,9 +442,10 @@ export const slug = s =>
     .join('-')
     .slice(0, 40) || 'agent'
 
-// What starting a new agent runs. A tab or worktree agent is a command line
-// typed into a new tmux tab's shell, so the shell stays when Claude exits; a
-// background agent is `claude --bg`, which prints its id and returns.
+// What starting a new agent runs. A tab agent is a command line typed into a
+// new tmux tab's shell, so the shell stays when Claude exits; a background
+// agent is `claude --bg`, which prints its id and returns. Either can start in
+// its own worktree (`-w`); monitors always run in the background, in place.
 export function launch(spec) {
   const opts = []
   if (spec.model && spec.model !== 'default') opts.push('--model', spec.model)
@@ -467,8 +468,9 @@ export function launch(spec) {
   }
   // A prompt that starts with - would read as an option.
   if (prompt.startsWith('-')) prompt = ` ${prompt}`
-  if (where === 'bg') return { where, cwd: spec.cwd, argv: ['claude', '--bg', '--name', name, ...opts, prompt], name }
-  const args = where === 'worktree' ? ['-w', name, ...opts] : opts
+  const wt = spec.kind === 'task' && spec.worktree ? ['-w', slug(name)] : []
+  if (where === 'bg') return { where, cwd: spec.cwd, argv: ['claude', '--bg', ...wt, '--name', name, ...opts, prompt], name }
+  const args = [...wt, ...opts]
   return {
     where,
     cwd: spec.cwd,

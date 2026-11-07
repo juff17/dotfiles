@@ -269,13 +269,15 @@ test('launch: a tab task is a quoted command line', () => {
   const p = launch({ kind: 'task', cwd: '/p/gad', prompt: "fix the user's page", runAs: 'tab', model: 'sonnet', mode: 'default', effort: 'high' })
   assert.equal(p.where, 'tab')
   assert.equal(p.line, "claude --model sonnet --effort high 'fix the user'\\''s page'")
-  const w = launch({ kind: 'task', cwd: '/p', prompt: 'Add cursor pagination to comments', runAs: 'worktree' })
+  const w = launch({ kind: 'task', cwd: '/p', prompt: 'Add cursor pagination to comments', runAs: 'tab', worktree: true })
   assert.equal(w.line, "claude -w add-cursor-pagination-to-comments 'Add cursor pagination to comments'")
 })
 
 test('launch: background agents, PR babysitters and log watchers', () => {
   const b = launch({ kind: 'task', cwd: '/p', prompt: 'write docs', runAs: 'bg', mode: 'plan' })
   assert.deepEqual(b.argv, ['claude', '--bg', '--name', 'write-docs', '--permission-mode', 'plan', 'write docs'])
+  const bw = launch({ kind: 'task', cwd: '/p', prompt: 'write docs', runAs: 'bg', worktree: true })
+  assert.deepEqual(bw.argv, ['claude', '--bg', '-w', 'write-docs', '--name', 'write-docs', 'write docs'])
   const pr = launch({ kind: 'pr', cwd: '/p', target: ' https://github.com/u/gad/pull/91 ' })
   assert.deepEqual(pr.argv, ['claude', '--bg', '--name', 'babysit #91', '/pr-babysit https://github.com/u/gad/pull/91'])
   const logs = launch({ kind: 'logs', cwd: '/p', target: 'docker compose logs api' })

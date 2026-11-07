@@ -19,26 +19,34 @@ const KINDS = [
   { id: 'logs', glyph: '◉', color: P.teal, label: 'Watch logs', sub: 'monitor a service' },
 ]
 const RUN_AS = [
-  { id: 'tab', label: 'New tab', sub: 'in this window' },
-  { id: 'worktree', label: 'Worktree + new tab', sub: 'on its own branch' },
+  { id: 'tab', label: 'New tab', sub: 'a tab in this window' },
   { id: 'bg', label: 'Background', sub: 'no tab; lives in the hub' },
+]
+const BRANCH = [
+  { id: 'current', label: 'Current branch', sub: 'works in the folder as it is' },
+  { id: 'worktree', label: 'Worktree', sub: 'its own worktree and branch' },
 ]
 const CHOICES = {
   model: ['default', 'opus', 'sonnet', 'haiku'],
   mode: ['default', 'auto', 'acceptEdits', 'plan'],
   effort: ['default', 'low', 'medium', 'high', 'xhigh'],
 }
-// What a new agent starts with; 'default' is still a choice, for Claude's own.
-const START = { model: 'opus', mode: 'auto', effort: 'medium' }
+// What each kind starts with; 'default' is still a choice, for Claude's own.
+// Monitors mostly wait and read output, so they don't need Opus.
+const START = {
+  task: { model: 'opus', mode: 'auto', effort: 'medium' },
+  pr: { model: 'sonnet', mode: 'auto', effort: 'medium' },
+  logs: { model: 'sonnet', mode: 'auto', effort: 'medium' },
+}
 const BOX = bg(P.base)
 // Space between the popup's border and the form.
 const MARGIN_X = 3
 const MARGIN_Y = 1
 const HINTS = '↑/↓ field   ←/→ choose   tab complete folder   ctrl+s start   esc cancel'
 // The tallest form is a task's: kind and its note, a gap, folder, recent, a
-// gap, the prompt, a gap, run as and its note, a gap, model, mode, effort, a
-// gap, Start. Below it a gap, then the keys.
-const BODY_ROWS = 16
+// gap, the prompt, a gap, run as, branch and their note, a gap, model, mode,
+// effort, a gap, Start. Below it a gap, then the keys.
+const BODY_ROWS = 17
 const LABEL_COLS = 10
 
 // The popup's size, border included, which the hub opens it at: just room
@@ -63,7 +71,7 @@ let menu = null
 
 function fields() {
   const k = KINDS[d.kind].id
-  return ['kind', 'folder', 'recent', k === 'task' ? 'prompt' : 'target', ...(k === 'task' ? ['runAs'] : []), 'model', 'mode', 'effort', 'start']
+  return ['kind', 'folder', 'recent', k === 'task' ? 'prompt' : 'target', ...(k === 'task' ? ['runAs', 'branch'] : []), 'model', 'mode', 'effort', 'start']
 }
 
 // `ghost` is the rest of a suggestion, drawn dim after the text with the
@@ -201,11 +209,14 @@ function draw() {
   if (kind === 'logs') note('a command or service, e.g. docker compose logs api; runs /logger')
   if (kind === 'task') {
     row(null, [])
-    row('runAs', [
-      ...label('Run as', 'runAs'),
-      ...RUN_AS.flatMap((x, i) => [[`${i === d.runAs ? '●' : '○'} `, fg(P.blue)], [x.label, i === d.runAs ? BOLD + fg(P.text) : fg(P.sub)], ['   ', '']]),
-    ])
-    note(RUN_AS[d.runAs].sub)
+    const radio = (f, name, opts) =>
+      row(f, [
+        ...label(name, f),
+        ...opts.flatMap((x, i) => [[`${i === d[f] ? '●' : '○'} `, fg(P.blue)], [x.label, i === d[f] ? BOLD + fg(P.text) : fg(P.sub)], ['   ', '']]),
+      ])
+    radio('runAs', 'Run as', RUN_AS)
+    radio('branch', 'Branch', BRANCH)
+    note(`${RUN_AS[d.runAs].sub} · ${BRANCH[d.branch].sub}`)
   }
   row(null, [])
   for (const f of ['model', 'mode', 'effort'])
@@ -253,7 +264,7 @@ function key(k, paste) {
     return
   }
   const text = ['folder', 'prompt', 'target'].includes(d.field) ? d[d.field] : null
-  const choice = { kind: [KINDS.length, 'kind'], runAs: [RUN_AS.length, 'runAs'], recent: [recents.length, 'recent'] }[d.field] ??
+  const choice = { kind: [KINDS.length, 'kind'], runAs: [RUN_AS.length, 'runAs'], branch: [BRANCH.length, 'branch'], recent: [recents.length, 'recent'] }[d.field] ??
     (CHOICES[d.field] ? [CHOICES[d.field].length, d.field] : null)
   if (k === '\x1b' || k === '\x03') return finish(null)
   if (k === '\x13') return submit()
@@ -275,7 +286,10 @@ function key(k, paste) {
       const p = tilde(recents[d.recent] ?? '')
       d.folder = { text: p, at: p.length }
     }
-    if (prop === 'kind' && !fields().includes(d.field)) d.field = 'kind'
+    if (prop === 'kind') {
+      startWith(KINDS[d.kind].id)
+      if (!fields().includes(d.field)) d.field = 'kind'
+    }
     return
   }
   if (!text) return
@@ -330,10 +344,16 @@ function submit() {
     prompt: d.prompt.text,
     target: d.target.text,
     runAs: RUN_AS[d.runAs].id,
+    worktree: BRANCH[d.branch].id === 'worktree',
     model: CHOICES.model[d.model],
     mode: CHOICES.mode[d.mode],
     effort: CHOICES.effort[d.effort],
   })
+}
+
+// Model, mode and effort go back to what the kind starts with.
+function startWith(kind) {
+  for (const f of ['model', 'mode', 'effort']) d[f] = CHOICES[f].indexOf(START[kind][f])
 }
 
 function finish(spec) {
@@ -355,9 +375,10 @@ function main() {
   d = {
     kind: 0,
     runAs: 0,
-    model: CHOICES.model.indexOf(START.model),
-    mode: CHOICES.mode.indexOf(START.mode),
-    effort: CHOICES.effort.indexOf(START.effort),
+    branch: 0,
+    model: 0,
+    mode: 0,
+    effort: 0,
     recent: Math.max(0, recents.indexOf(root)),
     field: 'prompt',
     folder: { text: tilde(root), at: tilde(root).length },
@@ -365,6 +386,7 @@ function main() {
     target: { text: '', at: 0 },
     error: null,
   }
+  startWith(KINDS[d.kind].id)
   process.stdin.setRawMode(true)
   process.stdin.on('data', data => {
     for (const t of tokens(data.toString('utf8'))) {
