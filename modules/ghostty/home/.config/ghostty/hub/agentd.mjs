@@ -172,14 +172,14 @@ const PANE_FORMAT =
   '#{pane_id}\t#{session_name}\t#{window_id}\t#{window_index}\t#{window_active}\t#{session_attached}\t#{@agent} #{@agent_fg}\t#{pane_pid}'
 const LAYOUT_SOCKET = process.env.GHOSTTY_LAYOUT_SOCKET || 'ghostty-layout'
 
-// The Ghostty windows showing their hub rather than their workspace: a tab
-// in front of one of those isn't being looked at.
+// The Ghostty windows showing their hub, or the diagrams window, rather than
+// their workspace: a tab in front of one of those isn't being looked at.
 async function hubShown() {
   const text = await exec('tmux', ['-L', LAYOUT_SOCKET, 'list-windows', '-a', '-F', '#{session_name} #{window_name} #{window_active}'])
   const wins = new Set()
   for (const line of (text ?? '').split('\n')) {
     const [session, name, active] = line.split(' ')
-    if (name === 'hub' && active === '1') wins.add(Number(session.replace(/^layout-/, '')))
+    if ((name === 'hub' || name === 'diagrams') && active === '1') wins.add(Number(session.replace(/^layout-/, '')))
   }
   return wins
 }

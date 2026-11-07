@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Alt+D: Claude's diagrams for one tab, in a window of their own over layout
+# window <win> (dv, framed). It closes with Alt+D or Esc, and tmux goes back
+# to the window you were in.
+#   ghostty-diagrams <win> <tab session>   that session's active tab, followed
+#                                          as it changes (ghostty-3, peek-12)
+#   ghostty-diagrams <win> <%pane>         that one tab-server pane
+# A window rather than a tmux popup: tmux drops the passthrough that dv draws
+# its pictures with from a popup, and keeps it for a pane.
+
+source "$(dirname "$(readlink -f "$0")")/ghostty-lib.sh"
+node=$(command -v node || cat "${XDG_CACHE_HOME:-$HOME/.cache}/ghostty-layout/node" 2>/dev/null)
+win=$1 from=$2
+session="layout-$win"
+[[ -n $node ]] || {
+  layout display -t "$session:" "Diagrams need Node.js"
+  exit 1
+}
+if [[ $from == %* ]]; then
+  pick="DV_PANE=$TABS_SOCKET:$from"
+else
+  pick="DV_TABS=$TABS_SOCKET:$from"
+fi
+# One at a time: a diagrams window left open behind the others goes first.
+layout kill-window -t "=$session:diagrams" 2>/dev/null
+layout new-window -t "$session:" -n diagrams -e DV_FRAME=1 -e "$pick" \
+  "$node" "$GHOSTTY_CONF/viewer/diagram-view.mjs"
