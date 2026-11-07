@@ -98,7 +98,10 @@ const board = () => lanes(visible())
 const strip = () => monitorsOf(visible())
 
 function where(a) {
-  if (a.pane) return a.pane.win === WIN || !a.pane.win ? `tab ${a.pane.tab}` : `w${a.pane.win} · tab ${a.pane.tab}`
+  if (a.pane) {
+    const tab = `${a.pane.hub ? 'hub tab' : 'tab'} ${a.pane.tab}`
+    return a.pane.win === WIN || !a.pane.win ? tab : `w${a.pane.win} · ${tab}`
+  }
   return a.kind === 'bg' ? 'bg' : 'terminal'
 }
 
@@ -551,8 +554,12 @@ async function start(spec) {
     child.unref()
     return
   }
-  const session = WIN ? `ghostty-${WIN}` : null
-  if (!session) return say('Not in a Ghostty layout window, so there is no tab session to open a tab in', P.red)
+  // The tab goes to the hub's tab session, so it shows in the hub and not
+  // in the workspace (hub_tabs in ghostty-lib.sh).
+  if (!WIN) return say('Not in a Ghostty layout window, so there is no tab session to open a tab in', P.red)
+  const own = await run([join(CONF, 'bin', 'ghostty-hub'), 'tabs', String(WIN)])
+  const session = own.out.trim()
+  if (!own.ok || !session) return say(`Couldn't make the hub's tab session: ${clean(own.err).slice(0, 120) || 'no workspace tabs'}`, P.red)
   const made = await tabs('new-window', '-d', '-t', `${session}:`, '-c', spec.cwd, '-P', '-F', '#{window_id} #{pane_id}')
   if (!made.ok) return say(`Couldn't open a tab: ${made.err}`, P.red)
   const [window, pane] = made.out.trim().split(' ')
@@ -560,7 +567,7 @@ async function start(spec) {
   // claude as the tab's command keeps the shell when Claude exits.
   await tabs('send-keys', '-t', pane, '-l', plan.line)
   await tabs('send-keys', '-t', pane, 'Enter')
-  await openSession({ id: `new:${pane}`, title: plan.name, pane: { session, window, pane, win: WIN } })
+  await openSession({ id: `new:${pane}`, title: plan.name, pane: { session, window, pane, win: WIN, hub: true } })
 }
 
 // ------------------------------------------------------------ actions
@@ -612,8 +619,9 @@ function moveIn(n) {
 }
 
 // Opens a's session beside the list: a pane in this window that attaches to
-// the agent's tmux tab through its own grouped session, so looking at a tab
-// here doesn't switch tabs in the workspace. A background agent opens with
+// the agent's tmux tab through its own session, grouped with the hub's tab
+// session, so looking at a tab here doesn't switch tabs in the workspace and
+// a tab opened here stays out of it. A background agent opens with
 // `claude attach`.
 let opening = false
 
@@ -631,7 +639,7 @@ async function open(a) {
   if (!process.env.TMUX) return say('The hub is not running in tmux, so it has nowhere to open a session', P.red)
   let cmd
   const bin = join(CONF, 'bin', 'ghostty-hub')
-  if (a.pane?.session && a.pane.window) cmd = `${bin} peek ${a.pane.session} ${a.pane.window}`
+  if (a.pane?.win && a.pane.window) cmd = `${bin} peek ${a.pane.win} ${a.pane.window}`
   else if (a.jobId) cmd = `${bin} attach ${a.jobId}`
   else return say(`${a.title} runs outside the layout's tabs, so it can't be opened here`, P.peach)
   if (a.id && !a.id.startsWith('new:')) markReviewed(a.id)
@@ -717,6 +725,8 @@ async function goToTab() {
   if (!a) return
   if (!a.pane && a.jobId) return toTab(a)
   if (!a.pane) return say(`${a.title} runs outside the layout's tabs`, P.sub)
+  // A tab opened from the hub isn't in the workspace, so it opens here.
+  if (a.pane.hub) return openSession(a)
   // By session as well: a bare window id picks whichever session used it last,
   // which can be the hub's own peek session.
   await tabs('select-window', '-t', `${a.pane.session}:${a.pane.window}`)

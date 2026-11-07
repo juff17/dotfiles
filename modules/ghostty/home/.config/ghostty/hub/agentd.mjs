@@ -193,25 +193,31 @@ async function panes() {
     if (!pane) continue
     if (mark?.trim()) map.marks.set(window, mark)
     const seen = map.get(pane)
-    // A peek session from the hub shares the windows of a tab session; the
-    // tab session's name is the one the pane belongs to.
-    const own = /^ghostty-\d+$/.test(session)
-    const win = Number(session.match(/^ghostty-(\d+)$/)?.[1] ?? seen?.win ?? 0)
-    const looked = active === '1' && Number(attached) > 0 && !(own && hub.has(win))
-    if (!seen || own)
+    // A tab shows in up to three sessions: the workspace's (ghostty-N), the
+    // hub's tab session (hubtabs-N), which links in every workspace tab and
+    // keeps the tabs opened from the hub, and the peek session grouped with
+    // that. The pane belongs to the first of those it's in; a tab only the
+    // hub has is `hub`.
+    const rank = sessionRank(session)
+    const win = Number(session.match(/^(?:ghostty|hubtabs)-(\d+)$/)?.[1] ?? seen?.win ?? 0)
+    const looked = active === '1' && Number(attached) > 0 && !(rank === 2 && hub.has(win))
+    if (!seen || rank > sessionRank(seen.session))
       map.set(pane, {
         pane,
-        session: own ? session : seen?.session ?? session,
+        session,
         win,
         window,
         tab: Number(index),
         pid: Number(pid),
+        hub: rank === 1,
         looked: looked || Boolean(seen?.looked),
       })
     else if (looked) seen.looked = true
   }
   return map
 }
+
+const sessionRank = name => (/^ghostty-\d+$/.test(name) ? 2 : /^hubtabs-\d+$/.test(name) ? 1 : 0)
 
 // Tab glyphs: one tmux call per change, setting @agent and @agent_fg on the
 // windows whose agent changed and clearing them where the agent left. The
@@ -242,14 +248,16 @@ async function markTabs(agents, marked = new Map()) {
 
 // Pane ids repeat across tmux servers, so a session's pane only counts when
 // the session's own tmux names this server's session and window, and Claude
-// runs under the pane's process. A tab opened or started from the hub's
-// open session names that session's peek-N group (Claude records whichever
-// session the pane was in), which shares the tab session's windows, so it
-// counts too, even after the peek is gone.
+// runs under the pane's process. Claude records whichever session the pane
+// was in when it started: a tab opened in the hub's open session names that
+// peek-N, one New agent opened names hubtabs-N, and a workspace tab Claude
+// started in while the hub showed it can name either. They all hold the tab
+// session's windows as well as the hub's own, so they count too, even after
+// the peek is gone.
 function paneOf(s, panes) {
   const m = String(s.tmux ?? '').match(/^([^:]+):(@\d+)\.(%\d+)$/)
   const p = m && panes.get(m[3])
-  if (!p || (p.session !== m[1] && !/^peek-\d+$/.test(m[1])) || p.window !== m[2]) return null
+  if (!p || (p.session !== m[1] && !/^(?:peek|hubtabs)-\d+$/.test(m[1])) || p.window !== m[2]) return null
   let pid = s.pid
   for (let i = 0; i < 16 && pid > 1; i++) {
     if (pid === p.pid) return p
