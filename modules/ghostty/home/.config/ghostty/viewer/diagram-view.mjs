@@ -6,7 +6,8 @@
 // next. It runs in two places:
 //   - the viewer pane of the Ghostty layout, following the window's active
 //     tab (DV_TABS), as one of the pane's modes;
-//   - the diagrams window that Alt+D opens (bin/ghostty-diagrams), framed and
+//   - the diagrams window that Alt+D opens (bin/ghostty-diagrams), framed in
+//     the middle of the window it came from (DV_UNDER, dimmed) and
 //     titled (DV_FRAME), following a tab session (DV_TABS) or pinned to one
 //     tab's pane (DV_PANE).
 
@@ -16,6 +17,7 @@ import { homedir } from 'node:os'
 import { dirname } from 'node:path'
 
 import { BOLD, CAP_L, CAP_R, ITALIC, P, bg, clean, fg, pill, render, split, width } from '../hub/term.mjs'
+import { compose, frameBox, slice } from './backdrop.mjs'
 import { deleteImage, gridRow, placeGrid, transmitFile } from './kitty.mjs'
 import { clampView, fitChips, home, panBy, placement, zoomAt } from './view.mjs'
 
@@ -53,14 +55,23 @@ const MODES = [
 const HEADER = !FRAME && MODES.length > 1
 // The frame's width on each side.
 const EDGE = FRAME ? 1 : 0
-// The picture's first row, counted from 1: under the frame's top, the mode
-// header and the row of diagram chips. Below it are the hint row and the
-// frame's bottom.
-const TOP = 1 + EDGE + (HEADER ? 1 : 0) + 1
+// The frame's share of the screen each way. Round it, the window Alt+D was
+// pressed in (DV_UNDER, a layout window id), dimmed (backdrop.mjs).
+const SHARE = FRAME ? 85 : 100
+const UNDER = process.env.DV_UNDER
+const DIM = fg(P.surface1) + bg(P.crust)
+let backdrop = []
+// Rows inside the frame above the picture (the frame's top, the mode header,
+// the row of diagram chips) and below it (the hint row, the frame's bottom).
+const ABOVE = EDGE + (HEADER ? 1 : 0) + 1
 const BELOW = 1 + EDGE
-const CHIP_ROW = TOP - 1
 // The picture sits on a darker panel than the text around it.
 const PANEL = bg(P.mantle)
+
+const box = () => frameBox(process.stdout.columns, process.stdout.rows, SHARE)
+// The picture's first screen row, counted from 1, and the chips' row above it.
+const pictureTop = () => box().top + ABOVE + 1
+const chipLine = () => pictureTop() - 1
 
 const out = s => process.stdout.write(s)
 
@@ -87,11 +98,11 @@ let shownFile = ''
 let placedGrid = ''
 let placedId = 1
 
-const inner = () => process.stdout.columns - 2 * EDGE
+const inner = () => box().w - 2 * EDGE
 
 const region = () => ({
   cols: inner(),
-  rows: Math.max(1, process.stdout.rows - (TOP - 1) - BELOW),
+  rows: Math.max(1, box().h - ABOVE - BELOW),
   ...cell,
 })
 
@@ -218,7 +229,7 @@ function chipRow(w) {
   )
   const left = []
   if (start) left.push([`‹${start} `, fg(P.overlay1)])
-  let col = EDGE + 1 + (start ? width(left[0][0]) : 0)
+  let col = box().left + EDGE + 1 + (start ? width(left[0][0]) : 0)
   for (let i = start; i < end; i++) {
     const c = all[i]
     chips.push({ i, from: col, close: col + c.cells - 3, to: col + c.cells - 2 })
@@ -296,39 +307,73 @@ function pictureRows() {
   const rows = Array(r.rows).fill(render([], r.cols, PANEL))
   for (let k = 0; k < at.rows; k++) {
     const cells = gridRow(shownId, placedId, at.gridRow + k, at.gridCol, at.cols)
-    rows[at.row + k] = `${PANEL}${' '.repeat(r.cols)}\x1b[${EDGE + at.col + 1}G${PANEL}${cells}\x1b[0m`
+    rows[at.row + k] = `${PANEL}${' '.repeat(r.cols)}\x1b[${box().left + EDGE + at.col + 1}G${PANEL}${cells}\x1b[0m`
   }
   return { rows, setup }
 }
 
-// The frame: a rounded blue border round the screen, with the tab's title in
-// its top edge and the key that closes it on the right.
+// The frame: a rounded blue border, with the tab's title in its top edge and
+// the key that closes it on the right.
 const EDGE_STYLE = fg(P.blue)
 
-function frameTop() {
-  const w = process.stdout.columns
+function frameTop(w) {
   const title = ` Diagrams${tabTitle ? ` · ${tabTitle}` : ''} `
   const close = [[' alt+d', fg(P.text)], [' close ', fg(P.sub)]]
   const fill = Math.max(0, w - 4 - width(title) - close.reduce((n, [t]) => n + width(t), 0))
   return render([['╭─', EDGE_STYLE], [title, BOLD + fg(P.blue)], ['─'.repeat(fill), EDGE_STYLE], ...close, ['─╮', EDGE_STYLE]], w)
 }
 
-const frameBottom = () => render([[`╰${'─'.repeat(Math.max(0, process.stdout.columns - 2))}╯`, EDGE_STYLE]], process.stdout.columns)
+const frameBottom = w => render([[`╰${'─'.repeat(Math.max(0, w - 2))}╯`, EDGE_STYLE]], w)
 
-const framed = line => `${EDGE_STYLE}│\x1b[0m${line}\x1b[0m\x1b[${process.stdout.columns}G${EDGE_STYLE}│\x1b[0m`
+// A row inside the frame; its right edge is placed by column, since the
+// picture's rows place their cells by column too.
+const framed = b => line => `${EDGE_STYLE}│\x1b[0m${line}\x1b[0m\x1b[${b.left + b.w}G${EDGE_STYLE}│\x1b[0m`
+
+// The backdrop's cells from to to (not included) on screen row r, dimmed.
+const dim = (r, from, to) => (from < to ? `${DIM}${slice(backdrop[r], from, to)}\x1b[0m` : '')
+
+// The window Alt+D was pressed in, as it looked then: each of its panes'
+// text, laid out on the screen.
+function captureBackdrop() {
+  if (!FRAME || !UNDER) return
+  try {
+    const list = execFileSync('tmux', ['list-panes', '-t', UNDER, '-F', '#{pane_id} #{pane_left} #{pane_top} #{pane_width} #{pane_height}'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    })
+    const panes = list
+      .trim()
+      .split('\n')
+      .map(line => {
+        const [id, left, top, width_, height] = line.split(' ')
+        const text = execFileSync('tmux', ['capture-pane', '-p', '-t', id], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
+        return { left: Number(left), top: Number(top), width: Number(width_), height: Number(height), lines: text.split('\n') }
+      })
+    backdrop = compose(panes, process.stdout.columns, process.stdout.rows)
+  } catch {
+    // The window closed meanwhile: the frame sits on a blank screen.
+  }
+}
 
 // Each frame goes out in one write, inside synchronized output, and every row
 // overwrites itself instead of the screen being cleared first, so the terminal
 // never shows a half-drawn frame while zooming or panning.
 function draw() {
   const w = inner()
+  const b = box()
+  const cols = process.stdout.columns
   const { rows, setup } = pictureRows()
   const body = [...(HEADER ? [header()] : []), chipRow(w), ...rows, footer(w)]
-  const lines = FRAME ? [frameTop(), ...body.map(framed), frameBottom()] : body
+  const boxed = FRAME ? [frameTop(b.w), ...body.map(framed(b)), frameBottom(b.w)] : body
   let frame = `\x1b[?2026h${setup}`
-  lines.forEach((line, i) => {
-    frame += `\x1b[${i + 1};1H\x1b[2K${line}`
-  })
+  for (let r = 0; r < process.stdout.rows; r++) {
+    const k = r - b.top
+    const line =
+      k >= 0 && k < boxed.length
+        ? `${dim(r, 0, b.left)}\x1b[${b.left + 1}G${boxed[k]}${b.left + b.w < cols ? `\x1b[${b.left + b.w + 1}G${dim(r, b.left + b.w, cols)}` : ''}`
+        : dim(r, 0, cols)
+    frame += `\x1b[${r + 1};1H\x1b[2K${line}`
+  }
   out(`${frame}\x1b[?2026l`)
 }
 
@@ -377,10 +422,13 @@ function pan(dx, dy) {
 }
 
 // Pointer position in pixels from the picture region's top left.
-const pointer = (x, y) =>
-  pixelMouse
-    ? { px: x - 1 - EDGE * cell.cw, py: y - 1 - (TOP - 1) * cell.ch }
-    : { px: (x - EDGE - 0.5) * cell.cw, py: (y - TOP + 0.5) * cell.ch }
+function pointer(x, y) {
+  const left = box().left + EDGE
+  const top = pictureTop()
+  return pixelMouse
+    ? { px: x - 1 - left * cell.cw, py: y - 1 - (top - 1) * cell.ch }
+    : { px: (x - left - 0.5) * cell.cw, py: (y - top + 0.5) * cell.ch }
+}
 
 function onMouse(button, x, y, released) {
   const { px, py } = pointer(x, y)
@@ -397,9 +445,13 @@ function onMouse(button, x, y, released) {
   if ((button & 3) !== 0) return
   const row = pixelMouse ? Math.floor((y - 1) / cell.ch) + 1 : y
   const col = pixelMouse ? Math.floor((x - 1) / cell.cw) + 1 : x
+  // A click on the dimmed window round the frame closes it, as a click
+  // outside a popup would.
+  const b = box()
+  if (col <= b.left || col > b.left + b.w || row <= b.top || row > b.top + b.h) return quit()
   const mode = HEADER && row === 1 && modeAt(col)
   if (mode?.exit) return quit(mode.exit)
-  const c = row === CHIP_ROW && chips.find(t => col >= t.from && col <= t.to)
+  const c = row === chipLine() && chips.find(t => col >= t.from && col <= t.to)
   if (c && col >= c.close) return closeTab(c.i)
   if (c) return select(c.i)
   drag = { px, py }
@@ -472,6 +524,7 @@ if (!process.stdin.isTTY) {
 
 mkdirSync(PANES, { recursive: true })
 tmuxCell()
+captureBackdrop()
 process.stdin.setRawMode(true)
 process.stdin.on('data', onInput)
 process.on('SIGWINCH', () => {

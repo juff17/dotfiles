@@ -23,5 +23,7 @@ else
 fi
 # One at a time: a diagrams window left open behind the others goes first.
 layout kill-window -t "=$session:diagrams" 2>/dev/null
-layout new-window -t "$session:" -n diagrams -e DV_FRAME=1 -e "$pick" \
+# dv draws the window you were in, dimmed, round its frame.
+under=$(layout display -p -t "$session:" '#{window_id}')
+layout new-window -t "$session:" -n diagrams -e DV_FRAME=1 -e "$pick" -e "DV_UNDER=$under" \
   "$node" "$GHOSTTY_CONF/viewer/diagram-view.mjs"
