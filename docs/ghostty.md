@@ -25,7 +25,7 @@ The hub is the window's second view (`Ctrl+Shift+A` or the rail's **hub**). It s
 
 - **Lanes** for task agents: **Needs you** (a permission prompt, a question, or a monitor that raised something), **Working** (with the command running now and for how long), **Done** (finished, and you haven't looked yet) and **Idle**. A lane that fills up keeps going: Needs you scrolls with a "▾ more" cue and never shrinks a card, Working drops to cards that show only the command, Done keeps its newest two as cards and folds the rest to a line each, and Idle is a line each. An empty lane says so (*Nothing needs you*, *Nothing working*, …).
 - **Monitors** in a tray below, which keeps room for five even when fewer run and grows to about a third of the screen when more do: each Monitor a session armed (pr-babysit's `watch_pr.py`, logger's `watch_logs.py`, or any other), with what it watches, its latest event and when it came. A monitor is *watching*, *needs action* (its last event was a failed, manual, stuck or conflicted job, an error or a crash, and you haven't seen it), *stale* (its command no longer runs) or *ended* (expired or stopped; it leaves after half an hour). A session that's watching something stays in the strip; it shows in a lane only when it needs you.
-- **Open a session:** Enter, or click a card twice, opens the agent's live session beside a list of the rest, and your keys go to it. A tab agent opens through its own grouped tmux session, so the workspace stays on the tab it was on; a background agent opens with `claude attach`. `Ctrl+]` closes it. Switching tabs in it, from its tab bar or with the tab keys, switches only what that pane shows, and the list follows to the agent in the new tab.
+- **Open a session:** Enter, or click a card twice, opens the agent's live session beside a list of the rest, and your keys go to it. A tab agent opens through its own grouped tmux session, so the workspace stays on the tab it was on; a background agent opens with `claude attach`. `Ctrl+Shift+B` closes it and goes back to the board. Switching tabs in it, from its tab bar or with the tab keys, switches only what that pane shows, and the list follows to the agent in the new tab.
 - **New agent** (`n`, or **+ new**): a task with a first prompt, run in a new tab, in a worktree and a new tab (`claude -w`), or in the background; a PR babysitter (`/pr-babysit <link>`, in the background); or a log watcher (`/logger watch <source>`, in the background). Folder, model, permission mode and effort are fields of their own; recent folders are one keypress away.
 - A done agent counts as seen once you open it, mark it (`e`), or its tab is the one in front.
 
@@ -68,7 +68,7 @@ Diagrams come from jstack's diagram-pane mod, which renders each one to a PNG an
 | click **+ new** on the rail, or `n` in the hub | New agent |
 | `h` / `l`, `j` / `k` in the hub | Move between lanes and agents (`tab`: the monitors strip) |
 | `enter` in the hub, or click a selected card | Open that agent's live session beside the list |
-| `ctrl+]` | Close the session the hub opened |
+| `ctrl+shift+b` (or `ctrl+]` in the session) | Close the session the hub opened and go back to the board; in the workspace, go to the board |
 | `a` / `d` in the hub | Allow or deny the selected permission prompt |
 | `e` / `E` in the hub | Mark the selected done agent, or all of them, as seen |
 | `o` in the hub | Go to the selected agent's tab |

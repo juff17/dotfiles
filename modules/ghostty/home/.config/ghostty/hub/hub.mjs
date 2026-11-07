@@ -300,7 +300,7 @@ function footer(w) {
   if (note && note.until > Date.now()) return render([[` ${note.text}`, fg(note.color)]], w)
   if (confirm) return render([[` ${confirm.text} `, BOLD + fg(P.peach)], ['y', fg(P.text)], [' yes  ', fg(P.sub)], ['n', fg(P.text)], [' no', fg(P.sub)]], w)
   const keys = listMode()
-    ? [['j/k', 'move'], ['↵', 'open'], ['esc', peek ? 'close session' : 'workspace'], ['a/d', 'allow/deny'], ['n', 'new']]
+    ? [['j/k', 'move'], ['↵', 'open'], peek ? ['ctrl+shift+b', 'board'] : ['esc', 'workspace'], ['a/d', 'allow/deny'], ['n', 'new']]
     : [['h/l', 'lane'], ['j/k', 'agent'], ['tab', 'monitors'], ['↵', 'open'], ['a/d', 'allow/deny'], ['e', 'reviewed'], ['o', 'go to tab'], ['x', 'close'], ['n', 'new'], ['/', 'filter']]
   return render([[' '], ...hint(keys)], w)
 }
@@ -352,14 +352,16 @@ function drawList() {
   const H = rows()
   const lines = [
     split(
-      [[peek ? ' ◂ board ' : ' agents ', BOLD + fg(P.blue)], [peek ? 'ctrl+]' : '', fg(P.sub)]],
+      // Back to the board: a solid pill with its key in it, so it reads as a
+      // button and says how to press it.
+      peek ? [[' ', ''], ...pill(' ◂ Board  ', P.surface1, P.base, BOLD + fg(P.text)).slice(0, 2), ['ctrl+shift+b ', fg(P.sub) + bg(P.surface1)], pill('', P.surface1, P.base)[2]] : [[' agents', BOLD + fg(P.blue)]],
       [...pill(' + New ', P.blue, P.base, BOLD + fg(P.crust)), [' ', '']],
       W,
     ),
     render([], W),
   ]
   hits.push({ x1: W - 9, x2: W, y1: 1, y2: 1, act: () => openDialog() })
-  hits.push({ x1: 1, x2: 12, y1: 1, y2: 1, act: () => closePeek() })
+  hits.push({ x1: 1, x2: 26, y1: 1, y2: 1, act: () => closePeek() })
   const items = listItems()
   const pickable = items.filter(x => x.id)
   if (!pickable.some(x => x.id === listSel)) listSel = (pickable.find(x => x.agent.id === peek?.id) ?? pickable[0])?.id ?? null
@@ -774,6 +776,9 @@ async function open(a) {
     if (!made.ok) return say(`Couldn't open the session: ${made.err}`, P.red)
     peek = { pane: made.out.trim(), id: a.id, window: a.pane?.window ?? null }
     await outer('set', '-p', '-t', peek.pane, '@peek', '1')
+    // The window remembers its open session, so Ctrl+Shift+B can close it
+    // from any pane (layout.conf).
+    await outer('set', '-w', '-t', peek.pane, '@peek_pane', peek.pane)
   }
   listSel = a.id
   draw()
@@ -790,8 +795,11 @@ async function closePeek() {
   const p = peek.pane
   peek = null
   await outer('kill-pane', '-t', p)
+  await forgetPeek()
   draw()
 }
+
+const forgetPeek = () => outer('set', '-wu', '-t', process.env.TMUX_PANE, '@peek_pane')
 
 // a and d answer a permission prompt by pressing its keys in the agent's
 // pane: 1 for Yes, Esc for No. Only while Claude says it's waiting right now
@@ -907,6 +915,7 @@ async function watchPeek() {
   const p = peek
   if (!(await paneAlive(p.pane))) {
     if (peek === p) peek = null
+    await forgetPeek()
     return draw()
   }
   if (!p.window) return
