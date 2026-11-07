@@ -29,6 +29,7 @@ STRING_RE = re.compile(r'f?"((?:[^"\\]|\\.)*)"|f?\'((?:[^\'\\]|\\.)*)\'|`([^`]*)
 PLACEHOLDER_RE = re.compile(r"\{[^}]*\}|\$\{[^}]*\}|#\{[^}]*\}|\$\w+|%[-+ #0-9.]*[a-zA-Z]|\\[nt]")
 SKIP_FILES_RE = re.compile(r"\.(md|txt|json|ya?ml|toml|lock|csv)$")
 MIN_FRAGMENT = 8
+MAX_CALL_LINES = 6
 
 
 def git(cwd, *args):
@@ -99,6 +100,38 @@ def fragment(line):
     return best if len(best) >= MIN_FRAGMENT else None
 
 
+def call_text(lines, i):
+    """The log call starting at lines[i], joined with the added lines after it
+    while its parentheses are still open (a call wrapped over several lines)."""
+    path, line_no, text = lines[i]
+    call = text
+    for next_path, next_no, next_text in lines[i + 1:i + MAX_CALL_LINES]:
+        if fragment(call) or not open_parens(call) or (next_path, next_no) != (path, line_no + 1):
+            break
+        call += " " + next_text.strip()
+        line_no = next_no
+    return call
+
+
+def open_parens(text):
+    code = STRING_RE.sub('""', text)
+    return code.count("(") > code.count(")")
+
+
+def markers(lines):
+    """Yield one marker dict per distinct log message in (file, line_no, text) lines."""
+    lines = list(lines)
+    seen = set()
+    for i, (path, line_no, text) in enumerate(lines):
+        if SKIP_FILES_RE.search(path) or not LOG_CALL_RE.search(text):
+            continue
+        frag = fragment(call_text(lines, i))
+        if not frag or frag in seen:
+            continue
+        seen.add(frag)
+        yield {"where": f"{path}:{line_no}", "text": frag, "regex": re.sub(r"([.^$*+?()\[\]{}|\\])", r"\\\1", frag)}
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("-C", dest="cwd", default=".")
@@ -106,15 +139,8 @@ def main():
     args = parser.parse_args()
 
     base = base_ref(args.cwd, args.base)
-    seen = set()
-    for path, line_no, text in added_lines(args.cwd, base):
-        if SKIP_FILES_RE.search(path) or not LOG_CALL_RE.search(text):
-            continue
-        frag = fragment(text)
-        if not frag or frag in seen:
-            continue
-        seen.add(frag)
-        print(json.dumps({"where": f"{path}:{line_no}", "text": frag, "regex": re.sub(r"([.^$*+?()\[\]{}|\\])", r"\\\1", frag)}))
+    for marker in markers(added_lines(args.cwd, base)):
+        print(json.dumps(marker))
 
 
 if __name__ == "__main__":

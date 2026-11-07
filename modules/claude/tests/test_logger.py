@@ -754,13 +754,20 @@ class Markers(Repo):
         self.assertEqual(self.texts("-C", str(self.dir / "pkg")), ["webhook received from stripe"],
                          "paths stay relative to the repo root from a subdirectory")
 
-    # Suspected bug: a log call wrapped over several lines (black's style for
-    # long messages) has the call on one line and the string on the next, so
-    # neither line is kept.
-    @unittest.expectedFailure
+    # A log call wrapped over several lines (black's style for long messages)
+    # has the call on one line and the string on the next.
     def test_a_log_call_split_over_lines_is_found(self):
         self.write("app.py", APP + 'logger.info(\n    "settlement batch posted to the bank"\n)\n')
-        self.assertEqual(self.texts(), ["settlement batch posted to the bank"])
+        self.assertEqual(self.markers(), [{"where": "app.py:4", "text": "settlement batch posted to the bank",
+                                           "regex": "settlement batch posted to the bank"}])
+
+    def test_only_the_open_call_is_joined_with_the_lines_after_it(self):
+        lines = [("a.py", 1, "logger.info("), ("a.py", 2, '    "first message in the call",'),
+                 ("a.py", 3, '    extra={"k": "a much longer string after the message"},'), ("a.py", 4, ")"),
+                 ("a.py", 5, "logger.info(msg)"), ("a.py", 6, 'name = "plain string not a log message"'),
+                 ("a.py", 9, "logger.info("), ("a.py", 12, '"not the next line so not joined"'),
+                 ("a.py", 13, 'logger.info("ok (" + str(n))'), ("a.py", 14, 'name = "is not part of that call"')]
+        self.assertEqual([m["text"] for m in cm.markers(lines)], ["first message in the call"])
 
     # The diff parser expects "+++ b/" paths, which diff.mnemonicPrefix
     # ("+++ w/app.py") or diff.noprefix ("+++ app.py") would otherwise change.
