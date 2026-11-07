@@ -63,9 +63,9 @@ function draw() {
   lines.push(count('✻', c.working, P.blue))
   lines.push(count('✓', c.done, P.green))
   lines.push(count('○', c.idle, P.sub))
-  const bottom = [render([[' +', fg(P.sub)]], w, BG), render([[' new', fg(P.sub)]], w, BG)]
+  const bottom = [render([[' +', fg(P.sub)]], w, BG), render([[' new', fg(P.sub)]], w, BG), render([[' alt+n', fg(P.overlay0)]], w, BG)]
   while (lines.length < rows() - bottom.length - 1) lines.push(render([], w, BG))
-  buttons.push({ y1: lines.length + 1, y2: lines.length + 2, act: newAgent })
+  buttons.push({ y1: lines.length + 1, y2: lines.length + bottom.length, act: newAgent })
   lines.push(...bottom, render([], w, BG))
   paint(lines.slice(0, rows()))
 }

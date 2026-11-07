@@ -19,7 +19,7 @@ import { fileURLToPath } from 'node:url'
 import { RUN, follow, markReviewed } from './client.mjs'
 import { cardHeights, counts, lanes, launch, monitorsOf, scrollTo } from './model.mjs'
 import { POPUP } from './newagent.mjs'
-import { BOLD, ITALIC, MONITOR, P, STATE, ago, bar, bg, clean, enter, fg, leave, mix, paint, pill, render, split, tokens, width } from './term.mjs'
+import { BOLD, CAP_L, CAP_R, ITALIC, MONITOR, P, STATE, ago, bar, bg, clean, enter, fg, leave, mix, paint, pill, render, split, tokens, width } from './term.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const CONF = process.env.GHOSTTY_CONF || dirname(HERE)
@@ -132,6 +132,19 @@ function hint(pairs) {
 }
 
 const tint = color => mix(color, P.mantle, 0.2)
+
+// The New agent button: a solid blue pill with its global key in it, and a
+// space after; `cells` is how wide that all is, for its click area.
+function newButton(label) {
+  const spans = [
+    [CAP_L, fg(P.blue) + bg(P.base)],
+    [label, BOLD + fg(P.crust) + bg(P.blue)],
+    ['alt+n ', fg(P.surface1) + bg(P.blue)],
+    [CAP_R, fg(P.blue) + bg(P.base)],
+    [' ', ''],
+  ]
+  return { spans, cells: spans.reduce((n, [t]) => n + width(t), 0) }
+}
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`
 
 // A header: a rounded bar tinted with its lane's color, the name on the left
@@ -163,8 +176,9 @@ function summary(c, width_) {
   ]
   const right = []
   if (filtering || filter) right.push([`/${filter}${filtering ? '▏' : ''}  `, fg(P.yellow)])
-  right.push(...pill(' + New agent  n ', P.blue, P.base, BOLD + fg(P.crust)), [' ', ''])
-  hits.push({ x1: width_ - 18, x2: width_, y1: 1, y2: 1, act: () => openDialog() })
+  const button = newButton(' + New agent  ')
+  right.push(...button.spans)
+  hits.push({ x1: width_ - button.cells + 1, x2: width_, y1: 1, y2: 1, act: () => openDialog() })
   return split(left, right, width_)
 }
 
@@ -353,6 +367,7 @@ function listItems() {
 }
 
 function drawList() {
+  const button = newButton(' + New  ')
   const W = cols()
   const H = rows()
   const lines = [
@@ -360,12 +375,12 @@ function drawList() {
       // Back to the board: a solid pill with its key in it, so it reads as a
       // button and says how to press it.
       peek ? [[' ', ''], ...pill(' ◂ Board  ', P.surface1, P.base, BOLD + fg(P.text)).slice(0, 2), ['ctrl+shift+b ', fg(P.sub) + bg(P.surface1)], pill('', P.surface1, P.base)[2]] : [[' agents', BOLD + fg(P.blue)]],
-      [...pill(' + New ', P.blue, P.base, BOLD + fg(P.crust)), [' ', '']],
+      button.spans,
       W,
     ),
     render([], W),
   ]
-  hits.push({ x1: W - 9, x2: W, y1: 1, y2: 1, act: () => openDialog() })
+  hits.push({ x1: W - button.cells + 1, x2: W, y1: 1, y2: 1, act: () => openDialog() })
   hits.push({ x1: 1, x2: 26, y1: 1, y2: 1, act: () => closePeek() })
   const items = listItems()
   const pickable = items.filter(x => x.id)
