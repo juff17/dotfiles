@@ -16,6 +16,8 @@ keybind = ctrl+tab=csi:9003~
 keybind = ctrl+shift+tab=csi:9004~
 keybind = ctrl+shift+arrow_right=csi:9003~
 keybind = ctrl+shift+arrow_left=csi:9004~
+keybind = ctrl+shift+page_up=csi:9005~
+keybind = ctrl+shift+page_down=csi:9006~
 
 # Claude Code writes the clipboard three times per copy inside tmux, so the
 # "Copied to clipboard" popup would show three times.
