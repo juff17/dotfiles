@@ -737,7 +737,9 @@ async function toTab(a) {
 }
 
 // x closes a done or idle agent: a tab agent's tab, or a background agent,
-// stopped with its conversation kept (`claude attach <id>` resumes it). The
+// stopped with its conversation kept (`claude attach <id>` resumes it). A
+// tab parked on a background job is one agent with it, so both go: the job
+// first, so the tab isn't left showing a job that's still running. The
 // footer says whether it worked; the card leaves once agentd sees it gone.
 // Closing a session ends every monitor it armed, so the question says how
 // many.
@@ -748,7 +750,16 @@ function closeAgent() {
   const done = (r, what) => say(r.ok ? what : `Couldn't close ${a.title}: ${clean(r.err).slice(0, 120)}`, r.ok ? P.green : P.red, 8000)
   const live = a.monitors.filter(m => m.state !== 'ended').length
   const also = live ? ` and its ${live === 1 ? 'monitor' : `${live} monitors`}` : ''
-  if (a.pane)
+  if (a.pane && a.jobId)
+    confirm = {
+      text: `Close ${where(a)} and stop background agent ${a.title}${also}? Its conversation is kept.`,
+      yes: async () => {
+        const stop = await run([CLAUDE, 'stop', a.jobId])
+        if (!stop.ok) return done(stop)
+        done(await tabs('kill-window', '-t', a.pane.window), `Closed ${where(a)} and stopped ${a.title}; claude attach ${a.jobId} resumes it`)
+      },
+    }
+  else if (a.pane)
     confirm = {
       text: `Close ${where(a)} (${a.title})${also}?`,
       yes: async () => done(await tabs('kill-window', '-t', a.pane.window), `Closed ${where(a)} (${a.title})`),

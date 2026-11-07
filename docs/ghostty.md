@@ -82,7 +82,7 @@ Diagrams come from jstack's diagram-pane mod, which renders each one to a PNG an
 | `a` / `d` in the hub | Allow or deny the selected permission prompt |
 | `e` / `E` in the hub | Mark the selected done agent, or all of them, as seen |
 | `o` in the hub | Go to the selected agent's tab |
-| `x` in the hub | Close a done or idle agent's tab, and any monitors it still runs (asks first); on a monitor, stop only that monitor (asks first, until you answer `a`: yes, don't ask again) |
+| `x` in the hub | Close a done or idle agent's tab, and any monitors it still runs (asks first); for a tab parked on a background job, stop the job too (its conversation is kept); on a monitor, stop only that monitor (asks first, until you answer `a`: yes, don't ask again) |
 | `/` in the hub | Filter agents by name, repo or command |
 | `ctrl+s`, `esc` in New agent | Start, cancel (`↑`/`↓` fields, `←`/`→` choices, `tab` completes the folder) |
 | `shift`+drag | Select text with Ghostty instead of tmux |
