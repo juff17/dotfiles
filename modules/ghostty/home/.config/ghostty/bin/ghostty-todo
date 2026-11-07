@@ -1,0 +1,154 @@
+#!/usr/bin/env node
+// The todo list the viewer's Todo mode shows, from the command line. The
+// /todo skill has Claude call it; it works the same typed by hand.
+//   ghostty-todo add [--cat C] [--note N] [--dir D] [--by claude|you] title…
+//   ghostty-todo list [--all] [--done] [--json]
+//   ghostty-todo done|undo|rm id…
+//   ghostty-todo edit id [--title T] [--cat C] [--note N]
+// add records the repo, branch and worktree of D (default: here), and, when
+// run from a tab of the Ghostty layout, that tab's tmux pane and the Claude
+// session it runs under, so the viewer can go back to it. list shows this
+// repo's open items; --all every repo's. Categories: bug, feature, follow-up
+// (the default), docs, question.
+
+import { readFileSync, realpathSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { basename, dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+// Through the link install.sh makes, to find viewer/ beside bin/.
+const here = dirname(realpathSync(fileURLToPath(import.meta.url)))
+const todo = await import(join(here, '../viewer/todo.mjs'))
+
+const TABS_SOCKET = process.env.AGENT_HUB_TABS_SOCKET || 'ghostty'
+const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude')
+
+function fail(message) {
+  console.error(`ghostty-todo: ${message}`)
+  process.exit(1)
+}
+
+// Flags anywhere among the words; the rest are positional.
+function parse(argv, flags) {
+  const opts = {}
+  const rest = []
+  for (let i = 0; i < argv.length; i++) {
+    const word = argv[i]
+    const name = word.startsWith('--') ? word.slice(2).split('=')[0] : ''
+    if (!name) rest.push(word)
+    else if (flags[name] === 'bool') opts[name] = true
+    else if (flags[name] === 'value') opts[name] = word.includes('=') ? word.slice(word.indexOf('=') + 1) : argv[++i]
+    else fail(`unknown flag --${name}`)
+    if (flags[name] === 'value' && opts[name] === undefined) fail(`--${name} needs a value`)
+  }
+  return { opts, rest }
+}
+
+function pickCategory(input) {
+  if (input === undefined) return undefined
+  const cat = todo.category(input)
+  if (!cat) fail(`unknown category "${input}"; use ${todo.CATEGORIES.map(c => c.name).join(', ')}`)
+  return cat
+}
+
+// The tab this runs in, when that's a tab of the layout's tab session. Only
+// the pane: its window shows in several sessions (the hub's too), so the
+// viewer looks up which is the window's own when it goes there.
+function tab() {
+  const pane = process.env.TMUX_PANE
+  const socket = (process.env.TMUX ?? '').split(',')[0]
+  return pane && basename(socket) === TABS_SOCKET ? { pane } : {}
+}
+
+// The Claude session this runs under: the nearest parent process Claude keeps
+// a session file for.
+function claudeSession() {
+  let pid = process.ppid
+  for (let depth = 0; pid > 1 && depth < 20; depth++) {
+    try {
+      const { sessionId, name } = JSON.parse(readFileSync(join(CLAUDE_DIR, 'sessions', `${pid}.json`), 'utf8'))
+      if (sessionId) return { session: sessionId, agent: name || '' }
+    } catch {}
+    try {
+      const stat = readFileSync(`/proc/${pid}/stat`, 'utf8')
+      pid = Number(stat.slice(stat.lastIndexOf(')') + 2).split(' ')[1])
+    } catch {
+      break
+    }
+  }
+  return {}
+}
+
+function show(item, now = Date.now()) {
+  const cat = todo.CATEGORIES.find(c => c.name === item.cat)?.short ?? item.cat
+  const mark = item.done ? '[x]' : '[ ]'
+  const where = `${item.repo}${item.branch ? `@${item.branch}` : ''} · ${todo.age(now - item.created)}`
+  const lines = [`${item.id}  ${mark} ${cat.padEnd(6)}  ${item.title}  (${where})`]
+  if (item.note) lines.push(...item.note.split('\n').map(l => `        ${l}`))
+  return lines.join('\n')
+}
+
+const [command, ...args] = process.argv.slice(2)
+
+switch (command) {
+  case 'add': {
+    const { opts, rest } = parse(args, { cat: 'value', note: 'value', dir: 'value', by: 'value' })
+    const title = rest.join(' ').trim()
+    if (!title) fail('add needs a title')
+    const dir = opts.dir || process.cwd()
+    const claude = claudeSession()
+    const by = opts.by ?? (claude.session ? 'claude' : 'you')
+    if (by !== 'claude' && by !== 'you') fail('--by is claude or you')
+    const item = todo.add({
+      title,
+      cat: pickCategory(opts.cat) ?? todo.DEFAULT_CATEGORY,
+      note: opts.note ?? '',
+      by,
+      cwd: dir,
+      ...(await todo.repoOf(dir)),
+      ...tab(),
+      ...claude,
+    })
+    console.log(`Added ${item.id}: ${item.title} (${item.cat}, ${item.repo})`)
+    break
+  }
+  case 'list': {
+    const { opts } = parse(args, { all: 'bool', done: 'bool', json: 'bool' })
+    const { root } = await todo.repoOf(process.cwd())
+    const items = todo
+      .load()
+      .filter(i => (opts.all || i.root === root) && (opts.done || !i.done))
+      .sort((a, b) => todo.CATEGORIES.findIndex(c => c.name === a.cat) - todo.CATEGORIES.findIndex(c => c.name === b.cat) || a.created - b.created)
+    if (opts.json) console.log(JSON.stringify(items, null, 1))
+    else if (!items.length) console.log(opts.all ? 'No open todos.' : `No open todos in ${basename(root)}.`)
+    else console.log(items.map(i => show(i)).join('\n'))
+    break
+  }
+  case 'done':
+  case 'undo':
+  case 'rm': {
+    if (!args.length) fail(`${command} needs an id`)
+    for (const id of args) {
+      const item = command === 'rm' ? todo.remove(id) : todo.change(id, { done: command === 'done' ? Date.now() : null })
+      if (!item) fail(`no single todo matches "${id}"`)
+      console.log(`${{ done: 'Done', undo: 'Reopened', rm: 'Removed' }[command]} ${item.id}: ${item.title}`)
+    }
+    break
+  }
+  case 'edit': {
+    const { opts, rest } = parse(args, { title: 'value', cat: 'value', note: 'value' })
+    if (rest.length !== 1) fail('edit needs one id')
+    const fields = {}
+    if (opts.title !== undefined) fields.title = opts.title
+    if (opts.cat !== undefined) fields.cat = pickCategory(opts.cat)
+    if (opts.note !== undefined) fields.note = opts.note
+    if (!Object.keys(fields).length) fail('edit needs --title, --cat or --note')
+    const item = todo.change(rest[0], fields)
+    if (!item) fail(`no single todo matches "${rest[0]}"`)
+    console.log(`Edited ${item.id}: ${item.title} (${item.cat})`)
+    break
+  }
+  default:
+    console.log(readFileSync(fileURLToPath(import.meta.url), 'utf8').split('\n').slice(1, 13).map(l => l.slice(3)).join('\n'))
+    process.exit(command && command !== 'help' && command !== '--help' ? 1 : 0)
+}
