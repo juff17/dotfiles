@@ -82,6 +82,8 @@ else
 fi
 
 # ─── Ownership ────────────────────────────────────────────────
+# .installed has one line per install: SRC<tab>DST<tab>KIND, KIND being link or
+# copy. Lines written before KIND existed have only SRC and DST.
 manifest_has() { [ -f "$MANIFEST" ] && awk -F'\t' -v d="$1" '$2 == d { found = 1 } END { exit !found }' "$MANIFEST"; }
 
 manifest_drop() {
@@ -89,15 +91,35 @@ manifest_drop() {
   awk -F'\t' -v d="$1" '$2 != d' "$MANIFEST" > "$MANIFEST.tmp" && mv "$MANIFEST.tmp" "$MANIFEST"
 }
 
-manifest_add() { manifest_drop "$2"; printf '%s\t%s\n' "$1" "$2" >> "$MANIFEST"; }
+manifest_add() { manifest_drop "$2"; printf '%s\t%s\t%s\n' "$1" "$2" "$3" >> "$MANIFEST"; }
+
+# manifest_field DST N — field N (1 SRC, 3 KIND) of DST's line, empty if none.
+manifest_field() {
+  [ -f "$MANIFEST" ] || return 0
+  awk -F'\t' -v d="$1" -v n="$2" '$2 == d { v = $n } END { print v }' "$MANIFEST"
+}
+
+# owned_copy DST KIND SRC — true if DST, which is not a symlink, is a copy
+# jstack made. A recorded link that is now a plain file or folder is the
+# user's own. An old line without KIND counts only while DST still matches SRC.
+owned_copy() {
+  local dst="$1" kind="$2" src="$3"
+  case "$kind" in
+    copy) return 0 ;;
+    link) return 1 ;;
+    *) [ -e "$src" ] && diff -rq -- "$src" "$dst" >/dev/null 2>&1 ;;
+  esac
+}
 
 # owned DST — true if jstack installed DST.
 owned() {
   local dst="$1"
   if [ -L "$dst" ]; then
     case "$(readlink "$dst")" in "$JSTACK_DIR"/*) return 0 ;; esac
+    return 1
   fi
-  manifest_has "$dst"
+  manifest_has "$dst" || return 1
+  owned_copy "$dst" "$(manifest_field "$dst" 3)" "$(manifest_field "$dst" 1)"
 }
 
 # ─── Install one item, honoring --dry-run / --uninstall / --force ─
@@ -125,7 +147,7 @@ do_item() {
     echo "  would link  $label"
   else
     _link_or_copy "$src" "$dst"
-    manifest_add "$src" "$dst"
+    if [ -L "$dst" ]; then manifest_add "$src" "$dst" link; else manifest_add "$src" "$dst" copy; fi
     echo "  linked  $label"
   fi
 }
@@ -147,11 +169,17 @@ prune_stale() {
     done < <(find "$destroot" -mindepth 1 -maxdepth 2 -type l)
   done
   [ -f "$MANIFEST" ] || return 0
-  while IFS=$'\t' read -r src dst; do
+  while IFS=$'\t' read -r src dst kind; do
     [ -e "$src" ] && continue
     # Symlinks were handled by the scan above.
     [ -L "$dst" ] && continue
     if ! [ -e "$dst" ]; then
+      [ "$DRY_RUN" -eq 1 ] || manifest_drop "$dst"
+      continue
+    fi
+    # Not a copy jstack made (the user put their own file where a link was):
+    # leave it and forget it.
+    if ! owned_copy "$dst" "$kind" "$src"; then
       [ "$DRY_RUN" -eq 1 ] || manifest_drop "$dst"
       continue
     fi

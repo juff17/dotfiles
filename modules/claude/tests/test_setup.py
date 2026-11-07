@@ -114,7 +114,7 @@ class Install(Setup):
         self.setup()
         lines = self.manifest_lines()
         self.assertEqual(len(lines), 10)
-        self.assertIn(f"{self.src('config', 'alpha', 'settings.json')}\t{self.claude}/settings.json", lines)
+        self.assertIn(f"{self.src('config', 'alpha', 'settings.json')}\t{self.claude}/settings.json\tlink", lines)
 
     def test_a_rerun_changes_nothing(self):
         self.setup()
@@ -227,11 +227,9 @@ class NotOurs(Setup):
         self.assertLinksTo(self.claude / "skills/skill-a", self.src("skills", "alpha", "skill-a"))
         self.assertLinksTo(self.claude / "commands/alpha/cmd-a.md", self.src("commands", "alpha", "cmd-a.md"))
 
-    # Suspected bug: a symlink install is also written to .installed, and
-    # owned() trusts .installed for anything at that path. So once the user
-    # swaps jstack's link for a file of their own, setup treats that file as a
-    # jstack copy: a re-run overwrites it and --uninstall deletes it.
-    @unittest.expectedFailure
+    # A link install is in .installed too, so the record alone can't say a
+    # file at that path is jstack's: once the user swaps the link for a file
+    # of their own, it is theirs.
     def test_a_users_file_put_where_a_link_was_is_not_overwritten(self):
         self.setup()
         (self.claude / "settings.json").unlink()
@@ -239,7 +237,6 @@ class NotOurs(Setup):
         self.setup()
         self.assertEqual((self.claude / "settings.json").read_text(), "user settings")
 
-    @unittest.expectedFailure
     def test_a_users_file_put_where_a_link_was_survives_uninstall(self):
         self.setup()
         (self.claude / "settings.json").unlink()
@@ -249,6 +246,15 @@ class NotOurs(Setup):
 
 
 class Stale(Setup):
+    def test_a_users_file_put_where_a_link_was_survives_its_source_vanishing(self):
+        self.setup()
+        (self.claude / "settings.json").unlink()
+        (self.claude / "settings.json").write_text("user settings")
+        self.src("config", "alpha", "settings.json").unlink()
+        self.setup()
+        self.assertEqual((self.claude / "settings.json").read_text(), "user settings")
+        self.assertNotIn("settings.json", self.manifest.read_text(), "the record forgets it")
+
     def test_links_whose_source_vanished_are_removed(self):
         self.setup()
         shutil.rmtree(self.src("skills", "alpha", "skill-a"))
@@ -291,7 +297,7 @@ class Copy(Setup):
         self.assertEqual(settings.read_text(), "alpha config settings.json\n")
         self.assertFalse((self.claude / "commands/alpha/cmd-a.md").is_symlink())
         self.assertEqual(len(self.manifest_lines()), 10)
-        self.assertIn(f"{self.src('config', 'alpha', 'settings.json')}\t{settings}", self.manifest_lines())
+        self.assertIn(f"{self.src('config', 'alpha', 'settings.json')}\t{settings}\tcopy", self.manifest_lines())
 
     def test_a_copy_is_frozen_until_setup_runs_again(self):
         self.setup("--copy")
@@ -336,6 +342,37 @@ class Copy(Setup):
         _, _, err = self.setup("--copy")
         self.assertIn("skipped  claude:alpha skill/skill-a", err)
         self.assertEqual((self.claude / "skills/skill-a/SKILL.md").read_text(), "user skill")
+
+
+class OldRecord(Setup):
+    """.installed lines written before the link/copy column: SRC<tab>DST."""
+
+    def old_format(self):
+        lines = ["\t".join(l.split("\t")[:2]) for l in self.manifest_lines()]
+        self.manifest.write_text("".join(f"{l}\n" for l in lines))
+
+    def test_old_copies_still_count_as_jstacks(self):
+        self.setup("--copy")
+        self.old_format()
+        _, _, err = self.setup("--copy")
+        self.assertEqual(err, "")
+        self.assertTrue(all(l.endswith("\tcopy") for l in self.manifest_lines()), "rewritten in the new format")
+
+    def test_old_copies_are_removed_by_uninstall(self):
+        self.setup("--copy")
+        self.old_format()
+        self.setup("--uninstall")
+        self.assertEqual(sorted(p for p in self.claude.rglob("*") if p.is_file()), [])
+
+    def test_an_old_line_for_a_file_that_no_longer_matches_is_left_alone(self):
+        self.setup()
+        self.old_format()
+        (self.claude / "settings.json").unlink()
+        (self.claude / "settings.json").write_text("user settings")
+        _, _, err = self.setup()
+        self.assertIn(f"({self.claude}/settings.json exists and was not installed by jstack)", err)
+        self.setup("--uninstall")
+        self.assertEqual((self.claude / "settings.json").read_text(), "user settings")
 
 
 class Hosts(Setup):
