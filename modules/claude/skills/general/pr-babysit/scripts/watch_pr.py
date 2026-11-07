@@ -5,8 +5,12 @@ Polls through `gh api` / `glab api`, authenticated only by GITHUB_TOKEN (or
 GH_TOKEN) / GITLAB_TOKEN. What has been reported is kept in a cache file, so
 re-arming the watcher after a Monitor timeout never repeats an event.
 
-Events: [watch] [setup] [busy] [auth] [error] [push] [failed] [manual] [stuck]
+Events: [watch] [saved] [setup] [busy] [auth] [error] [push] [failed] [manual] [stuck]
         [stage] [pipeline] [behind] [conflict] [comment] [review] [merged] [closed]
+
+Facts the babysitting agent must not lose (lease_sha, worktree, clone) are
+kept with --set in a notes file beside the state, and printed again on the
+[watch] line, so a re-arm or a summarized conversation gets them back.
 
 Pipeline events end with "| <progress>": every stage in pipeline order with
 its state, e.g. "CI ✓ · QA ⏳ · EU". A stage is a GitLab stage, or on GitHub
@@ -430,13 +434,52 @@ def pr_base(forge, number):
 
 
 def session_state(base, session):
-    """State file for this session. Other sessions' files for the PR are removed,
-    so a new session starts clean and reports everything still open."""
-    keep = Path(f"{base}.{session}.json")
+    """State file for this session. Other sessions' files for the PR (state and
+    notes) are removed, so a new session starts clean and reports everything
+    still open."""
+    keep = (Path(f"{base}.{session}.json"), notes_path(base, session))
     for old in base.parent.glob(f"{base.name}.*.json"):
-        if old != keep:
+        if old not in keep:
             old.unlink(missing_ok=True)
-    return keep
+    return keep[0]
+
+
+# What the agent records with --set. A file apart from the state, because the
+# running watcher rewrites the state on every poll and would undo a --set.
+NOTE_KEYS = ("lease_sha", "worktree", "clone")
+
+
+def notes_path(base, session):
+    return Path(f"{base}.{session}.notes.json")
+
+
+def load_notes(path):
+    try:
+        data = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return {}
+    return {k: v for k, v in data.items() if k in NOTE_KEYS and isinstance(v, str)}
+
+
+def set_notes(path, pairs):
+    notes = load_notes(path)
+    for pair in pairs:
+        key, sep, value = pair.partition("=")
+        if not sep or key not in NOTE_KEYS:
+            raise ValueError(f"--set takes KEY=VALUE with KEY one of {', '.join(NOTE_KEYS)}: {pair!r}")
+        if value:
+            notes[key] = value
+        else:
+            notes.pop(key, None)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = Path(f"{path}.tmp")
+    tmp.write_text(json.dumps(notes))
+    tmp.replace(path)
+    return notes
+
+
+def show_notes(notes):
+    return ", ".join(f"{k} {notes[k]}" for k in NOTE_KEYS if k in notes)
 
 
 def load_state(path):
@@ -602,11 +645,23 @@ def main():
     ap.add_argument("--session", help="babysit session id; reuse it on every re-arm (required unless --once)")
     ap.add_argument("--once", action="store_true",
                     help="poll once and print events; no lock, state not saved")
+    ap.add_argument("--set", action="append", metavar="KEY=VALUE",
+                    help=f"save a fact for this session ({', '.join(NOTE_KEYS)}; empty VALUE clears it), "
+                         "print what is saved, and exit; repeatable")
     args = ap.parse_args()
     if not args.once and not args.session:
         ap.error("--session is required unless --once")
 
     forge, number = parse_url(args.url)
+    if args.set:
+        if not args.session:
+            ap.error("--set needs --session")
+        try:
+            notes = set_notes(notes_path(pr_base(forge, number), args.session), args.set)
+        except ValueError as e:
+            ap.error(str(e))
+        emit("saved", show_notes(notes) or "nothing")
+        return 0
     remote = find_remote(forge, args.cwd)
     if remote is None:
         emit("setup", f"{os.path.abspath(args.cwd)} has no git remote for {forge.host}/{forge.project}. "
@@ -631,6 +686,7 @@ def main():
 
     path = None if args.once else session_state(base, args.session)
     state = (load_state(path) if path else None) or {"comments": set(), "events": set()}
+    notes = load_notes(notes_path(base, args.session)) if path else {}
 
     failures, attached = 0, False
     while True:
@@ -642,7 +698,8 @@ def main():
                 emit("watch", f"{'resumed' if state.get('sha') else 'attached'} {snap['url']} "
                               f"\"{flat(snap['title'], 80)}\", branch {snap['branch']}{fork} -> {snap['base']}, "
                               f"head {snap['sha']}, remote {remote}, "
-                              f"{sum(not c['resolved'] and c['author'] != me for c in snap['comments'])} open comment(s), polling every {args.interval}s")
+                              f"{sum(not c['resolved'] and c['author'] != me for c in snap['comments'])} open comment(s), polling every {args.interval}s"
+                              f"{f' | saved: {show_notes(notes)}' if notes else ''}")
                 attached = True
             report(snap, state, me, args.stuck_after)
             if path:

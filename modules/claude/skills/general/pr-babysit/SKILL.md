@@ -23,6 +23,10 @@ Scripts live in this skill's `scripts/` directory:
 - `watch_pr.py`: polls pipeline, merge state, reviews, and comments, and
   prints one line per new event. It remembers what it reported, so re-arming
   it never repeats an event.
+- `watch_pr.py <url> --session <id> --set KEY=VALUE ...`: saves a fact this
+  babysit must not lose (`lease_sha`, `worktree`, `clone`) and exits. The
+  watcher prints the saved facts on its `[watch]` line, so they come back on
+  every re-arm.
 - `notify.sh TITLE MESSAGE`: puts an item in the Agents tray, under Needs
   you, that takes the user to this session. There are no desktop pop-ups.
 
@@ -120,7 +124,10 @@ one; it may be the user's or another babysitter's.
    stop and tell the user.
 5. Record the head sha as `lease_sha`. It is what the user's push compares
    against, so nobody else's pushes get overwritten.
-6. Find the repo's lint and unit test commands (Makefile, package.json,
+6. Save these facts, so they outlive this conversation's memory:
+   `watch_pr.py <url> --session <id> --set lease_sha=<head sha> --set worktree=<absolute worktree path> --set clone=<absolute clone path>`.
+   It answers `[saved] ...` with what is now saved.
+7. Find the repo's lint and unit test commands (Makefile, package.json,
    pyproject, CI config). Every fix and rebase is checked with them.
 
 Then tell the user in 2 or 3 bullets: which PR, which worktree, what is watched.
@@ -152,7 +159,7 @@ may need to add.
 | `[conflict]` | The branch conflicts with the base | [references/rebase.md](references/rebase.md) |
 | `[comment]` | New comment, inline note, or review summary | [references/feedback.md](references/feedback.md) |
 | `[review]` | Approved or changes requested | Note it for the briefing; notify on changes requested |
-| `[push]` | The PR head moved (the user or someone else pushed) | Fetch it. If the worktree is already at the new sha (the user pushed from it), set `lease_sha` to it. If the worktree is still at `lease_sha` with no local commits, move it (`git reset --hard <new sha>`) and set `lease_sha`. Otherwise someone pushed over local commits: notify and ask "Want me to move my commits onto `<new sha>`?". On yes: `git rebase --onto <new sha> <lease_sha>`, run lint and tests, and set `lease_sha` to the new sha. |
+| `[push]` | The PR head moved (the user or someone else pushed) | Fetch it. Whenever `lease_sha` changes below, save it right away with `--set lease_sha=<new sha>`. If the worktree is already at the new sha (the user pushed from it), set `lease_sha` to it. If the worktree is still at `lease_sha` with no local commits, move it (`git reset --hard <new sha>`) and set `lease_sha`. Otherwise someone pushed over local commits: notify and ask "Want me to move my commits onto `<new sha>`?". On yes: `git rebase --onto <new sha> <lease_sha>`, run lint and tests, and set `lease_sha` to the new sha. |
 | `[merged]` / `[closed]` | Done; the script exits | Give the final briefing and stop |
 | `[error]` | API calls keep failing; the script keeps retrying | Tell the user once |
 
@@ -181,7 +188,12 @@ give the full briefing of everything not yet reviewed.
 - Monitor stops after 30 minutes. On expiry, re-arm with the same command and
   the same `--session` id. The state carries over, so nothing is lost or
   repeated. Say nothing in the chat for the re-arm or its `[watch] resumed`
-  line. Keep re-arming until the PR merges or closes, or the user says stop.
+  line.
+- The `[watch] resumed` line ends with `| saved: lease_sha <sha>, worktree
+  <path>, clone <path>`. Those saved values are the truth: use them, not what
+  you remember, since a long babysit's conversation may have been summarized.
+  If `| saved:` is missing or lacks a value, check the worktree
+  (`git -C <worktree> log`) before using it, and save it again with `--set`. Keep re-arming until the PR merges or closes, or the user says stop.
   Long pipelines (an hour or more) are fine.
 - To stop: TaskStop on the monitor, then a short summary of what happened and
   what is still open.
