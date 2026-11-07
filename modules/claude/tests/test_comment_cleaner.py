@@ -86,12 +86,11 @@ class Tokenizer(unittest.TestCase):
     def test_scss_adds_line_comments(self):
         self.assertEqual(comments("// c\n$x: 1;\n/* b */\n", "a.scss"), ["// c", "/* b */"])
 
-    @unittest.expectedFailure
     def test_scss_unquoted_url_is_not_a_comment(self):
-        # Suspected bug: SCSS/Less take `//` as a line comment anywhere outside
-        # a quoted string, so the `//` of an unquoted url(http://...) is reported
-        # as the comment "//x.com/a.png);". Sass itself treats url() specially.
-        self.assertEqual(comments("a { background: url(http://x.com/a.png); }\n", "a.scss"), [])
+        # Sass and Less read an unquoted url(...) as one token, `//` and all.
+        for ext in (".scss", ".less"):
+            self.assertEqual(comments("a { background: url(http://x.com/a.png); } // c\n", "a" + ext),
+                             ["// c"], ext)
 
     @unittest.expectedFailure
     def test_yaml_apostrophe_in_a_plain_value_does_not_hide_the_comment(self):

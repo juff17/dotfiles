@@ -117,7 +117,9 @@ CSS = {
 SCSS = {
     "line": [{"t": "//"}],
     "block": [{"open": "/*", "close": "*/"}],
-    "strings": [{"open": '"', "close": '"', "esc": "\\"}, {"open": "'", "close": "'", "esc": "\\"}],
+    # An unquoted url(http://...) is one token in Sass and Less, not a `//` comment.
+    "strings": [{"open": "url(", "close": ")", "raw": True},
+                {"open": '"', "close": '"', "esc": "\\"}, {"open": "'", "close": "'", "esc": "\\"}],
 }
 
 LANG_BY_EXT = {
