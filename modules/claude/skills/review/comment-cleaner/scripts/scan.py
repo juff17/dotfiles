@@ -238,14 +238,15 @@ def inner_text(comment):
 # Git scoping
 # ============================================================================
 def resolve_repo_root(repo_root_arg):
-    if repo_root_arg:
-        return os.path.abspath(repo_root_arg)
+    """The top of the repo at repo_root_arg (or the cwd); exit 2 if it isn't one."""
     try:
         return subprocess.run(
-            ["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True, check=True
+            ["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True, check=True,
+            cwd=os.path.abspath(repo_root_arg) if repo_root_arg else None,
         ).stdout.strip()
     except (OSError, subprocess.CalledProcessError):
-        print("Not inside a git repository (git rev-parse failed).", file=sys.stderr)
+        where = repo_root_arg or "the current folder"
+        print(f"Not inside a git repository: {where} (git rev-parse failed).", file=sys.stderr)
         sys.exit(2)
 
 

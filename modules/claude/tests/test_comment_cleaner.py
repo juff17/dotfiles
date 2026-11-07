@@ -435,6 +435,24 @@ class Cli(Repo):
         self.assertEqual(r.returncode, 2)
         self.assertIn("Not inside a git repository", r.stderr)
 
+    def test_a_repo_path_that_is_not_a_repo_exits_2(self):
+        for path in (self.tmp, self.tmp / "missing"):
+            r = subprocess.run([sys.executable, str(SCRIPT), "full", str(path), "--out", str(self.tmp / "r")],
+                               capture_output=True, text=True, cwd=self.root)
+            self.assertEqual(r.returncode, 2, path)
+            self.assertIn("Not inside a git repository", r.stderr)
+            self.assertNotIn("Traceback", r.stderr)
+
+    def test_a_repo_path_inside_a_repo_scans_from_its_top(self):
+        (self.root / "sub").mkdir(exist_ok=True)
+        (self.root / "sub" / "a.js").write_text("// keep\nx();\n")
+        self.commit()
+        out = self.tmp / "report"
+        r = subprocess.run([sys.executable, str(SCRIPT), "full", str(self.root / "sub"), "--out", str(out)],
+                           capture_output=True, text=True, cwd=self.tmp)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(json.loads(Path(f"{out}.json").read_text())["repo"], str(self.root))
+
     def test_an_unknown_mode_is_rejected(self):
         self.assertEqual(subprocess.run([sys.executable, str(SCRIPT), "everything"],
                                         capture_output=True, cwd=self.root).returncode, 2)
