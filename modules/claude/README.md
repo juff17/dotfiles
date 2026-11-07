@@ -1,0 +1,129 @@
+# jstack
+
+Personal home for coding-agent tooling — skills, slash commands, subagents, hooks,
+and Claude Code settings —
+organized by **category** and installed onto any machine with one command.
+
+The point: on a new PC, `git clone` this repo and run `./setup`. Your agent
+tools land in the right place for whichever agent(s) you have installed. No
+marketplaces, no per-repo sprawl.
+
+## Layout
+
+```
+jstack/
+  setup                 # the entrypoint your dotfiles call
+  lib/
+    link.sh             # symlink-or-copy helper
+    targets.sh          # the only vendor-specific file: vendor -> install dirs
+  skills/
+    <category>/<name>/SKILL.md
+  commands/
+    <category>/<name>.md
+  agents/
+    <category>/<name>.md
+  hooks/
+    <category>/<name>.sh     # -> ~/.claude/hooks/<name>.sh
+  mods/
+    <category>/<name>/       # -> ~/.claude/mods/<name>, loaded via CLAUDE_CODE_PLUGIN_DIRS
+  config/
+    <category>/<file>        # -> ~/.claude/<file> (settings.json, statusline)
+  tests/
+    test_<tool>.py           # not installed; setup only links the folders above
+```
+
+Tools are grouped by type first, then by **category**: `docify` (document
+writing), `review`, `daily-prep` (standup prep), `general`,
+`shortcuts` (short-circuit guidance prompts), and `core` (settings and hooks). A category is a
+source-organization and install-selection concept only — at install time skills
+and agents flatten into the agent's own directories, so **their names must be
+globally unique across categories.** Commands are the exception: they are
+namespaced by category, so `commands/shortcuts/discuss.md` installs as
+`/shortcuts:discuss`.
+
+## Tests
+
+Tests for the tools' scripts live in `tests/`, one `test_<tool>.py` per tool.
+They use only Python's built-in `unittest`, so there is nothing to install,
+and they never call a real GitHub or GitLab:
+
+```sh
+python3 -m unittest discover -s tests
+```
+
+## Install
+
+```sh
+./setup                   # every category into every detected agent
+./setup --host claude     # only Claude Code
+./setup --category docify # only the docify category
+./setup --dry-run         # show what would happen, change nothing
+./setup --uninstall       # remove everything jstack installed
+./setup --copy            # copy instead of symlink (Windows / forced)
+./setup --force           # also replace items jstack did not install
+```
+
+Setup only replaces or removes what it installed (a symlink into this repo, or
+a copy recorded in the git-ignored `.installed` file). If something else
+already has a tool's name, setup skips it with a warning. Installs whose
+source was renamed or deleted are removed on each run.
+
+Installs are **symlinks** on macOS/Linux, so edits here are live and
+`git pull` updates every machine. Re-run `./setup` only after adding or
+removing tools, or on a fresh machine. It is idempotent.
+
+**This repo must live at a stable path** (symlinks point back into it). Keep it
+at `~/projects/jstack`. Your dotfiles bootstrap is then just:
+
+```sh
+git clone <jstack-remote> ~/projects/jstack
+~/projects/jstack/setup
+```
+
+## Claude Code settings and plugins
+
+`config/core/settings.json` installs as `~/.claude/settings.json` and registers
+the hooks in `hooks/core/` by their installed path (`$HOME/.claude/hooks/...`).
+
+Third-party pieces are downloaded rather than linked, so `./setup` installs
+them for Claude after linking, skipping what is already there:
+
+- **Marketplaces** listed in `extraKnownMarketplaces`, via `claude plugin marketplace add`.
+- **Plugins** turned on in `enabledPlugins`, via `claude plugin install <id> --scope user`.
+- **Mod packages**: `npm ci` in each mod with a `package-lock.json`, when
+  `node_modules` is missing or older than the lockfile. Puppeteer's Chrome
+  download is skipped; diagram-pane renders with `/usr/bin/google-chrome`.
+
+To add a plugin, add it to `enabledPlugins` (and its marketplace to
+`extraKnownMarketplaces`) and re-run `./setup`. A failed install is reported
+with the command to retry. `--uninstall` leaves plugins and `node_modules` in
+place. This step needs the `claude` CLI, `python3`, and `npm` on `PATH`.
+
+Claude sends no desktop notifications. What needs you (a permission prompt, a
+question, a finished agent, a failed pipeline) shows in the Agents panel
+widget from dotfiles' `ghostty` module, which reads every session itself; no
+hook is needed. pr-babysit's `notify.sh` adds what only it knows (a fix ready
+to push, a finished rebase) to that tray as a note.
+
+## Vendor support
+
+| Type     | Claude | Codex | OpenCode |
+|----------|:------:|:-----:|:--------:|
+| skills   |   ✅   |  ✅   |    ✅    |
+| commands |   ✅   |  —    |    —     |
+| agents   |   ✅   |  —    |    —     |
+| hooks    |   ✅   |  —    |    —     |
+| config   |   ✅   |  —    |    —     |
+
+Skills are the portable backbone. Commands and agents are Claude-first today;
+other vendors are wired for skills only and silently skip the rest. Add a vendor
+by editing `lib/targets.sh` — nothing else changes.
+
+## Adding a tool
+
+1. Drop it under its type and category: `skills/general/my-skill/SKILL.md`,
+   `commands/general/my-cmd.md`, or `agents/general/my-agent.md`.
+2. `./setup` (or `./setup --dry-run` first).
+
+Need a new category? Make a folder under `skills/`, `commands/`, or `agents/` —
+`setup` discovers it automatically.

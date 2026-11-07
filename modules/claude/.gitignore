@@ -1,0 +1,24 @@
+# OS cruft
+.DS_Store
+Thumbs.db
+
+# Editor cruft
+*.swp
+*~
+
+# Python cruft
+__pycache__/
+*.pyc
+
+# Per-machine skill configs — never commit; copy from config.example.yaml
+**/config.yaml
+
+# Per-machine record of what ./setup installed
+.installed
+
+# Type declarations Claude Code writes beside each loaded mod
+mods/**/.claude-plugin/types/
+
+.tours/
+
+.claude/docs/
