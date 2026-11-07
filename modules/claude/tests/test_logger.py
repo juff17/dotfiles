@@ -633,11 +633,13 @@ class Fragments(unittest.TestCase):
         for line in ('raise ValueError("bad order state")', 'name = "a long plain string"', 'blog.post("x")'):
             self.assertFalse(cm.LOG_CALL_RE.search(line), line)
 
-    # Suspected bug: the Rails.logger alternative requires "(" after the method,
-    # but idiomatic Ruby calls it without parentheses, so these are never found.
-    @unittest.expectedFailure
+    # Idiomatic Ruby calls the logger without parentheses.
     def test_ruby_log_calls_without_parentheses_are_recognised(self):
-        self.assertTrue(cm.LOG_CALL_RE.search('Rails.logger.info "user #{id} signed in via sso"'))
+        for line in ('Rails.logger.info "user #{id} signed in via sso"', "logger.warn 'cache cold'"):
+            self.assertTrue(cm.LOG_CALL_RE.search(line), line)
+        self.assertEqual(cm.fragment('Rails.logger.info "user #{id} signed in via sso"'), "signed in via sso")
+        for line in ("logger.level = :debug", "log.debug? and x", "logger.formatter proc"):
+            self.assertFalse(cm.LOG_CALL_RE.search(line), line)
 
     # Suspected bug: escaped quotes stay in the fragment as \" and the regex
     # escapes the backslash, so the marker never matches the printed message.

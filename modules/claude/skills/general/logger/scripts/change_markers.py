@@ -21,7 +21,7 @@ from pathlib import Path
 
 LOG_CALL_RE = re.compile(
     r"\b(log|logger|logging|_log|console|slog|zap|zerolog|klog|glog|winston|pino"
-    r"|Log|LOG|Logger|Rails\.logger)\b\s*\.\s*\w+\s*\("
+    r"|Log|LOG|Logger|Rails\.logger)\b\s*\.\s*\w+(\s*\(|\s+[\"'`])"  # Ruby may drop the ()
     r"|\b(fmt\.Print\w*|log\.Print\w*|print|println|printf|puts|warn|die)\s*[\( ]"
     r"|\b(info|warn|error|debug|trace)!\s*\("
 )
