@@ -30,8 +30,9 @@ const TABS_SOCKET = process.env.AGENT_HUB_TABS_SOCKET || 'ghostty'
 const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude')
 // Where ghostty-claude-start saved claude: Ghostty's own PATH often lacks it.
 const CLAUDE_FILE = join(process.env.XDG_CACHE_HOME || join(homedir(), '.cache'), 'ghostty-layout/claude')
-// How the /todo skill names this command, and so how Claude runs it.
-const CLI = '~/.config/ghostty/bin/ghostty-todo'
+// What the filer runs: this same script, as it was started (the installed
+// link, or a worktree's copy), so the filer's add matches this file.
+const CLI = process.argv[1]
 const FILER = { model: 'claude-haiku-5-5', effort: 'medium', limitMs: 3 * 60 * 1000 }
 
 function fail(message) {
@@ -113,10 +114,13 @@ function claudeBin() {
 
 // The filer's whole job, so it adds this one item and touches nothing else;
 // dontAsk denies every tool but the add.
-const filerPrompt = id => `You file one todo and then stop. The user's message after "add todo:" describes it.
+const filerPrompt = (item, repos) => `You file one todo and then stop. The user's message after "add todo:" describes it.
 Write a title of at most about 50 characters that says what to do. Pick one category: bug (something is broken), feature (something new to build), follow-up (unfinished work), docs, question (something to decide or find out) or other. When the message makes it clear, also pick one type: research (find something out), decide (make a call), action (do or build something), review (judge someone's work, like a PR) or chore (upkeep); otherwise leave --type out. Write a note of one to three sentences only when the title doesn't say it all, keeping what the message says about where and why.
+The user sent it from ${item.repo === 'none' ? `${item.root}, outside any repo` : `the ${item.repo} repo`}, and it is filed there unless the message says it belongs to one of these repos instead:
+${repos.map(r => `${r.repo}: ${r.root}`).join('\n') || '(none)'}
+If it does, add --dir <that repo's path> to the command. Use only a path from this list.
 Then run this one command and nothing else:
-${CLI} add --filing ${id} --cat <category> [--type <type>] --note "<note>" <title>
+${CLI} add --filing ${item.id} --cat <category> [--type <type>] --note "<note>" <title>
 Don't look into the item, read files or work on it.`
 
 // Runs Claude on a filing item and waits. Resolves to '' once the item is
@@ -125,8 +129,8 @@ function runFiler(item) {
   const dir = [item.worktree, item.cwd, item.root].find(d => d && existsSync(d)) || homedir()
   const args = [
     '-p', '--model', FILER.model, '--effort', FILER.effort, '--permission-mode', 'dontAsk',
-    '--allowedTools', `Bash(${CLI} add *)`, `Bash(${join(homedir(), '.config/ghostty/bin/ghostty-todo')} add *)`,
-    '--append-system-prompt', filerPrompt(item.id),
+    '--allowedTools', `Bash(${CLI} add *)`,
+    '--append-system-prompt', filerPrompt(item, todo.knownRepos(todo.load()).filter(r => r.root !== item.root)),
     `add todo: ${item.title}`,
   ]
   return new Promise(done => {
@@ -179,14 +183,17 @@ switch (command) {
     if (!title) fail('add needs a title')
     const type = pickType(opts.type)
     // From the filer: fills in the item the viewer shows, which already has
-    // its repo. No tab or session: the filer's is gone once it's done.
+    // the repo it was sent from; --dir moves it to the repo the message
+    // named. No tab or session: the filer's is gone once it's done.
     if (opts.filing) {
+      if (opts.dir && !existsSync(opts.dir)) fail(`--dir ${opts.dir} doesn't exist`)
       const item = todo.fill(opts.filing, {
         title,
         cat: pickCategory(opts.cat) ?? todo.DEFAULT_CATEGORY,
         ...(type ? { type } : {}),
         note: opts.note ?? '',
         by: 'claude',
+        ...(opts.dir && { cwd: opts.dir, ...(await todo.repoOf(opts.dir)) }),
       })
       if (!item) fail(`nothing is filing as ${opts.filing}: it was dropped or filed already`)
       console.log(`Filed ${item.id}: ${item.title} (${[item.cat, item.type, item.repo].filter(Boolean).join(', ')})`)

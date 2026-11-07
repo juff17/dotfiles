@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 
 import { launch } from '../hub/model.mjs'
-import { FILING_TIMEOUT_MS, KEEP_DONE_MS, add, age, arrange, category, change, fill, filingState, find, handoffPlace, handoffSpec, inGit, load, newId, prune, remove, repoOf, taskType } from './todo.mjs'
+import { FILING_TIMEOUT_MS, KEEP_DONE_MS, add, age, arrange, category, change, fill, filingState, find, handoffPlace, handoffSpec, inGit, knownRepos, load, newId, prune, remove, repoOf, taskType } from './todo.mjs'
 
 const now = new Date(2026, 10, 7, 15, 0).getTime()
 const item = (id, cat, root, created, done = null) => ({ id, cat, root, repo: root.split('/').pop(), title: id, created, done })
@@ -132,6 +132,24 @@ test('fill turns a filing item into a real one, once', () => {
   assert.equal(fill(placeholder.id, { title: 'again' }, file), undefined)
   assert.equal(fill(plain.id, { title: 'not filing' }, file), undefined)
   assert.equal(fill('missing', { title: 'x' }, file), undefined)
+})
+
+test('the filer knows the listed repos and the git repos beside them', () => {
+  const tree = { '/p': ['dot', 'jstack', 'notes'], '/w': ['solo'] }
+  const gits = new Set(['/p/dot/.git', '/p/jstack/.git', '/w/solo/.git'])
+  const opts = { exists: path => gits.has(path), list: dir => tree[dir] ?? [] }
+  const items = [
+    { repo: 'dot', root: '/p/dot' },
+    { repo: 'dot', root: '/p/dot' },
+    { repo: 'none', root: '/p/notes' },
+    { repo: 'solo', root: '/w/solo' },
+  ]
+  assert.deepEqual(knownRepos(items, opts), [
+    { repo: 'dot', root: '/p/dot' },
+    { repo: 'jstack', root: '/p/jstack' },
+    { repo: 'solo', root: '/w/solo' },
+  ])
+  assert.deepEqual(knownRepos([], opts), [])
 })
 
 test('a hand-off starts one task agent per item, in its repo', () => {

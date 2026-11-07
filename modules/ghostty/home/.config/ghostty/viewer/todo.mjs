@@ -4,7 +4,7 @@
 // viewer never reads half a write.
 
 import { execFile } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, renameSync, rmdirSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmdirSync, statSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 
@@ -234,6 +234,25 @@ export async function repoOf(dir) {
   const root = basename(common) === '.git' ? dirname(common) : top
   const branch = (await git(['branch', '--show-current'], top)) || (await git(['rev-parse', '--short', 'HEAD'], top))
   return { root, repo: basename(root), worktree: top === root ? '' : top, branch }
+}
+
+// The repos the filer may put an item in when the message names one: those
+// already on the list, and the git repos beside them (a projects folder).
+// A message typed in one tab is often about another repo, and without the
+// paths Claude can only file it where the tab is.
+export function knownRepos(items, { exists = existsSync, list = dir => readdirSync(dir) } = {}) {
+  const roots = new Set(items.filter(i => i.repo !== 'none' && i.root).map(i => i.root))
+  for (const parent of new Set([...roots].map(r => dirname(r)))) {
+    let names = []
+    try {
+      names = list(parent)
+    } catch {}
+    for (const name of names) roots.add(join(parent, name))
+  }
+  return [...roots]
+    .filter(root => exists(join(root, '.git')))
+    .sort()
+    .map(root => ({ repo: basename(root), root }))
 }
 
 // How the viewer hands an item to an agent, as the hub's New agent form
