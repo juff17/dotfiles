@@ -96,12 +96,18 @@ PY = {
 SHELL = {
     "line": [{"t": "#", "boundary": True}],
     "block": [],
-    "strings": [{"open": "'", "close": "'", "raw": True}, {"open": '"', "close": '"', "esc": "\\"}],
+    # Outside quotes a backslash escapes the next character (don\'t, \#), and
+    # $'...' is a string with escapes ($'it\'s').
+    "strings": [{"open": "$'", "close": "'", "esc": "\\"}, {"open": "\\", "width": 2},
+                {"open": "'", "close": "'", "raw": True}, {"open": '"', "close": '"', "esc": "\\"}],
 }
+# A YAML quote opens a string only where a value starts; mid-word (It's) it is
+# plain text.
 YAML = {
     "line": [{"t": "#", "boundary": True}],
     "block": [],
-    "strings": [{"open": "'", "close": "'", "raw": True}, {"open": '"', "close": '"', "esc": "\\"}],
+    "strings": [{"open": "'", "close": "'", "raw": True, "valueStart": True},
+                {"open": '"', "close": '"', "esc": "\\", "valueStart": True}],
 }
 HCL = {
     "line": [{"t": "#"}, {"t": "//"}],
@@ -368,6 +374,10 @@ def _read_string(text, i, strings, n):
     for s in strings:
         if not text.startswith(s["open"], i):
             continue
+        if s.get("width"):
+            return {"emit": False, "raw": text[i:i + s["width"]], "kind": "doc", "start": i, "next": i + s["width"]}
+        if s.get("valueStart") and not _yaml_value_start(text, i):
+            continue
         j = i + len(s["open"])
         while j < n:
             if not s.get("raw") and s.get("esc") and text[j] == s["esc"]:
@@ -381,6 +391,29 @@ def _read_string(text, i, strings, n):
             j += 1
         return {"emit": bool(s.get("emitAsDoc")), "raw": text[i:j], "kind": "doc", "start": i, "next": j}
     return None
+
+
+def _yaml_value_start(text, i):
+    """True when a quote at i starts a YAML value: at the start of a line, after
+    `key: `, `- ` or `? `, or after `[`, `{` or `,` in a flow collection. A
+    `!tag` or `&anchor` before the value is skipped."""
+    j = i
+    while True:
+        k = j
+        while k > 0 and text[k - 1] in " \t":
+            k -= 1
+        if k == 0 or text[k - 1] == "\n" or text[k - 1] in "[{,":
+            return True
+        if text[k - 1] in ":-?" and k < j:
+            return True
+        # The word before: a tag or anchor is skipped, anything else is plain text.
+        w = k
+        while w > 0 and not text[w - 1].isspace():
+            w -= 1
+        if k < j and text[w] in "!&":
+            j = w
+            continue
+        return False
 
 
 def _finalize_comments(raw_comments, text, lang):

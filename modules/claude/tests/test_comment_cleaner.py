@@ -92,12 +92,20 @@ class Tokenizer(unittest.TestCase):
             self.assertEqual(comments("a { background: url(http://x.com/a.png); } // c\n", "a" + ext),
                              ["// c"], ext)
 
-    @unittest.expectedFailure
     def test_yaml_apostrophe_in_a_plain_value_does_not_hide_the_comment(self):
-        # Suspected bug: in YAML (and the shared shell rules) a lone `'` inside a
-        # plain value opens a "string" that runs to the end of the line, so a
-        # trailing comment such as `title: It's fine  # note` is never seen.
+        # A YAML quote opens a string only where a value starts, so a mid-word
+        # apostrophe must not swallow the rest of the line.
         self.assertEqual(comments("title: It's fine  # note\n", "a.yaml"), ["# note"])
+        self.assertEqual(comments("- don't  # a\nk: [x, it's]  # b\n", "a.yaml"), ["# a", "# b"])
+
+    def test_yaml_quoted_values_still_hide_a_hash(self):
+        src = "a: 'x # no'  # c1\nb: \"y # no\"  # c2\n- 'z # no'\nc: !tag 'w # no'\nd: &id 'v # no'\ne: ['u # no', \"t # no\"]\n"
+        self.assertEqual(comments(src, "a.yaml"), ["# c1", "# c2"])
+
+    def test_shell_escaped_quotes_do_not_hide_the_comment(self):
+        for line in ("echo don\\'t  # c", "echo 'it'\\''s'  # c", "echo $'it\\'s'  # c", 'echo "It\'s"  # c'):
+            self.assertEqual(comments(line + "\n", "a.sh"), ["# c"], line)
+        self.assertEqual(comments("echo \\# not a comment\n", "a.sh"), [])
 
     def test_an_unterminated_block_runs_to_the_end_of_the_file(self):
         self.assertEqual(comments("x();\n/* open\nmore", "a.js"), ["/* open\nmore"])
