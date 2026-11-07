@@ -3,6 +3,7 @@ alone, and how it cleans up. Every run uses a throwaway copy of setup and lib
 beside a made-up tool tree, with HOME pointed at a temp dir, so neither the real
 home nor the real repo's .installed is ever touched."""
 
+import json
 import os
 import shutil
 import subprocess
@@ -41,7 +42,7 @@ class Setup(unittest.TestCase):
         self.home.mkdir()
         (self.repo / "lib").mkdir(parents=True)
         shutil.copy2(REPO / "setup", self.repo / "setup")
-        for lib in ("link.sh", "targets.sh"):
+        for lib in ("link.sh", "targets.sh", "extras.sh"):
             shutil.copy2(REPO / "lib" / lib, self.repo / "lib" / lib)
         for category, types in TOOLS.items():
             for type_, files in types.items():
@@ -373,6 +374,140 @@ class OldRecord(Setup):
         self.assertIn(f"({self.claude}/settings.json exists and was not installed by jstack)", err)
         self.setup("--uninstall")
         self.assertEqual((self.claude / "settings.json").read_text(), "user settings")
+
+
+FAKE_CLAUDE = """#!/bin/sh
+echo "claude $*" >> "$(dirname "$0")/calls.log"
+case "$*" in
+  "plugin marketplace list --json") cat "$(dirname "$0")/marketplaces.json" ;;
+  "plugin list --json") cat "$(dirname "$0")/plugins.json" ;;
+  *broken*) exit 1 ;;
+esac
+"""
+
+# Writes the marker real npm ci leaves, so a re-run can tell it is done.
+FAKE_NPM = """#!/bin/sh
+echo "npm $* in $(basename "$PWD") skip=$PUPPETEER_SKIP_DOWNLOAD" >> "$(dirname "$0")/calls.log"
+mkdir -p node_modules && echo done > node_modules/.package-lock.json
+"""
+
+
+class Extras(Setup):
+    """Plugins, marketplaces and mod packages, with fake claude and npm CLIs."""
+
+    def setUp(self):
+        super().setUp()
+        self.bin = self.root / "bin"
+        self.bin.mkdir()
+        for name, body in (("claude", FAKE_CLAUDE), ("npm", FAKE_NPM)):
+            (self.bin / name).write_text(body)
+            (self.bin / name).chmod(0o755)
+        self.have(marketplaces=["official"], plugins=["old@official"])
+        self.src("config", "alpha", "settings.json").write_text(json.dumps({
+            "extraKnownMarketplaces": {
+                "official": {"source": {"source": "github", "repo": "org/official"}},
+                "extra": {"source": {"source": "github", "repo": "me/extra"}},
+            },
+            "enabledPlugins": {"old@official": True, "new@extra": True, "off@official": False},
+        }))
+        (self.src("mods", "beta", "pane") / "package-lock.json").write_text("{}")
+
+    def have(self, marketplaces, plugins):
+        (self.bin / "marketplaces.json").write_text(json.dumps([{"name": m} for m in marketplaces]))
+        (self.bin / "plugins.json").write_text(json.dumps(
+            [{"id": p, "scope": "user"} for p in plugins] + [{"id": "project-only@x", "scope": "project"}]))
+
+    def run_setup(self, *args, **kw):
+        return self.setup(*args, path=f"{self.bin}:{SYSTEM_PATH}", **kw)
+
+    def calls(self, prefix=""):
+        log = self.bin / "calls.log"
+        lines = log.read_text().splitlines() if log.exists() else []
+        return [line for line in lines if line.startswith(prefix) and "--json" not in line]
+
+    def test_installs_only_what_is_missing(self):
+        _, out, err = self.run_setup()
+        self.assertEqual(self.calls(), [
+            "claude plugin marketplace add me/extra",
+            "claude plugin install new@extra --scope user",
+            "npm ci --no-audit --no-fund in pane skip=1",
+        ])
+        self.assertIn("added  marketplace/extra", out)
+        self.assertIn("installed  plugin/new@extra", out)
+        self.assertEqual(err, "")
+
+    def test_a_plugin_installed_only_for_a_project_is_installed_for_the_user(self):
+        settings = json.loads(self.src("config", "alpha", "settings.json").read_text())
+        settings["enabledPlugins"] = {"project-only@x": True}
+        self.src("config", "alpha", "settings.json").write_text(json.dumps(settings))
+        self.run_setup()
+        self.assertIn("claude plugin install project-only@x --scope user", self.calls())
+
+    def test_a_rerun_installs_nothing(self):
+        self.run_setup()
+        self.have(marketplaces=["official", "extra"], plugins=["old@official", "new@extra"])
+        (self.bin / "calls.log").unlink()
+        _, out, _ = self.run_setup()
+        self.assertEqual(self.calls(), [])
+        self.assertTrue(out.rstrip().endswith("Done."))
+
+    def test_a_newer_lockfile_runs_npm_again(self):
+        self.run_setup()
+        lock = self.src("mods", "beta", "pane") / "package-lock.json"
+        later = os.path.getmtime(self.src("mods", "beta", "pane") / "node_modules/.package-lock.json") + 10
+        os.utime(lock, (later, later))
+        self.run_setup()
+        self.assertEqual(len(self.calls("npm")), 2)
+
+    def test_a_mod_without_a_lockfile_is_left_alone(self):
+        (self.src("mods", "beta", "pane") / "package-lock.json").unlink()
+        self.run_setup()
+        self.assertEqual(self.calls("npm"), [])
+
+    def test_dry_run_and_uninstall_install_nothing(self):
+        _, out, _ = self.run_setup("--dry-run")
+        self.assertIn("would add  marketplace/extra", out)
+        self.assertIn("would install  plugin/new@extra", out)
+        self.assertIn("would npm ci  mod/pane", out)
+        self.run_setup("--uninstall")
+        self.assertEqual(self.calls(), [])
+
+    def test_a_failed_install_is_reported_and_the_rest_continue(self):
+        settings = json.loads(self.src("config", "alpha", "settings.json").read_text())
+        settings["enabledPlugins"] = {"broken@official": True, "new@extra": True}
+        self.src("config", "alpha", "settings.json").write_text(json.dumps(settings))
+        code, out, err = self.run_setup()
+        self.assertEqual(code, 0)
+        self.assertIn("failed  plugin/broken@official  (claude plugin install broken@official)", err)
+        self.assertIn("installed  plugin/new@extra", out)
+        self.assertIn("1 plugin or package install(s) failed", err)
+        self.assertNotIn("Done.", out)
+
+    def test_missing_clis_are_reported_and_links_still_made(self):
+        (self.bin / "claude").unlink()
+        (self.bin / "npm").unlink()
+        _, _, err = self.run_setup()
+        self.assertIn("failed  plugins  (the claude CLI is not on PATH)", err)
+        # A system-wide npm, if there is one, fails on the fake lockfile instead.
+        self.assertIn("failed  mod/pane  (", err)
+        self.assertLinksTo(self.claude / "settings.json", self.src("config", "alpha", "settings.json"))
+
+    def test_other_hosts_get_no_extras(self):
+        self.run_setup(host="codex")
+        self.assertEqual(self.calls(), [])
+
+    def test_other_categories_get_no_extras(self):
+        self.run_setup("--category", "alpha")
+        self.assertEqual(self.calls("npm"), [])
+        (self.bin / "calls.log").unlink()
+        self.run_setup("--category", "beta")
+        self.assertEqual(self.calls("claude"), [])
+
+    def test_items_in_the_way_get_no_extras(self):
+        (self.claude / "mods/pane").mkdir(parents=True)
+        (self.claude / "mods/pane/package-lock.json").write_text("{}")
+        self.run_setup()
+        self.assertEqual(self.calls("npm"), [])
 
 
 class Hosts(Setup):
