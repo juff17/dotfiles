@@ -1,0 +1,18 @@
+{
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "juff17"
+            }
+        ],
+        "Category": "System Information",
+        "Description": "Claude agents that need you, from the agent hub: counts in the panel, an inbox to act from",
+        "Icon": "dialog-messages",
+        "Id": "dev.dotfiles.agents",
+        "License": "MIT",
+        "Name": "Agents",
+        "Version": "1.0"
+    },
+    "KPackageStructure": "Plasma/Applet",
+    "X-Plasma-API-Minimum-Version": "6.0"
+}

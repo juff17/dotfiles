@@ -25,13 +25,21 @@ The hub is the window's second view (`Ctrl+Shift+A` or the rail's **hub**). It s
 
 - **Lanes** for task agents: **Needs you** (a permission prompt, a question, or a monitor that raised something), **Working** (with the command running now and for how long), **Done** (finished, and you haven't looked yet) and **Idle**. A lane that fills up keeps going: Needs you scrolls with a "▾ more" cue and never shrinks a card, Working drops to cards that show only the command, Done keeps its newest two as cards and folds the rest to a line each, and Idle is a line each. An empty lane says so (*Nothing needs you*, *Nothing working*, …).
 - **Monitors** in a tray below, which keeps room for five even when fewer run and grows to about a third of the screen when more do: each Monitor a session armed (pr-babysit's `watch_pr.py`, logger's `watch_logs.py`, or any other), with what it watches, its latest event and when it came. A monitor is *watching*, *needs action* (its last event was a failed, manual, stuck or conflicted job, an error or a crash, and you haven't seen it), *stale* (its command no longer runs) or *ended* (expired or stopped; it leaves after half an hour). A session that's watching something stays in the strip; it shows in a lane only when it needs you.
-- **Open a session:** Enter, or click a card twice, opens the agent's live session beside a list of the rest, and your keys go to it. A tab agent opens through its own grouped tmux session, so the workspace stays on the tab it was on; a background agent opens with `claude attach`. `Ctrl+Shift+B` closes it and goes back to the board. Switching tabs in it, from its tab bar or with the tab keys, switches only what that pane shows, and the list follows to the agent in the new tab.
+- **Open a session:** Enter opens the agent's live session beside a list of the rest, and your keys go to it. A tab agent opens through its own grouped tmux session, so the workspace stays on the tab it was on; a background agent opens with `claude attach`. `Ctrl+Shift+B` closes it and goes back to the board. Switching tabs in it, from its tab bar or with the tab keys, switches only what that pane shows, and the list follows to the agent in the new tab.
 - **New agent** (`n`, or **+ new**): a task with a first prompt, run in a new tab, in a worktree and a new tab (`claude -w`), or in the background; a PR babysitter (`/pr-babysit <link>`, in the background); or a log watcher (`/logger watch <source>`, in the background). Folder, model, permission mode and effort are fields of their own; recent folders are one keypress away.
 - A done agent counts as seen once you open it, mark it (`e`), or its tab is the one in front.
 
 The hub needs no Claude Code hooks. It reads what Claude already writes: each running session's `~/.claude/sessions/<pid>.json` (its status, what it's waiting for, its tmux pane) and its transcript (the prompt, the tool running, the last reply, the context used, and every Monitor with the events it delivered).
 
 The theme is Catppuccin Mocha.
+
+## Agents widget
+
+A Plasma panel widget puts the hub's agents beside the clock, in place of desktop pop-ups:
+
+- **In the panel:** a glyph and count per kind: ▲ needs you, ✗ broke (a monitor saw a failed job, an error, a crash or a conflict), ✻ working, ◉ watching (◌ gone quiet) and ✓ done; ○ when nothing runs. A new ▲ or ✗ fills it with its colour for two seconds, and a ring stays around it until you open the inbox.
+- **The inbox** (click it, or the shortcut you give it): every item in those sections, needs-you first, each with its buttons. **Allow** and **Deny** answer a permission prompt, only while it's on screen, as in the hub; **Go** switches to the agent's tab and brings Ghostty to the front, or opens a background agent in the hub; **Open hub ↗** shows the hub. Keys: `j` / `k` move, `↵` goes, `1` / `2` press the first two buttons, `x` dismisses an item until it changes, `esc` closes. Done items fold into one line until shown, and leave once you open them.
+- It reads and acts through `ghostty-hub tray` (`hub/tray.mjs`), the same agents the hub shows, so handling an item in one clears it in the other. It keeps agentd running while it's in the panel.
 
 ## Install
 
@@ -106,12 +114,14 @@ Settings you can change through the environment:
 - `GHOSTTY_RAIL` (default 1): `0` leaves out the rail and the hub.
 - `GHOSTTY_RAIL_COLS` (default 6): the rail's width.
 
+The Agents widget links into `~/.local/share/plasma/plasmoids/dev.dotfiles.agents/` with the rest of the module. Add it once: right-click the panel, **Add or Manage Widgets**, drag **Agents** next to the clock. Its shortcut goes in its settings (right-click it, **Configure Agents…**, **Keyboard Shortcuts**); the inbox's header says `Meta+A`. Plasma loads a changed widget when it restarts (`plasmashell --replace &`, or log out and in).
+
 ## Tests
 
-`dv`'s zoom and pan math and the agent hub's model (reading transcripts and monitor events, sorting agents into lanes, fitting a full lane, the commands a new agent runs) have tests. They use only Node's built-in test runner:
+`dv`'s zoom and pan math, the agent hub's model (reading transcripts and monitor events, sorting agents into lanes, fitting a full lane, the commands a new agent runs) and the Agents widget's items (sections, what's new, dismissing) have tests. They use only Node's built-in test runner:
 
 ```bash
-node --test modules/ghostty/home/.config/ghostty/viewer/view.test.mjs modules/ghostty/home/.config/ghostty/hub/hub.test.mjs
+node --test modules/ghostty/home/.config/ghostty/viewer/view.test.mjs modules/ghostty/home/.config/ghostty/hub/hub.test.mjs modules/ghostty/home/.config/ghostty/hub/tray.test.mjs
 ```
 
 ## Limits
@@ -122,7 +132,8 @@ node --test modules/ghostty/home/.config/ghostty/viewer/view.test.mjs modules/gh
 - **When a window opens**, the viewer holds focus for about a second while yazi starts, then hands it back. yazi asks Ghostty about the terminal through tmux, and tmux gives the answers to whichever pane has focus; in Claude's pane one of them reads as Alt+P and opens the model picker. Keys typed in that second go to yazi. Starting Claude never moves focus, since yazi is already running.
 - **Closing the last tab** closes the window.
 - **Ghostty tabs:** tabs made from Ghostty's own tab button don't get the layout.
-- **Answering from the hub** (`a` / `d`) works for tab agents, and only while the prompt is on screen. A background agent's prompt is answered in its session (Enter).
+- **Answering from the hub** (`a` / `d`) works for tab agents, and only while the prompt is on screen. A background agent's prompt is answered in its session (Enter). The same goes for Allow and Deny in the Agents widget.
+- **Go in the Agents widget** brings the first Ghostty window to the front. With several layout windows open, the tab still switches in the right one, but it may be another window that comes forward.
 - **Sessions outside the layout** (Claude in another terminal or another tmux) show on the hub, but can't be opened from it.
 - **An open session resizes its tab** to the hub's pane, the way two tmux clients on one window do; it goes back when you're in the workspace again.
 - **`shift`+drag** selects across the whole window, btop and viewer included, since Ghostty sees one split.

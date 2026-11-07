@@ -12,6 +12,7 @@
 //   tray.mjs snapshot           print the items once; keeps agentd running
 //   tray.mjs seen               mark every current item as seen
 //   tray.mjs act <action> <id>  allow, deny, go or dismiss; prints the result
+//   tray.mjs hub                show the hub; prints the result
 //   tray.mjs watch              print a snapshot on every change, for testing
 
 import { execFile, spawn } from 'node:child_process'
@@ -146,13 +147,7 @@ async function go(a) {
     return { ok: true, raise: true, message: `${a.title}, tab ${a.pane.tab}` }
   }
   if (a.jobId) {
-    const sessions = (await run(['tmux', ...LAYOUT, 'list-sessions', '-F', '#{session_attached} #{session_name}'])).out
-    const layout = sessions
-      .split('\n')
-      .filter(Boolean)
-      .sort()
-      .reverse()
-      .map(l => l.split(' ')[1])[0]
+    const layout = await layoutSession()
     if (!layout) return { ok: false, message: 'No Ghostty layout window is open to show it in' }
     const hub = (await run(['tmux', ...LAYOUT, 'show', '-v', '-t', layout, '@hub'])).out.trim()
     if (!hub) return { ok: false, message: 'The hub is not running' }
@@ -162,6 +157,25 @@ async function go(a) {
     return { ok: true, raise: true, message: `${a.title}, in the hub` }
   }
   return { ok: false, message: `${a.title} runs outside the layout, so there's nowhere to take you` }
+}
+
+// The layout session to show things in: one a Ghostty window is attached
+// to, else any.
+async function layoutSession() {
+  const sessions = (await run(['tmux', ...LAYOUT, 'list-sessions', '-F', '#{session_attached} #{session_name}'])).out
+  return sessions
+    .split('\n')
+    .filter(Boolean)
+    .sort()
+    .reverse()
+    .map(l => l.split(' ')[1])[0]
+}
+
+export async function showHub() {
+  const layout = await layoutSession()
+  if (!layout) return { ok: false, message: 'No Ghostty layout window is open' }
+  const shown = await run(['tmux', ...LAYOUT, 'select-window', '-t', `${layout}:hub`])
+  return shown.ok ? { ok: true, raise: true, message: 'The hub' } : { ok: false, message: `Couldn't show the hub: ${shown.err}` }
 }
 
 export async function act(action, id, agents = readState()?.agents ?? []) {
@@ -200,10 +214,12 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
     writeFileSync(SEEN, JSON.stringify(ids))
   } else if (cmd === 'act') {
     act(process.argv[3], process.argv[4]).then(r => process.stdout.write(`${JSON.stringify(r)}\n`))
+  } else if (cmd === 'hub') {
+    showHub().then(r => process.stdout.write(`${JSON.stringify(r)}\n`))
   } else if (cmd === 'watch') {
     follow(state => process.stdout.write(`${JSON.stringify(snapshot(state), null, 2)}\n`))
   } else {
-    process.stderr.write('tray.mjs snapshot | seen | act <allow|deny|go|dismiss> <id> | watch\n')
+    process.stderr.write('tray.mjs snapshot | seen | act <allow|deny|go|dismiss> <id> | hub | watch\n')
     process.exit(1)
   }
 }
