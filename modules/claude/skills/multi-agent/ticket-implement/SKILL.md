@@ -29,9 +29,12 @@ rule below explicitly says to.
   should return only the decision/summary needed — not raw dumps.
 
 ## Code quality rules
-Apply these to code you add or change, including tests. Where the repo already has a
-clear convention that differs, the repo wins.
+Apply these to code you add or change, including tests.
 
+- **Match the repo's existing style first:** formatting, naming, file layout, error and
+  logging patterns, and test structure, as found in Phase 3. New code should look like the
+  code around it. Where the repo has a clear convention that differs from a rule below, the
+  repo wins.
 - **Comments:** only where the code can't explain itself. Explain *why* (intent, gotchas),
   not what. No notes about the ticket, the task, or what was just fixed.
 - **Modularization:** keep functions and files focused. Pull logic out when a function gets
