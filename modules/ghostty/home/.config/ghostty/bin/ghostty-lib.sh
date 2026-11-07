@@ -7,8 +7,9 @@
 # global keybinds act on every split of every window.
 
 GHOSTTY_CONF="$(dirname "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")")"
-LAYOUT_SOCKET=ghostty-layout
-TABS_SOCKET=ghostty
+# The sockets can be moved for tests, which then never touch the real servers.
+LAYOUT_SOCKET=${GHOSTTY_LAYOUT_SOCKET:-ghostty-layout}
+TABS_SOCKET=${AGENT_HUB_TABS_SOCKET:-ghostty}
 
 layout() {
   tmux -L "$LAYOUT_SOCKET" -f "$GHOSTTY_CONF/layout.conf" "$@"
@@ -56,6 +57,33 @@ open_viewer() {
   done
   sleep 1
   layout select-pane -t "$tabs"
+}
+
+# Adds the agent hub to window <win>'s outer session: the rail down the left
+# of the workspace, and a second tmux window, hub, with its own rail and the
+# hub itself. The rail's work and hub buttons, and Ctrl+Shift+A, switch
+# between the two (layout.conf). GHOSTTY_RAIL=0 leaves it all out.
+add_hub() {
+  local win=$1 session="layout-$1" cols=${GHOSTTY_RAIL_COLS:-6} tabs top rail hub hub_rail
+  [[ ${GHOSTTY_RAIL:-1} == 0 ]] && return 0
+  [[ -n $(layout show -t "$session" -v @hub 2>/dev/null) ]] && return 0
+  tabs=$(layout show -t "$session" -v @tabs 2>/dev/null) || return
+  local bin="$GHOSTTY_CONF/bin/ghostty-hub"
+  layout rename-window -t "$tabs" work
+  rail=$(layout split-window -d -h -b -f -l "$cols" -t "$tabs" -P -F '#{pane_id}' \
+    "$bin rail $win work") || return
+  layout set -p -t "$rail" @rail 1
+  hub=$(layout new-window -d -t "$session:" -n hub -P -F '#{pane_id}' "$bin hub $win") || return
+  layout set -p -t "$hub" @hub 1
+  hub_rail=$(layout split-window -d -h -b -f -l "$cols" -t "$hub" -P -F '#{pane_id}' \
+    "$bin rail $win hub") || return
+  layout set -p -t "$hub_rail" @rail 1
+  layout set -t "$session" @hub "$hub"
+  # tmux shares a resize out between the panes; this puts btop's height and
+  # the rails' width back after one.
+  top=$(layout list-panes -s -t "$session" -F '#{pane_id} #{@top}' | awk '$2 == 1 { print $1; exit }')
+  layout set-hook -t "$session" window-resized \
+    "${top:+resize-pane -t $top -y ${GHOSTTY_TOP_ROWS:-10} ; }resize-pane -t $rail -x $cols ; resize-pane -t $hub_rail -x $cols"
 }
 
 windows() {

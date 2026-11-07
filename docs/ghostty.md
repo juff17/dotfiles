@@ -3,12 +3,13 @@
 My [Ghostty](https://ghostty.org) configuration, in [`modules/ghostty/home/.config/ghostty/`](../modules/ghostty/home/.config/ghostty/). Every new window opens as a layout:
 
 ```
-┌──────────────────────────────────────────────┐
-│ btop (CPU only)                               │
-├──────────────┬───────────────────────────────┤
-│ viewer       │ [dir] 1:zsh 2:claude* 3:gad!  │ ← tmux tabs
-│ files·diff·dv│ claude / shell                │
-└──────────────┴───────────────────────────────┘
+┌────┬─────────────────────────────────────────┐
+│work│ btop (CPU only)                          │
+│hub●├──────────────┬──────────────────────────┤
+│▲ 2 │ viewer       │ [dir] 1:zsh 2:claude ✻   │ ← tmux tabs
+│✻ 3 │ files·diff·dv│ claude / shell           │
+│+new│              │                          │
+└────┴──────────────┴──────────────────────────┘
 ```
 
 - **Top:** btop, showing only its CPU box. If btop isn't installed, htop runs instead.
@@ -16,6 +17,19 @@ My [Ghostty](https://ghostty.org) configuration, in [`modules/ghostty/home/.conf
 - **Left:** opens with the window, in Files (the yazi file manager, which previews documents). Each Claude start or resume in the window points Files at that Claude's folder: straight away if Files is showing, otherwise the next time you switch to it. Tab switches it to Diagrams, the diagram viewer (`dv`), which shows the diagrams Claude draws. A header row shows both modes; click one to switch.
 - **Diff:** a mode of the left pane, beside Files. It shows the uncommitted changes of the repository your active tmux tab is in, against the last commit (staged, unstaged and new files): a summary of what changed, a row per file with its added and removed lines, and one file open in place under its row with its diff. It checks git every second, so it empties once you commit.
 - **Ping:** when Claude finishes or asks for permission in a tab you're not on, that tab turns red and a desktop notification names the tab and its project. The notification comes from jstack's `agent-notify.sh`.
+- **Rail:** a strip down the far left. **work** and **hub** switch the window between this workspace and the agent hub, the counts under them are the agents that need you (▲), are working (✻), are done (✓) and are idle (○), and **+ new** starts an agent. The hub button gets an orange dot while anything needs you. A tab running Claude carries the same glyph in the tab bar.
+
+## Agent hub
+
+The hub is the window's second view (`Ctrl+Shift+A` or the rail's **hub**). It shows every Claude session on the machine, from every Ghostty window and the background (`claude --bg`):
+
+- **Lanes** for task agents: **Needs you** (a permission prompt, a question, or a monitor that raised something), **Working** (with the command running now and for how long), **Done** (finished, and you haven't looked yet) and **Idle**. A lane that fills up keeps going: Needs you scrolls with a "▾ more" cue and never shrinks a card, Working drops to cards that show only the command, Done keeps its newest two as cards and folds the rest to a line each, and Idle is a line each. An empty lane says so (*Nothing needs you*, *Nothing working*, …).
+- **Monitors** in a tray below, which keeps room for five even when fewer run and grows to about a third of the screen when more do: each Monitor a session armed (pr-babysit's `watch_pr.py`, logger's `watch_logs.py`, or any other), with what it watches, its latest event and when it came. A monitor is *watching*, *needs action* (its last event was a failed, manual, stuck or conflicted job, an error or a crash, and you haven't seen it), *stale* (its command no longer runs) or *ended* (expired or stopped; it leaves after half an hour). A session that's watching something stays in the strip; it shows in a lane only when it needs you.
+- **Open a session:** Enter, or click a card twice, opens the agent's live session beside a list of the rest, and your keys go to it. A tab agent opens through its own grouped tmux session, so the workspace stays on the tab it was on; a background agent opens with `claude attach`. `Ctrl+Shift+B` closes it and goes back to the board. Switching tabs in it, from its tab bar or with the tab keys, switches only what that pane shows, and the list follows to the agent in the new tab.
+- **New agent** (`n`, or **+ new**): a task with a first prompt, run in a new tab, in a worktree and a new tab (`claude -w`), or in the background; a PR babysitter (`/pr-babysit <link>`, in the background); or a log watcher (`/logger watch <source>`, in the background). Folder, model, permission mode and effort are fields of their own; recent folders are one keypress away.
+- A done agent counts as seen once you open it, mark it (`e`), or its tab is the one in front.
+
+The hub needs no Claude Code hooks. It reads what Claude already writes: each running session's `~/.claude/sessions/<pid>.json` (its status, what it's waiting for, its tmux pane) and its transcript (the prompt, the tool running, the last reply, the context used, and every Monitor with the events it delivered).
 
 The theme is Catppuccin Mocha.
 
@@ -50,6 +64,17 @@ Diagrams come from jstack's diagram-pane mod, which renders each one to a PNG an
 | `q` in yazi | Switch to Diagrams |
 | `q` in Diff | Switch to Files |
 | `ctrl+shift+n` (default) | New window with the layout |
+| `ctrl+shift+a`, or **work** / **hub** on the rail | Switch between the workspace and the agent hub |
+| click **+ new** on the rail, or `n` in the hub | New agent |
+| `h` / `l`, `j` / `k` in the hub | Move between lanes and agents (`tab`: the monitors strip) |
+| `enter` in the hub, or click a selected card | Open that agent's live session beside the list |
+| `ctrl+shift+b` (or `ctrl+]` in the session) | Close the session the hub opened and go back to the board; in the workspace, go to the board |
+| `a` / `d` in the hub | Allow or deny the selected permission prompt |
+| `e` / `E` in the hub | Mark the selected done agent, or all of them, as seen |
+| `o` in the hub | Go to the selected agent's tab |
+| `x` in the hub | Close a done or idle agent's tab (asks first) |
+| `/` in the hub | Filter agents by name, repo or command |
+| `ctrl+s`, `esc` in New agent | Start, cancel (`↑`/`↓` fields, `←`/`→` choices, `tab` completes the folder) |
 | `shift`+drag | Select text with Ghostty instead of tmux |
 | click a pane | Focus btop, the viewer or the tabs |
 
@@ -68,20 +93,24 @@ The scripts in `bin/`:
 - **Keeping btop's height:** tmux shares a window resize out between the panes, so a `window-resized` hook puts btop back to `GHOSTTY_TOP_ROWS` after one. That includes the resize on attach, when KDE maximizes a new window while its layout is being built.
 - **`ghostty-claude-start`** sends the viewer's yazi to Claude's folder with `ya emit-to` (yazi runs with a client id per window), and leaves the folder in a file that Files reads when it next starts. It never moves focus. If you closed the viewer, it opens a new one. It also saves where Node.js is, which Diff and Diagrams need and Ghostty's own PATH lacks. The viewer gets `DV_TABS` so Diagrams and Diff know which tab session to follow; `tmux.conf` touches `$XDG_RUNTIME_DIR/ghostty-layout/tab-changed` when the active tab changes, so both switch with it.
 - **`ghostty-viewer`** runs the left pane's three modes in turn, starting with `yazi`: `yazi` (Files), `viewer/diff-view.mjs` (Diff) and `dv` (`viewer/diagram-view.mjs`, Diagrams). Diff and Diagrams exit with the code of the mode to show next (`GV_*_EXIT`, `DV_TAB_EXIT`, `DV_DIFF_EXIT`). `yazi` can't choose an exit code, so it says where to go by whether it writes its `--cwd-file`: Tab and the Diff tab do, `q` and the Diagrams tab don't. `yazi/init.lua` and `yazi/theme.toml` lay yazi out like the design: the mode header, a file list beside a wide preview, and a short status bar. `dv` draws images through tmux with kitty Unicode placeholders, so panning moves in whole cells.
-- **Tab keys:** Ghostty sends them as escape codes, and the outer tmux runs the matching command in the tab session, whichever pane has focus.
+- **Tab keys:** Ghostty sends them as escape codes, and the outer tmux runs the matching command in the tab session, whichever pane has focus; in a session the hub opened, they act on that pane's own session (`peek-<pane number>`) instead. `Ctrl+Shift+A` is one of them too, and switches the outer session's window.
+- **The hub's windows:** `add_hub` in `ghostty-lib.sh` gives each outer session a second window, `hub`, and a rail (`hub/rail.mjs`) down the left of both. Clicks on a rail pass through to it without selecting its pane, and it never keeps focus, like btop. It puts its own width back after a resize. `ghostty-hub setup` adds the rail and the hub to a window opened before they existed.
+- **`hub/agentd.mjs`** is the one process that watches the sessions, so every rail and hub together cost one. Once a second it reads the session files, the new lines of each transcript and the tab server's panes, writes `$XDG_RUNTIME_DIR/agent-hub/state.json`, and sets each Claude tab's `@agent` glyph, which `tmux.conf` draws. The hub and the rails start it when it isn't running and register in `clients/`; it exits a little after the last of them. `hub/model.mjs` holds the logic that turns a session into a card, and `hub/hub.mjs` and `hub/rail.mjs` draw.
 
 New windows are told apart from splits you open yourself by their D-Bus window number, recorded in `$XDG_RUNTIME_DIR/ghostty-layout/<ghostty pid>/known`.
 
 Settings you can change through the environment:
 - `GHOSTTY_TOP_ROWS` (default 10): rows for btop.
 - `GHOSTTY_VIEWER_SHARE` (default 40): the viewer's percent of the bottom row.
+- `GHOSTTY_RAIL` (default 1): `0` leaves out the rail and the hub.
+- `GHOSTTY_RAIL_COLS` (default 6): the rail's width.
 
 ## Tests
 
-`dv`'s zoom and pan math has tests. They use only Node's built-in test runner:
+`dv`'s zoom and pan math and the agent hub's model (reading transcripts and monitor events, sorting agents into lanes, fitting a full lane, the commands a new agent runs) have tests. They use only Node's built-in test runner:
 
 ```bash
-node --test modules/ghostty/home/.config/ghostty/viewer/view.test.mjs
+node --test modules/ghostty/home/.config/ghostty/viewer/view.test.mjs modules/ghostty/home/.config/ghostty/hub/hub.test.mjs
 ```
 
 ## Limits
@@ -92,4 +121,7 @@ node --test modules/ghostty/home/.config/ghostty/viewer/view.test.mjs
 - **When a window opens**, the viewer holds focus for about a second while yazi starts, then hands it back. yazi asks Ghostty about the terminal through tmux, and tmux gives the answers to whichever pane has focus; in Claude's pane one of them reads as Alt+P and opens the model picker. Keys typed in that second go to yazi. Starting Claude never moves focus, since yazi is already running.
 - **Closing the last tab** closes the window.
 - **Ghostty tabs:** tabs made from Ghostty's own tab button don't get the layout.
+- **Answering from the hub** (`a` / `d`) works for tab agents, and only while the prompt is on screen. A background agent's prompt is answered in its session (Enter).
+- **Sessions outside the layout** (Claude in another terminal or another tmux) show on the hub, but can't be opened from it.
+- **An open session resizes its tab** to the hub's pane, the way two tmux clients on one window do; it goes back when you're in the workspace again.
 - **`shift`+drag** selects across the whole window, btop and viewer included, since Ghostty sees one split.

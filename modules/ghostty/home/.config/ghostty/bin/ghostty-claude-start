@@ -14,11 +14,15 @@ session=$(tmux display -p '#S' 2>/dev/null)
 win=${session#ghostty-}
 [[ $win =~ ^[0-9]+$ ]] || exit 0
 
-# Diff and Diagrams need Node.js, which Ghostty's own PATH usually lacks, so
-# the viewer reads where it is from here.
+# Diff, Diagrams and the agent hub need Node.js, and the hub needs claude,
+# which Ghostty's own PATH usually lacks, so they read where they are from here.
+cache=${XDG_CACHE_HOME:-$HOME/.cache}/ghostty-layout
 if node=$(command -v node); then
-  cache=${XDG_CACHE_HOME:-$HOME/.cache}/ghostty-layout
   mkdir -p "$cache" && readlink -f "$node" >"$cache/node"
+fi
+# Not resolved: claude's link points at one version, which an update removes.
+if claude=$(command -v claude); then
+  mkdir -p "$cache" && echo "$claude" >"$cache/claude"
 fi
 
 viewer=$(layout list-panes -t "layout-$win" -F '#{pane_id} #{pane_start_command}' 2>/dev/null |
