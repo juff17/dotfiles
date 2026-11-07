@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# Alt+T (layout.conf): shows window <win>'s viewer in Todo mode with focus in
+# it, from the workspace or the hub. When Todo already has focus, it hands
+# focus back to the tabs, so Alt+T twice returns you where you were. With the
+# viewer closed, it opens one straight in Todo.
+#   ghostty-todo-panel <win>
+# The viewer leaves its mode in $XDG_RUNTIME_DIR/ghostty-viewer-<pid>.mode and
+# takes a mode to switch to from .want, after its current mode quits
+# (bin/ghostty-viewer).
+
+source "$(dirname "$(readlink -f "$0")")/ghostty-lib.sh"
+
+win=$1
+[[ $win =~ ^[0-9]+$ ]] || exit 0
+session="layout-$win"
+runtime=${XDG_RUNTIME_DIR:-/tmp}
+
+read -r viewer pid < <(layout list-panes -s -t "$session" -F '#{pane_id} #{pane_pid} #{pane_start_command}' 2>/dev/null |
+  awk '/ghostty-viewer/ { print $1, $2; exit }')
+tabs=$(layout show -t "$session" -v @tabs 2>/dev/null)
+
+if [[ -z $viewer ]]; then
+  layout select-window -t "$session:work" 2>/dev/null
+  dir=$(tmux -L "$TABS_SOCKET" display -p -t "ghostty-$win:" '#{pane_current_path}' 2>/dev/null)
+  open_viewer "$win" "${dir:-$HOME}" todo
+  exit 0
+fi
+
+mode=$(cat "$runtime/ghostty-viewer-$pid.mode" 2>/dev/null)
+read -r window active < <(layout display -p -t "$session" '#{window_name} #{pane_id}')
+if [[ $window == work && $active == "$viewer" && $mode == todo ]]; then
+  [[ -n $tabs ]] && layout select-pane -t "$tabs"
+  exit 0
+fi
+
+layout select-window -t "$session:work" 2>/dev/null
+layout select-pane -t "$viewer"
+if [[ $mode != todo ]]; then
+  echo todo >"$runtime/ghostty-viewer-$pid.want"
+  # The mode running now is the viewer's only child, and the viewer reads
+  # .want once it quits. yazi ignores TERM, so it's told to quit by its
+  # client id; Diff and Diagrams quit on TERM.
+  if [[ $mode == files ]]; then
+    ya=$(command -v ya || command -v yazi.ya) && "$ya" emit-to "$(viewer_id "$win")" quit --no-cwd-file >/dev/null 2>&1
+  else
+    pkill -TERM -P "$pid"
+  fi
+fi
