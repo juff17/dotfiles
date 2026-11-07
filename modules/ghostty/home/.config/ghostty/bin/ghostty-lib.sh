@@ -35,25 +35,20 @@ viewer_dir_file() {
   echo "${XDG_RUNTIME_DIR:-/tmp}/ghostty-layout/viewer-$(viewer_id "$1").dir"
 }
 
-# Opens window <win>'s viewer left of the tab session, in Files at <dir>, or
-# in [mode] with focus kept in it.
+# Opens window <win>'s viewer left of the tab session, in Files at <dir>.
 # yazi asks Ghostty about the terminal through tmux, and tmux hands Ghostty's
 # answers to whichever pane has focus; in a Claude pane one reads as Alt+P
 # (the model picker). So the viewer holds focus while yazi starts. yazi sets
 # allow-passthrough on its pane between its first round of questions, which
 # tmux answers, and its second, which Ghostty answers a moment later.
 open_viewer() {
-  local win=$1 dir=$2 mode=${3:-files} tabs viewer i
+  local win=$1 dir=$2 tabs viewer i
   tabs=$(layout show -t "layout-$win" -v @tabs 2>/dev/null) || return
   # DV_TABS tells Diagrams and Diff whose active tab to follow.
   viewer=$(layout split-window -d -h -b -l "${GHOSTTY_VIEWER_SHARE:-40}%" \
     -t "$tabs" -P -F '#{pane_id}' -c "$dir" \
-    -e "DV_TABS=$TABS_SOCKET:ghostty-$win" -e "VIEWER_ID=$(viewer_id "$win")" -e "GV_MODE=$mode" \
+    -e "DV_TABS=$TABS_SOCKET:ghostty-$win" -e "VIEWER_ID=$(viewer_id "$win")" \
     "$GHOSTTY_CONF/bin/ghostty-viewer" "$dir" 2>/dev/null) || return
-  if [[ $mode != files ]]; then
-    layout select-pane -t "$viewer"
-    return 0
-  fi
   command -v yazi >/dev/null || return 0
   layout select-pane -t "$viewer"
   for ((i = 0; i < 40; i++)); do

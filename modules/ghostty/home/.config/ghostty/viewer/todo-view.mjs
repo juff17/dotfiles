@@ -10,7 +10,8 @@
 // (bin/ghostty-claude-start); without it, dir is the folder.
 // TD_FILES_EXIT, TD_DIFF_EXIT and TD_DIAGRAMS_EXIT are the exit codes that
 // switch the pane to another mode (bin/ghostty-viewer); Tab goes to Diagrams,
-// q to Files.
+// q to Files. TD_POPUP=1 runs it in Alt+T's popup (bin/ghostty-todo-panel)
+// instead: no modes, Alt+T, Esc or q close it, and so does going to a tab.
 
 import { execFile } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, watch } from 'node:fs'
@@ -29,6 +30,7 @@ const CLAUDE_FILE = join(process.env.XDG_CACHE_HOME || join(homedir(), '.cache')
 const FILES_EXIT = Number(process.env.TD_FILES_EXIT) || 0
 const DIFF_EXIT = Number(process.env.TD_DIFF_EXIT) || 0
 const DIAGRAMS_EXIT = Number(process.env.TD_DIAGRAMS_EXIT) || 0
+const POPUP = process.env.TD_POPUP === '1'
 const MODES = [
   { label: ' Diagrams ', exit: DIAGRAMS_EXIT },
   { label: ' Files ', exit: FILES_EXIT },
@@ -201,7 +203,7 @@ const hintWidth = pairs => pairs.map(([key, what]) => `${key} ${what}`).join('  
 function tabOf(item) {
   if (!item.pane) return ''
   const at = panes.get(item.pane)
-  if (!at) return 'tab closed'
+  if (!at) return 'a tab now closed'
   const tab = at.hub ? 'a hub tab' : `tab ${at.index}`
   return at.win === WIN || !WIN ? tab : `w${at.win} · ${tab}`
 }
@@ -209,6 +211,7 @@ function tabOf(item) {
 const clock = ms => new Date(ms).toTimeString().slice(0, 5)
 
 function header() {
+  if (POPUP) return `${C.text}${C.bold} Todo${C.reset}\x1b[${width() - 'alt+t close'.length}G${hint([['alt+t', 'close']])}`
   const line = MODES.map((m, i) => (i === 3 ? `${C.tabBg}${C.crust}${C.bold}${m.label}${C.reset}` : `${C.sub}${C.bold}${m.label}${C.reset}`)).join(' ')
   return `${line}\x1b[${width() - 'tab switch'.length + 1}G${hint([['tab', 'switch']])}`
 }
@@ -465,6 +468,7 @@ async function goTo() {
   if (at?.hub) {
     // The hub opens its tabs itself, beside its board.
     if (at.win === WIN && WIN) await outer('select-window', '-t', `layout-${WIN}:hub`)
+    if (POPUP && at.win === WIN) return quit()
     return say(`It's a tab the hub opened${at.win === WIN ? '' : ` in Ghostty window ${at.win}`}: pick it on the board`)
   }
   if (at) {
@@ -476,7 +480,7 @@ async function goTo() {
       await outer('select-window', '-t', `layout-${WIN}:work`)
       if (tabsPane) await outer('select-pane', '-t', tabsPane)
     }
-    return draw()
+    return POPUP ? quit() : draw()
   }
   if (!WIN) return say('Not in a Ghostty layout window, so there is no tab session to open a tab in', P.red)
   const dir = [item.worktree, item.cwd, item.root].find(d => d && existsSync(d))
@@ -500,6 +504,8 @@ async function reopen(item, dir) {
   write(() => change(item.id, { pane }))
   const tabsPane = (await outer('show', '-t', `layout-${WIN}`, '-v', '@tabs')).out.trim()
   if (tabsPane) await outer('select-pane', '-t', tabsPane)
+  await outer('select-window', '-t', `layout-${WIN}:work`)
+  if (POPUP) return quit()
   void refresh()
 }
 
@@ -521,7 +527,7 @@ function onMouse(button, x, y, released) {
   if (button & 64) return moveCursor((button & 1) === 0 ? -1 : 1)
   if (released || (button & 3) !== 0 || button & 32 || prompt) return
   if (y === 1) {
-    const mode = modeAt(x)
+    const mode = !POPUP && modeAt(x)
     if (mode?.exit) quit(mode.exit)
     return
   }
@@ -541,8 +547,10 @@ function onKey(key) {
   if (prompt) return onPromptKey(key)
   const page = Math.max(1, Math.floor(bodyHeight() / 2))
   const actions = {
-    q: () => quit(FILES_EXIT),
-    '\x03': () => quit(FILES_EXIT),
+    q: () => quit(POPUP ? 0 : FILES_EXIT),
+    '\x03': () => quit(POPUP ? 0 : FILES_EXIT),
+    '\x1b': () => POPUP && quit(),
+    '\x1bt': () => POPUP && quit(),
     '\t': () => DIAGRAMS_EXIT && quit(DIAGRAMS_EXIT),
     j: () => moveCursor(1),
     k: () => moveCursor(-1),
@@ -572,7 +580,8 @@ function onKey(key) {
   actions[key]?.()
 }
 
-const INPUT = /\x1b\[<(\d+);(\d+);(\d+)([Mm])|\x1b\[[^a-zA-Z~]*[a-zA-Z~]|[\s\S]/gu
+// Mouse reports, other escape sequences, Alt+letter, then single keys.
+const INPUT = /\x1b\[<(\d+);(\d+);(\d+)([Mm])|\x1b\[[^a-zA-Z~]*[a-zA-Z~]|\x1b[a-zA-Z]|[\s\S]/gu
 
 function onInput(data) {
   for (const m of data.toString('utf8').matchAll(INPUT)) {

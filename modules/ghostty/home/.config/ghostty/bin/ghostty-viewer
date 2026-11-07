@@ -10,9 +10,6 @@
 #   - Diagrams: Claude's diagrams (viewer/diagram-view.mjs, dv). q closes the
 #     pane.
 #   ghostty-viewer [dir] [node]
-# GV_MODE picks the first mode (default files). bin/ghostty-todo-panel
-# (Alt+T) reads the mode showing from $next.mode, and switches it by writing
-# another to $next.want and stopping the mode showing.
 # node is the Node.js binary for Diff, Todo and Diagrams. Ghostty's own PATH usually
 # lacks it, so without one it uses the one ghostty-claude-start last saw.
 # VIEWER_ID is yazi's client id, which ghostty-claude-start sends `cd` to.
@@ -38,10 +35,10 @@ TODO=6
 # tab don't. The Todo tab also leaves GV_TODO_MARK (yazi/init.lua).
 next="${XDG_RUNTIME_DIR:-/tmp}/ghostty-viewer-$$"
 todo_mark="$next.todo"
-trap 'rm -f "$next" "$todo_mark" "$next.mode" "$next.want"' EXIT
+trap 'rm -f "$next" "$todo_mark"' EXIT
 
-mode=${GV_MODE:-files}
-[[ $mode == files ]] && ! command -v yazi >/dev/null && mode=diff
+mode=files
+command -v yazi >/dev/null || mode=diff
 [[ $mode == diff && -z $node ]] && {
   echo "Neither yazi nor Node.js is installed."
   read -rsn1 -p "Press any key to close."
@@ -49,12 +46,6 @@ mode=${GV_MODE:-files}
 }
 
 while :; do
-  if [[ -s $next.want ]]; then
-    mode=$(<"$next.want")
-    rm -f "$next.want"
-  fi
-  [[ $mode != files && -z $node ]] && mode=files
-  echo "$mode" >"$next.mode"
   case $mode in
     files)
       if ! command -v yazi >/dev/null; then
@@ -87,10 +78,7 @@ while :; do
       DV_TAB_EXIT=$FILES DV_DIFF_EXIT=$DIFF DV_TODO_EXIT=$TODO "$node" "$dv"
       ;;
   esac
-  code=$?
-  # Stopped for another mode: the loop's top picks it up.
-  [[ -s $next.want ]] && continue
-  case $code in
+  case $? in
     "$FILES") mode=files ;;
     "$DIFF") mode=diff ;;
     "$DIAGRAMS") mode=diagrams ;;
