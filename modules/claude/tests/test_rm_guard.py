@@ -210,6 +210,7 @@ class Bypasses(Guard):
         self.assertAsks(f"rm '{PAD}/x'")
         self.assertAsks(f'rm "{PAD}/x"')
         self.assertAsks(f"rm {PAD}/a\\ b")
+        self.assertAsks(f"rm {PAD}/a\\b")
         self.assertAsks(f"\\rm {PAD}/x")
 
     def test_redirection_is_asked(self):
@@ -235,11 +236,9 @@ class Bypasses(Guard):
         self.assertAsks("rm -rf", cwd=PAD)
         self.assertAsks("git rm -r --cached", cwd=self.wt)
 
-    # Suspected bug: `[` and `]` are not in the rejected set, but they are a
-    # shell glob. Here the hook resolves the literal `lin[k]` (which does not
-    # exist) to a path inside the worktree and allows it, while the shell
+    # `[...]` is a shell glob. The hook would resolve the literal `lin[k]`
+    # (which does not exist) to a path inside the worktree, while the shell
     # expands it to `link/x`, which points outside the worktree.
-    @unittest.expectedFailure
     def test_a_bracket_glob_is_asked(self):
         (self.wt / "link").symlink_to(self.outside)
         self.assertNotAllowed(f"rm -rf {self.wt}/lin[k]/x")

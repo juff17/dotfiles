@@ -50,8 +50,10 @@ in_worktree() {
   [[ $gitdir != "$common" && $1 == "$top"/?* ]]
 }
 
-# Reject anything a shell could expand or chain.
-if [[ $cmd == *$'\n'* || $cmd =~ [\;\&\|\<\>\`\$\(\)\{\}\*\?\~\"\'\\] ]]; then
+# Reject anything a shell could expand or chain. `]` comes first so the bracket
+# expression takes it literally; backslash is literal inside brackets.
+unsafe='[]\[;&|<>`$(){}*?~"'\''\\]'
+if [[ $cmd == *$'\n'* || $cmd =~ $unsafe ]]; then
   decide ask "rm outside a plain single-command form"
 fi
 
