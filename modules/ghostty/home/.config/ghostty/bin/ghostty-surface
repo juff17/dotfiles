@@ -77,11 +77,13 @@ run_top() {
 }
 
 # The tab session, nested in the outer tmux. When it ends (its last tab
-# closed), the window closes with it.
+# closed), the window closes with it, and so do the tabs opened from its hub
+# (hub_tabs in ghostty-lib.sh).
 run_tabs() {
   unset TMUX TMUX_PANE
   tmux -L "$TABS_SOCKET" -f "$GHOSTTY_CONF/tmux.conf" \
     new-session -A -s "ghostty-$1" -c "$2"
+  tmux -L "$TABS_SOCKET" kill-session -t "=hubtabs-$1" 2>/dev/null
   layout kill-session -t "=layout-$1"
   exit
 }

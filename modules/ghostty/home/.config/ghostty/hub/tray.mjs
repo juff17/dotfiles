@@ -45,7 +45,7 @@ export const TRAY_CLIENT = 'tray'
 // Monitor event tags that mean something broke, rather than something to do.
 const BROKE = new Set(['failed', 'stuck', 'conflict', 'conflicts', 'error', 'crash'])
 
-const where = a => (a.pane ? `tab ${a.pane.tab}` : a.kind === 'bg' ? 'background' : 'terminal')
+const where = a => (a.pane ? `${a.pane.hub ? 'hub tab' : 'tab'} ${a.pane.tab}` : a.kind === 'bg' ? 'background' : 'terminal')
 const place = a => (a.worktree ? `${a.repo} ⑂ ${a.worktree}` : a.repo)
 
 // One inbox row. `actions` are what its buttons do; the first is the usual

@@ -86,6 +86,34 @@ add_hub() {
     "${top:+resize-pane -t $top -y ${GHOSTTY_TOP_ROWS:-10} ; }resize-pane -t $rail -x $cols ; resize-pane -t $hub_rail -x $cols"
 }
 
+# Makes sure window <win> has the hub's tab session, hubtabs-<win>, on the tab
+# server, and prints its name. It holds every tab of the workspace session,
+# ghostty-<win>, linked in, plus the tabs opened from the hub, which only it
+# has. The session the hub opens is grouped with it, so the hub sees the
+# workspace's tabs, while a tab opened there stays out of the workspace.
+# Linked tabs are one tab: closing one closes it in both.
+hub_tabs() {
+  local win=$1 work="ghostty-$1" own="hubtabs-$1" seed w
+  local -a tabs=(tmux -L "$TABS_SOCKET" -f "$GHOSTTY_CONF/tmux.conf")
+  "${tabs[@]}" has-session -t "=$own" 2>/dev/null && { echo "$own"; return 0; }
+  "${tabs[@]}" has-session -t "=$work" 2>/dev/null || return 1
+  # A tab opened in any workspace session is linked into that window's
+  # hubtabs session, when it has one. Set before the first links below, so a
+  # tab opened meanwhile is caught.
+  "${tabs[@]}" set-hook -g window-linked \
+    'if -F "#{&&:#{m/r:^ghostty-[0-9]+$,#{hook_session_name}},#{S:#{?#{==:#{session_name},hubtabs-#{s/ghostty-//:hook_session_name}},1,}}}" { run -C "link-window -d -s #{hook_window} -t hubtabs-#{s/ghostty-//:hook_session_name}:" }'
+  # tmux.conf destroys unattached sessions, and nothing attaches to this one,
+  # so it opts out in the same command that makes it. A session needs a
+  # window, so it starts with a placeholder that goes once the tabs are in.
+  seed=$("${tabs[@]}" new-session -d -s "$own" -P -F '#{window_id}' 'sleep 60' \; set -t "$own" destroy-unattached off) || return 1
+  for w in $("${tabs[@]}" list-windows -t "=$work" -F '#{window_id}'); do
+    "${tabs[@]}" list-windows -t "=$own" -F '#{window_id}' | grep -qx "$w" ||
+      "${tabs[@]}" link-window -d -s "$w" -t "$own:"
+  done
+  "${tabs[@]}" kill-window -t "$seed"
+  echo "$own"
+}
+
 windows() {
   gdbus introspect --session --dest com.mitchellh.ghostty \
     --object-path /com/mitchellh/ghostty/window 2>/dev/null |
