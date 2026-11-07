@@ -2,7 +2,8 @@
 // The rail: a few columns down the left of a Ghostty window, as the S3.1
 // design draws it. work and hub switch the window between the workspace and
 // the agent hub; under them, counts of the agents that need you, are
-// working, are done and are idle; + new opens the hub's New agent dialog.
+// working, are done and are idle; + new opens the hub's New agent dialog,
+// and ? help the keys overlay (Alt+H).
 // The hub button carries an orange dot while anything needs you.
 //   rail.mjs <work|hub>     which of the two windows this rail sits in
 // HUB_WIN is the Ghostty window number. The outer tmux passes clicks on the
@@ -10,6 +11,8 @@
 // keys meant for the workspace.
 
 import { execFile } from 'node:child_process'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { follow } from './client.mjs'
 import { counts } from './model.mjs'
 import { BOLD, P, bg, enter, fg, leave, paint, render, tokens } from './term.mjs'
@@ -29,6 +32,16 @@ async function newAgent() {
   execFile('tmux', ['list-panes', '-t', `${session}:hub`, '-F', '#{pane_id} #{@hub}'], (err, out) => {
     const pane = (out ?? '').split('\n').find(l => l.endsWith(' 1'))?.split(' ')[0]
     if (pane) void tmux('send-keys', '-t', pane, '-l', NEW_AGENT_KEY)
+  })
+}
+
+// The keys overlay, on this window's client: a click doesn't say which
+// client made it, but each outer session has one, its Ghostty window.
+const HELP = join(dirname(fileURLToPath(import.meta.url)), '../bin/ghostty-help')
+function help() {
+  execFile('tmux', ['list-clients', '-t', session, '-F', '#{client_name}'], (err, out) => {
+    const client = (out ?? '').split('\n')[0]
+    if (client) execFile(HELP, [client, VIEW], () => {})
   })
 }
 
@@ -63,10 +76,17 @@ function draw() {
   lines.push(count('✻', c.working, P.blue))
   lines.push(count('✓', c.done, P.green))
   lines.push(count('○', c.idle, P.sub))
-  const bottom = [render([[' +', fg(P.sub)]], w, BG), render([[' new', fg(P.sub)]], w, BG), render([[' alt+n', fg(P.overlay0)]], w, BG)]
-  while (lines.length < rows() - bottom.length - 1) lines.push(render([], w, BG))
-  buttons.push({ y1: lines.length + 1, y2: lines.length + bottom.length, act: newAgent })
-  lines.push(...bottom, render([], w, BG))
+  const tail = (icon, label, key) => [render([[` ${icon}`, fg(P.sub)]], w, BG), render([[` ${label}`, fg(P.sub)]], w, BG), render([[` ${key}`, fg(P.overlay0)]], w, BG)]
+  const bottom = [
+    [newAgent, tail('+', 'new', 'alt+n')],
+    [help, tail('?', 'help', 'alt+h')],
+  ]
+  const height = bottom.reduce((n, [, ls]) => n + ls.length + 1, 0)
+  while (lines.length < rows() - height) lines.push(render([], w, BG))
+  for (const [act, ls] of bottom) {
+    buttons.push({ y1: lines.length + 1, y2: lines.length + ls.length, act })
+    lines.push(...ls, render([], w, BG))
+  }
   paint(lines.slice(0, rows()))
 }
 

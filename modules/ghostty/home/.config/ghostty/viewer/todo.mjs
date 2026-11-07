@@ -4,9 +4,11 @@
 // viewer never reads half a write.
 
 import { execFile } from 'node:child_process'
-import { mkdirSync, readFileSync, renameSync, rmdirSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, renameSync, rmdirSync, statSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
+
+import { slug } from '../hub/model.mjs'
 
 export const STORE =
   process.env.TODO_FILE || join(process.env.XDG_STATE_HOME || join(homedir(), '.local/state'), 'ghostty-layout/todos.json')
@@ -38,6 +40,18 @@ const TYPE_ALIASES = { do: 'action', act: 'action', task: 'action' }
 
 // Done items stay this long, then a write drops them.
 export const KEEP_DONE_MS = 7 * 24 * 60 * 60 * 1000
+
+// A filing item holds a message Claude is turning into a todo (ghostty-todo
+// file) until `add --filing` replaces it with the real one. ghostty-todo
+// stops Claude well before this; past it the item counts as failed anyway,
+// in case the filer died without saying so.
+export const FILING_TIMEOUT_MS = 5 * 60 * 1000
+
+// 'filing', 'failed', or '' for an ordinary item.
+export function filingState(item, now = Date.now()) {
+  if (!item.filing) return ''
+  return item.filing.error || now - item.filing.started > FILING_TIMEOUT_MS ? 'failed' : 'filing'
+}
 
 // A category from what someone typed: a name, an alias or a unique prefix.
 export function category(input) {
@@ -99,15 +113,19 @@ const startOfDay = now => {
 // What the viewer shows: open items grouped by category in CATEGORIES order,
 // the repo `here` (a main repo's root) first in each group and newest first
 // after that, and the items done since midnight. `only` keeps just here's.
+// Items Claude is still filing go apart, oldest first: they have no real
+// category yet and don't count as open.
 export function arrange(items, { here = '', only = false, now = Date.now() } = {}) {
   const shown = items.filter(i => !only || i.root === here)
+  const filing = shown.filter(i => i.filing).sort((a, b) => a.created - b.created)
+  const real = shown.filter(i => !i.filing)
   const order = (a, b) => (b.root === here) - (a.root === here) || b.created - a.created
-  const groups = CATEGORIES.map(c => ({ ...c, items: shown.filter(i => !i.done && i.cat === c.name).sort(order) })).filter(
+  const groups = CATEGORIES.map(c => ({ ...c, items: real.filter(i => !i.done && i.cat === c.name).sort(order) })).filter(
     g => g.items.length,
   )
   const today = startOfDay(now)
-  const doneToday = shown.filter(i => i.done && i.done >= today).sort((a, b) => b.done - a.done)
-  return { groups, doneToday, open: groups.reduce((n, g) => n + g.items.length, 0) }
+  const doneToday = real.filter(i => i.done && i.done >= today).sort((a, b) => b.done - a.done)
+  return { groups, filing, doneToday, open: groups.reduce((n, g) => n + g.items.length, 0) }
 }
 
 export function load(file = STORE) {
@@ -182,6 +200,18 @@ export function change(id, fields, file = STORE) {
   }, file)
 }
 
+// Turns the filing item `id` into a real one with these fields. Undefined
+// when no item is filing under that id: it was dropped, or filed already.
+export function fill(id, fields, file = STORE) {
+  return update(items => {
+    const item = items.find(i => i.id === id && i.filing)
+    if (!item) return { items }
+    const { filing, ...rest } = item
+    const filled = { ...rest, ...fields }
+    return { items: items.map(i => (i === item ? filled : i)), value: filled }
+  }, file)
+}
+
 export function remove(id, file = STORE) {
   return update(items => {
     const item = find(items, id)
@@ -204,4 +234,44 @@ export async function repoOf(dir) {
   const root = basename(common) === '.git' ? dirname(common) : top
   const branch = (await git(['branch', '--show-current'], top)) || (await git(['rev-parse', '--short', 'HEAD'], top))
   return { root, repo: basename(root), worktree: top === root ? '' : top, branch }
+}
+
+// How the viewer hands an item to an agent, as the hub's New agent form
+// would start a task: one agent per item, in the item's repo. In its own
+// worktree it starts from the main checkout; on the current branch, from the
+// worktree or folder the item was added in. Undefined when none of those is
+// on disk any more. Outside git there is no worktree to make, so the spec
+// says worktree: false.
+export const HANDOFF_MODELS = ['opus', 'sonnet', 'haiku']
+
+// Whether the item's repo is a git repo still, which claude -w needs.
+export const inGit = (item, exists = existsSync) => item.repo !== 'none' && !!item.root && exists(join(item.root, '.git'))
+
+// Where an item's agent works: its own repo, or, for an item added outside
+// git, the folder the viewer has open (`here`: repoOf's fields plus folder).
+// That folder's repo stands in, without the branch the item was added on.
+export function handoffPlace(item, here, exists = existsSync) {
+  if (inGit(item, exists) || !here?.folder) return item
+  return { ...item, root: here.root, worktree: here.worktree, cwd: here.folder, repo: here.repo, branch: '' }
+}
+
+export function handoffSpec(item, { runAs = 'tab', worktree = true, model = 'opus' } = {}, exists = existsSync) {
+  worktree = worktree && inGit(item, exists)
+  const places = worktree ? [item.root, item.worktree, item.cwd] : [item.worktree, item.cwd, item.root]
+  const cwd = places.find(d => d && exists(d))
+  if (!cwd) return undefined
+  // The id keeps two agents on similar titles from sharing a worktree.
+  const name = slug(`${slug(item.title).split('-').slice(0, 4).join(' ')} ${item.id}`)
+  const about = [`todo ${item.id}`, `a ${item.cat} in ${item.repo}`, item.branch && `added on ${item.branch}`].filter(Boolean).join(', ')
+  // One line: a tab agent's command is typed into a shell, where a newline
+  // would run it early.
+  const prompt = [
+    `Work on this item from my todo list (${about}): ${item.title.replace(/[.!?]+$/, '')}.`,
+    item.note && item.note.trim().replace(/([^.!?])$/, '$1.'),
+    `Once it's finished, mark it done: ~/.config/ghostty/bin/ghostty-todo done ${item.id}`,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .replace(/\s*\n\s*/g, ' ')
+  return { kind: 'task', cwd, name, prompt, runAs, worktree, model, mode: 'auto', effort: 'medium' }
 }

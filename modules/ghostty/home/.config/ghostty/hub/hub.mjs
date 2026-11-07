@@ -7,6 +7,8 @@
 //     pane attached to its tab, or `claude attach` for a background one).
 //   - n starts a new agent: a task in a new tab, a worktree or the
 //     background, a PR babysitter or a log watcher.
+//   - Alt+D shows the diagrams of the open session's tab, or of the selected
+//     agent's tab, in a window of their own (bin/ghostty-diagrams).
 // It runs in the hub window of the window's outer tmux (layout.conf), next to
 // the rail. HUB_WIN is the Ghostty window number; GHOSTTY_CONF the config
 // folder. State comes from agentd through client.mjs.
@@ -56,6 +58,9 @@ const PEEK_CLOSING_KEY = '\x1b[9101~'
 // What the tray sends to have the hub open an agent's session, after writing
 // the agent's id to HUB_OPEN (tray.mjs): a background agent has no tab to go to.
 const OPEN_AGENT_KEY = '\x1b[9102~'
+// What Alt+D (layout.conf) sends the hub to show the diagrams of the tab
+// you're looking at here: the open session's, or the selected card's.
+const DIAGRAMS_KEY = '\x1b[9103~'
 
 const run = (args, opts = {}) =>
   new Promise(resolve =>
@@ -366,8 +371,8 @@ function footer(w) {
     )
   if (note && note.until > Date.now()) return render([[` ${note.text}`, fg(note.color)]], w)
   const keys = listMode()
-    ? [['j/k', 'move'], ['↵', 'open'], ...(peek ? [['alt+s', 'session'], ['ctrl+shift+b', 'board']] : [['esc', 'workspace']]), ['a/d', 'allow/deny'], ['n', 'new']]
-    : [['h/l', 'lane'], ['j/k', 'agent'], ['tab', 'monitors'], ['↵', 'open'], ['a/d', 'allow/deny'], ['e', 'reviewed'], ['o', 'go to tab'], ['x', focus === 4 ? 'stop monitor' : 'close'], ['n', 'new'], ['/', 'filter']]
+    ? [['j/k', 'move'], ['↵', 'open'], ...(peek ? [['alt+s', 'session'], ['ctrl+shift+b', 'board']] : [['esc', 'workspace']]), ['a/d', 'allow/deny'], ['alt+d', 'diagrams'], ['n', 'new']]
+    : [['h/l', 'lane'], ['j/k', 'agent'], ['tab', 'monitors'], ['↵', 'open'], ['a/d', 'allow/deny'], ['e', 'reviewed'], ['o', 'go to tab'], ['x', focus === 4 ? 'stop monitor' : 'close'], ['alt+d', 'diagrams'], ['n', 'new'], ['/', 'filter']]
   return render([[' '], ...hint(keys)], w)
 }
 
@@ -667,6 +672,24 @@ async function open(a) {
   draw()
 }
 
+// Claude's diagrams for a tab, in their own window (bin/ghostty-diagrams).
+// With a session open beside the list, the tab it shows, followed as you
+// switch tabs in it; otherwise the selected agent's tab. The diagram mod
+// keeps diagrams per tmux pane, so a background agent has none.
+async function showDiagrams() {
+  if (!WIN) return say('Not in a Ghostty layout window, so there is nowhere to show diagrams', P.red)
+  let from
+  if (peek?.window && (await paneAlive(peek.pane))) from = `peek-${peek.pane.slice(1)}`
+  else {
+    const a = focused()
+    if (!a) return say('Select an agent to see its diagrams')
+    if (!a.pane?.pane) return say(`${a.title} runs in the background, with no tab, so it has no diagrams to show`, P.peach)
+    from = a.pane.pane
+  }
+  const shown = await run([join(CONF, 'bin', 'ghostty-diagrams'), String(WIN), from])
+  if (!shown.ok) say(`Couldn't show the diagrams: ${clean(shown.err).slice(0, 120)}`, P.red)
+}
+
 // tmux display exits 0 with empty output for a pane that's gone, so the
 // answer is whether it names the pane.
 async function paneAlive(id) {
@@ -959,6 +982,8 @@ process.stdin.on('data', data => {
       } catch {}
       const a = agents.find(x => x.id === id)
       if (a) void openSession(a)
+    } else if (t.key === DIAGRAMS_KEY) {
+      void showDiagrams()
     } else if (t.key === PEEK_CLOSING_KEY) {
       if (peek) {
         peek = null

@@ -73,6 +73,18 @@ export function zoomAt(image, region, view, factor, px, py) {
   return clampView(image, region, { zoom, cx, cy })
 }
 
+// The run of diagram chips, `widths` cells each, that fits in `room` cells
+// and holds the current one: chips start to end - 1. It starts as far left as
+// it can, so the row only scrolls once the current chip would fall off it.
+export function fitChips(widths, index, room) {
+  const sum = (from, to) => widths.slice(from, to).reduce((n, w) => n + w, 0)
+  let start = 0
+  while (start < index && sum(start, index + 1) > room) start++
+  let end = start
+  while (end < widths.length && sum(start, end + 1) <= room) end++
+  return { start, end: Math.max(end, Math.min(index + 1, widths.length)) }
+}
+
 // Moves the picture with a drag of (dx, dy) screen pixels.
 export function panBy(image, region, view, dx, dy) {
   const scale = fitScale(image, region) * view.zoom

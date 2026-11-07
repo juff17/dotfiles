@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# The keys overlay (viewer/help-view.mjs) in a tmux popup over the whole
+# window, from Alt+H (layout.conf) or the rail's help button (hub/rail.mjs).
+# Alt+H, Esc or q closes it.
+#   ghostty-help <client> <window name>   open it on that tmux client; the
+#                                         window (work, hub, diagrams) picks
+#                                         the section it opens on
+#   ghostty-help --panel <window name>    what runs inside the popup
+
+source "$(dirname "$(readlink -f "$0")")/ghostty-lib.sh"
+
+if [[ $1 == --panel ]]; then
+  node=$(command -v node || cat "${XDG_CACHE_HOME:-$HOME/.cache}/ghostty-layout/node" 2>/dev/null)
+  if [[ -z $node ]]; then
+    echo "Help needs Node.js, and none was found."
+    read -rsn1 -p "Press any key to close."
+    exit 1
+  fi
+  exec "$node" "$GHOSTTY_CONF/viewer/help-view.mjs" "$2"
+fi
+
+client=$1 place=$2
+layout display-popup -c "$client" -E -w 80% -h 80% -b rounded -S "fg=#89b4fa" -s "bg=#1e1e2e" \
+  "$(printf '%q ' "$GHOSTTY_CONF/bin/ghostty-help" --panel "$place")"
