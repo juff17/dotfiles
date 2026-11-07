@@ -154,11 +154,11 @@ class GitHub(Forge):
                 "finished": s.get("updated_at") if state != "pending" else None,
                 "allow_failure": False,
             })
-        # Environment approvals and first-time-contributor approvals show up
-        # only on workflow runs, not on check runs.
+        # A run waiting for first-time-contributor approval has no check runs
+        # yet. Environment approvals are already a "waiting" check run.
         runs = self.api(f"{self.repo()}/actions/runs?head_sha={sha}&per_page=100")
         for r in runs.get("workflow_runs", []):
-            if r["status"] in ("waiting", "action_required"):
+            if r["status"] == "action_required":
                 snap["checks"].append({
                     "id": f"run:{r['id']}",
                     "name": f"workflow {r['name']} ({r['status'].replace('_', ' ')})",
