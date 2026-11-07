@@ -115,7 +115,24 @@ Settings you can change through the environment:
 - `GHOSTTY_RAIL` (default 1): `0` leaves out the rail and the hub.
 - `GHOSTTY_RAIL_COLS` (default 6): the rail's width.
 
-The Agents widget links into `~/.local/share/plasma/plasmoids/dev.dotfiles.agents/` with the rest of the module. Add it once: right-click the panel, **Add or Manage Widgets**, drag **Agents** next to the clock. Its shortcut goes in its settings (right-click it, **Configure Agents…**, **Keyboard Shortcuts**); the inbox's header says `Meta+A`. Plasma loads a changed widget when it restarts (`plasmashell --replace &`, or log out and in).
+### The Agents widget
+
+`./install.sh --links ghostty` links the widget's folder, `modules/ghostty/plasmoid/dev.dotfiles.agents/`, to `~/.local/share/plasma/plasmoids/dev.dotfiles.agents` as one link (the module's `after-link.sh`). It isn't under `home/` because Plasma refuses a widget whose files are links that lead outside its folder. Check that Plasma sees it:
+
+```bash
+kpackagetool6 --type Plasma/Applet --show dev.dotfiles.agents
+```
+
+Then put it in the panel, once:
+
+1. Right-click an empty part of the panel and choose **Add Widgets…**. A sidebar of widgets opens.
+2. Type **Agents** in its search box.
+3. Drag the **Agents** card onto the panel, left of the system tray, and let go. It shows as a small dark chip: `✻2` with two agents working, `○` with none.
+4. Give it its shortcut: right-click the chip, **Configure Agents…**, **Keyboard Shortcuts**, set **Meta+A** (the inbox's header names it). Set it there rather than over D-Bus, which can crash KWin.
+
+Plasma loads the widget's files when its panel starts, so after changing them, or if Agents isn't in the widget list yet, restart the panel: `systemctl --user restart plasma-plasmashell` (windows stay open).
+
+If the chip shows **"Sorry! There was an error loading dev.dotfiles.agents … package does not exist"**, the folder isn't one link: `ls -la ~/.local/share/plasma/plasmoids/` should show `dev.dotfiles.agents -> …/modules/ghostty/plasmoid/dev.dotfiles.agents`. Run `./install.sh --links ghostty` to fix it, then restart the panel as above.
 
 ## Tests
 
