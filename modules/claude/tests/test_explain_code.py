@@ -136,6 +136,22 @@ class Invalid(Repo):
                             "step 1 (A): selection 4-9 out of range (file has 5 lines)",
                             "step 2 (B): selection 3-2 out of range (file has 5 lines)")
 
+    def test_a_non_integer_line_is_reported_not_a_crash(self):
+        self.assertProblems([step("L", file="src/app.py", line="3"), step("B", file="src/app.py", line=True)],
+                            "step 1 (L): line '3' is not a whole number",
+                            "step 2 (B): line True is not a whole number")
+
+    def test_a_malformed_selection_is_reported_not_a_crash(self):
+        bad = [{"start": {"line": 1}}, {"start": 1, "end": 2}, ["1", "2"],
+               {"start": {"line": "1"}, "end": {"line": 2}}]
+        code, problems, _, err = self.validate([step(str(i), file="src/app.py", selection=sel)
+                                                for i, sel in enumerate(bad, 1)])
+        self.assertEqual((code, err), (1, ""))
+        self.assertEqual(len(problems), len(bad), problems)
+        for i, line in enumerate(problems, 1):
+            self.assertTrue(line.startswith(f"step {i} ({i}): selection "), line)
+            self.assertIn("is malformed", line)
+
     def test_a_pattern_that_matches_nothing(self):
         self.assertProblems([step("P", file="src/app.py", pattern="^class ")],
                             "step 1 (P): pattern '^class ' not found in 'src/app.py'")

@@ -29,6 +29,19 @@ def git(repo, *args):
     return r.stdout if r.returncode == 0 else None
 
 
+def is_int(v):
+    return isinstance(v, int) and not isinstance(v, bool)
+
+
+def selection_lines(sel):
+    """(start, end) lines of a selection, or (None, None) if it is malformed."""
+    try:
+        s, e = sel["start"]["line"], sel["end"]["line"]
+    except (KeyError, TypeError):
+        return None, None
+    return (s, e) if is_int(s) and is_int(e) else (None, None)
+
+
 def main():
     if len(sys.argv) < 2:
         sys.exit(__doc__)
@@ -79,12 +92,18 @@ def main():
             problems.append(f"{label}: file '{step['file']}' not found {where}")
             continue
         n = len(text.splitlines())
-        if "line" in step and not 1 <= step["line"] <= n:
-            problems.append(f"{label}: line {step['line']} out of range (file has {n} lines)")
+        if "line" in step:
+            if not is_int(step["line"]):
+                problems.append(f"{label}: line {step['line']!r} is not a whole number")
+            elif not 1 <= step["line"] <= n:
+                problems.append(f"{label}: line {step['line']} out of range (file has {n} lines)")
         sel = step.get("selection")
         if sel:
-            s, e = sel["start"]["line"], sel["end"]["line"]
-            if not (1 <= s <= e <= n):
+            s, e = selection_lines(sel)
+            if s is None:
+                problems.append(f"{label}: selection {sel!r} is malformed, expected "
+                                "{\"start\": {\"line\": N}, \"end\": {\"line\": N}}")
+            elif not (1 <= s <= e <= n):
                 problems.append(f"{label}: selection {s}-{e} out of range (file has {n} lines)")
         if "pattern" in step:
             try:
