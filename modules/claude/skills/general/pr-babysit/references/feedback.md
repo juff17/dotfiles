@@ -33,10 +33,9 @@ If you are between Yes and Unsure, it is Unsure.
 
 1. Make the change in the babysit worktree. Keep it to what the comment asks.
 2. Run the linter and unit tests. Fix what the change broke.
-3. Leave it uncommitted. Never commit, push, reply, or resolve the thread.
+3. Commit it on `babysit/<number>`, one commit per comment, with a short
+   message saying what changed. Never push, reply, or resolve the thread.
 4. Notify, then brief with the comment item format in
    [briefing.md](briefing.md).
 
-Several comments can be addressed in the same uncommitted working tree. If the
-user wants to split commits, `git diff` per file shows which comment touched
-what.
+One commit per comment lets the user drop any fix they disagree with.

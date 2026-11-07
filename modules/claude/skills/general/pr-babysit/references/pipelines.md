@@ -25,26 +25,31 @@ briefing and do not notify.
 
 | Cause | Signs | Do |
 |-------|-------|----|
-| The branch's code | Test, lint, type, or build errors in files the branch changed, or in code they call | Reproduce locally if it runs in a few minutes. If the fix is obvious (same bar as [feedback.md](feedback.md)), make it in the worktree, uncommitted, and run lint and unit tests. Notify. |
-| The base branch | The same failure on the base branch's latest pipeline | Notify; a rebase may fix it once the base is fixed |
-| Flaky or infra | Runner lost, network or registry errors, OOM, timeout with no code cause, test that passed on the last run | Notify with the retry command. Retry only if the user asked for auto-retry this session, and only once per job. |
-| Unknown | None of the above | Notify with the log excerpt and your best guess |
+| The branch's code | Test, lint, type, or build errors in files the branch changed, or in code they call | Reproduce locally if it runs in a few minutes. If the fix is obvious (same bar as [feedback.md](feedback.md)), make it in the worktree, run lint and unit tests, and commit it on `babysit/<number>`. Notify. |
+| The base branch | The same failure on the base branch's latest pipeline | FYI only; a rebase may fix it once the base is fixed |
+| Flaky or infra | Runner lost, network or registry errors, OOM, timeout with no code cause, test that passed on the last run | Notify and ask "Want me to retry?". Retry only on yes, once per job. |
+| Unknown | None of the above | Notify with the key log line and your best guess. If a retry is worth trying, ask "Want me to retry?" |
 
 Base branch pipelines: `gh api "repos/<owner>/<repo>/actions/runs?branch=<base>&per_page=5"`
 or `glab api "projects/<path>/pipelines?ref=<base>&per_page=5"`.
 
-Retry commands (give them to the user; run them only when asked):
+Retry commands (run them only after the user says yes):
 
 - GitHub: `gh api -X POST repos/<owner>/<repo>/actions/jobs/<id>/rerun`
 - GitLab: `glab api -X POST "projects/<path>/jobs/<id>/retry"`
 
 ## Manual, approval, and stuck jobs
 
-These need a person. Notify right away with the job name and URL.
+These need a person. Notify right away with the job name and URL, and offer
+to act. Act only after the user says yes.
 
-- GitLab manual job: the user can play it, or ask you to:
+- GitLab manual job: ask "Want me to run it?". On yes:
   `glab api -X POST "projects/<path>/jobs/<id>/play"`.
-- GitHub environment or workflow approval: give the run URL. Approval
-  happens in the browser.
+- GitHub environment approval: ask "Want me to approve it?". On yes, get the
+  environment id from `gh api repos/<owner>/<repo>/actions/runs/<run id>/pending_deployments`,
+  then `gh api -X POST repos/<owner>/<repo>/actions/runs/<run id>/pending_deployments -f state=approved -F "environment_ids[]=<env id>" -f comment="Approved from pr-babysit"`.
+  If the token is not allowed, say to approve at the link instead.
 - Stuck: the job is waiting for a runner. Say how long, and whether other
-  jobs in the pipeline got runners.
+  jobs got runners. Ask "Want me to cancel it?". On yes:
+  `gh api -X POST repos/<owner>/<repo>/actions/runs/<run id>/cancel` (GitHub
+  cancels the whole run) or `glab api -X POST "projects/<path>/jobs/<id>/cancel"`.
