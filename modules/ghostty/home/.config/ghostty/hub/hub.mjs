@@ -43,6 +43,9 @@ const MONITOR_ROWS = 5
 // its minimum.
 const MIN_LANE_ROWS = 10
 const LIST_COLS = 46
+// What Alt+N (layout.conf) and the rail's + new send the hub to open New
+// agent, whatever it's in the middle of.
+const NEW_AGENT_KEY = '\x1b[9100~'
 
 const run = (args, opts = {}) =>
   new Promise(resolve =>
@@ -765,7 +768,11 @@ if (!process.stdin.isTTY) {
 process.stdin.setRawMode(true)
 process.stdin.on('data', data => {
   for (const t of tokens(data.toString('utf8'))) {
-    if (t.mouse) onMouse(t.mouse)
+    if (t.key === NEW_AGENT_KEY) {
+      confirm = null
+      filtering = false
+      void openDialog()
+    } else if (t.mouse) onMouse(t.mouse)
     else if (t.key) onKey(t.key)
   }
   draw()

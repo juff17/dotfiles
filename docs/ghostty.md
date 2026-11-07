@@ -65,7 +65,7 @@ Diagrams come from jstack's diagram-pane mod, which renders each one to a PNG an
 | `q` in Diff | Switch to Files |
 | `ctrl+shift+n` (default) | New window with the layout |
 | `ctrl+shift+a`, or **work** / **hub** on the rail | Switch between the workspace and the agent hub |
-| click **+ new** on the rail, or `n` in the hub | New agent |
+| `alt+n` anywhere in the window, **+ new** on the rail, or `n` in the hub | New agent |
 | `h` / `l`, `j` / `k` in the hub | Move between lanes and agents (`tab`: the monitors strip) |
 | `enter` in the hub (a click only selects) | Open that agent's live session beside the list, with focus in it |
 | `alt+s` in the hub | Swap focus between the list and the open session |

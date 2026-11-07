@@ -22,12 +22,13 @@ let c = { needs: 0, working: 0, done: 0, idle: 0 }
 const tmux = (...args) => new Promise(r => execFile('tmux', args, () => r()))
 const show = view => tmux('select-window', '-t', `${session}:${view}`)
 
-// The hub's pane, to hand it the n key for + new.
+// The hub's pane, to hand it the key that opens New agent (hub.mjs).
+const NEW_AGENT_KEY = '\x1b[9100~'
 async function newAgent() {
   await show('hub')
   execFile('tmux', ['list-panes', '-t', `${session}:hub`, '-F', '#{pane_id} #{@hub}'], (err, out) => {
     const pane = (out ?? '').split('\n').find(l => l.endsWith(' 1'))?.split(' ')[0]
-    if (pane) void tmux('send-keys', '-t', pane, 'n')
+    if (pane) void tmux('send-keys', '-t', pane, '-l', NEW_AGENT_KEY)
   })
 }
 
