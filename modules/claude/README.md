@@ -31,7 +31,7 @@ jstack/
 ```
 
 Tools are grouped by type first, then by **category**: `docify` (document
-writing), `review`, `daily-prep` (slack digest, standup prep), `general`,
+writing), `review`, `daily-prep` (standup prep), `general`,
 `shortcuts` (short-circuit guidance prompts), and `core` (settings and hooks). A category is a
 source-organization and install-selection concept only — at install time skills
 and agents flatten into the agent's own directories, so **their names must be
