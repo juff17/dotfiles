@@ -164,13 +164,25 @@ test('a re-armed monitor shows once', () => {
   assert.equal(a.monitors[0].task, 'c7')
 })
 
-test('worktree sessions are named after their repo and worktree', () => {
+test('worktree sessions know their repo and worktree', () => {
   assert.deepEqual(repoOf('/p/gad/.claude/worktrees/comments'), { repo: 'gad', worktree: 'comments' })
   const a = classify({ session: session('idle', { cwd: '/p/gad/.claude/worktrees/comments' }), t: emptyTranscript() })
-  assert.equal(a.title, 'gad ⑂ comments')
-  const b = classify({ session: session('idle', { kind: 'bg', name: 'babysit #91' }), t: emptyTranscript() })
-  assert.equal(b.title, 'babysit #91')
-  assert.equal(b.kind, 'bg')
+  assert.equal(a.repo, 'gad')
+  assert.equal(a.worktree, 'comments')
+  assert.equal(a.title, 'New session')
+})
+
+test('an agent is named by /rename, then --name, then Claude\'s title, then its first prompt', () => {
+  const name = (entries, extra) => classify({ session: session('idle', extra), t: feed(entries) }).title
+  const ai = { type: 'ai-title', aiTitle: 'Steam pixel art app' }
+  const agent = { type: 'agent-name', agentName: 'gad-components' }
+  const custom = { type: 'custom-title', customTitle: 'Sprite exporter' }
+  assert.equal(name([user(1, 'make the sprites export\nand more')]), 'make the sprites export')
+  assert.equal(name([user(1, 'go'), ai]), 'Steam pixel art app')
+  assert.equal(name([user(1, 'go'), ai], { name: 'jstack-12', nameSource: 'derived' }), 'Steam pixel art app')
+  assert.equal(name([user(1, 'go'), ai], { kind: 'bg', name: 'babysit #91' }), 'babysit #91')
+  assert.equal(name([user(1, 'go'), ai, agent]), 'gad-components')
+  assert.equal(name([user(1, 'go'), ai, agent, custom]), 'Sprite exporter')
 })
 
 test('lanes: needs and idle oldest first, working and done newest first', () => {

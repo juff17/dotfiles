@@ -23,6 +23,9 @@ export function emptyTranscript() {
     monitors: {}, // task id -> monitor
     armed: {}, // Monitor tool_use id -> { description, command, at }, until its result names the task
     queued: [], // notifications seen queued and not yet delivered
+    // The names Claude Code writes into the transcript: one set with /rename,
+    // one given at launch (--name), and the title it makes up itself.
+    names: { custom: '', agent: '', ai: '' },
   }
 }
 
@@ -105,6 +108,9 @@ function addNotification(t, text, at, queued = false) {
 // latest of each kind wins.
 export function addEntry(t, e) {
   const at = time(e)
+  if (e.type === 'custom-title' && e.customTitle) t.names.custom = e.customTitle
+  if (e.type === 'agent-name' && e.agentName) t.names.agent = e.agentName
+  if (e.type === 'ai-title' && e.aiTitle) t.names.ai = e.aiTitle
   if (e.gitBranch) t.branch = e.gitBranch
   if (e.type === 'queue-operation' && e.operation === 'enqueue' && typeof e.content === 'string') {
     if (e.content.startsWith('<task-notification>')) addNotification(t, e.content, at, true)
@@ -217,6 +223,22 @@ export function repoOf(cwd) {
 // `pane` is the session's tmux pane on the tab server, or null; `alive(cmd)`
 // says whether a monitor's command still runs (true, false, or null when
 // unknown); `reviewedAt` is when you last looked at the session's result.
+// An agent's name, the first there is of: the one set with /rename, the one
+// it was launched with (--name, or the session file's name when that wasn't
+// derived from the folder), the title Claude Code gave it, its first prompt.
+function nameOf(session, t) {
+  const given = session.nameSource === 'derived' ? '' : session.name
+  const prompt = firstLine(t.prompt?.text)
+  return (
+    t.names.custom ||
+    t.names.agent ||
+    given ||
+    t.names.ai ||
+    (prompt.length > 60 ? `${prompt.slice(0, 59)}…` : prompt) ||
+    'New session'
+  )
+}
+
 export function classify({ session, t, pane, reviewedAt = 0, alive = () => null, now = Date.now() }) {
   const { repo, worktree } = repoOf(session.cwd)
   const bg = session.kind === 'bg' || session.kind === 'background'
@@ -292,8 +314,9 @@ export function classify({ session, t, pane, reviewedAt = 0, alive = () => null,
     id: session.sessionId,
     pid: session.pid,
     kind: pane ? 'tab' : bg ? 'bg' : 'term',
-    title: bg ? session.name || repo : worktree ? `${repo} ⑂ ${worktree}` : repo,
+    title: nameOf(session, t),
     repo,
+    worktree,
     cwd: session.cwd,
     branch: t.branch,
     state,

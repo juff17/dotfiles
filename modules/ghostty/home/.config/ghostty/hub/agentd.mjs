@@ -151,7 +151,13 @@ function transcript(s) {
 function readLines(t, text) {
   for (const line of text.split('\n')) {
     if (line.startsWith('{"type":"api-request')) continue
-    if (!line.includes('"type":"assistant"') && !line.includes('"type":"user"') && !line.includes('"queue-operation"'))
+    if (
+      !line.includes('"type":"assistant"') &&
+      !line.includes('"type":"user"') &&
+      !line.includes('"queue-operation"') &&
+      !line.includes('-title"') &&
+      !line.includes('"type":"agent-name"')
+    )
       continue
     try {
       addEntry(t, JSON.parse(line))
