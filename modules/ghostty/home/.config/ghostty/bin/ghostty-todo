@@ -10,8 +10,8 @@
 // session it runs under, so the viewer can go back to it. list shows this
 // repo's open items; --all every repo's. Categories: bug, feature, follow-up
 // (the default), docs, question, other (alias misc). Types, which are
-// optional: research, action, chore; --type none clears one. Outside a git
-// repo the item's repo is none.
+// optional: research, decide, action, review, chore; --type none clears
+// one. Outside a git repo the item's repo is none.
 
 import { readFileSync, realpathSync } from 'node:fs'
 import { homedir } from 'node:os'

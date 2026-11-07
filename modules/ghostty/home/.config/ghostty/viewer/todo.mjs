@@ -25,10 +25,13 @@ export const DEFAULT_CATEGORY = 'follow-up'
 const ALIASES = { fix: 'bug', feat: 'feature', follow: 'follow-up', followup: 'follow-up', doc: 'docs', ask: 'question', q: 'question', misc: 'other' }
 
 // What kind of work an item is, beside its category: finding something out,
-// doing something, or upkeep. Optional, so an item can have none.
+// making a call, doing something, judging someone's work, or upkeep.
+// Optional, so an item can have none.
 export const TYPES = [
   { name: 'research', color: '#fab387' },
+  { name: 'decide', color: '#f5c2e7' },
   { name: 'action', color: '#a6e3a1' },
+  { name: 'review', color: '#74c7ec' },
   { name: 'chore', color: '#9399b2' },
 ]
 const TYPE_ALIASES = { do: 'action', act: 'action', task: 'action' }

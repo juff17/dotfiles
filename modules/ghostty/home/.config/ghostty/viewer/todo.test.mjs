@@ -23,7 +23,10 @@ test('categories by name, alias or unique prefix', () => {
 
 test('types by name, alias or unique prefix, and none clears one', () => {
   assert.equal(taskType('research'), 'research')
-  assert.equal(taskType('R'), 'research')
+  assert.equal(taskType('Res'), 'research')
+  assert.equal(taskType('rev'), 'review')
+  assert.equal(taskType('r'), undefined)
+  assert.equal(taskType('de'), 'decide')
   assert.equal(taskType('do'), 'action')
   assert.equal(taskType('ch'), 'chore')
   assert.equal(taskType('none'), null)
