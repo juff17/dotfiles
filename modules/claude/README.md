@@ -28,6 +28,8 @@ jstack/
     <category>/<name>/       # -> ~/.claude/mods/<name>, loaded via CLAUDE_CODE_PLUGIN_DIRS
   config/
     <category>/<file>        # -> ~/.claude/<file> (settings.json, statusline)
+  tests/
+    test_<tool>.py           # not installed; setup only links the folders above
 ```
 
 Tools are grouped by type first, then by **category**: `docify` (document
@@ -38,6 +40,16 @@ and agents flatten into the agent's own directories, so **their names must be
 globally unique across categories.** Commands are the exception: they are
 namespaced by category, so `commands/shortcuts/discuss.md` installs as
 `/shortcuts:discuss`.
+
+## Tests
+
+Tests for the tools' scripts live in `tests/`, one `test_<tool>.py` per tool.
+They use only Python's built-in `unittest`, so there is nothing to install,
+and they never call a real GitHub or GitLab:
+
+```sh
+python3 -m unittest discover -s tests
+```
 
 ## Install
 
