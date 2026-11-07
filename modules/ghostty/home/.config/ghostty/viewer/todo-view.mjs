@@ -24,7 +24,7 @@ import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { launch } from '../hub/model.mjs'
-import { CATEGORIES, DEFAULT_CATEGORY, HANDOFF_MODELS, STORE, add, age, arrange, change, colorOf, fill, filingState, handoffSpec, inGit, load, remove, repoOf, stamp } from './todo.mjs'
+import { CATEGORIES, DEFAULT_CATEGORY, HANDOFF_MODELS, STORE, add, age, arrange, change, colorOf, fill, filingState, handoffPlace, handoffSpec, inGit, load, remove, repoOf, stamp } from './todo.mjs'
 
 const TODO_CLI = join(dirname(fileURLToPath(import.meta.url)), '../bin/ghostty-todo')
 
@@ -455,13 +455,16 @@ function statusRow(list, current) {
     const n = prompt.ids.length
     const choice = (key, value) => `${C.blue}${key}${C.reset} ${C.text}${C.bold}${value}${C.reset}`
     // Outside git there's no worktree or branch to choose, only the folder.
+    // Items without a repo go to the open folder; the row says which.
     const outside = n - prompt.inGit
+    const folders = [...new Set(prompt.places.filter(p => !p.git).map(p => p.cwd))]
+    const away = prompt.places.filter(p => p.moved).length
     const branch = !prompt.inGit
-      ? `${Date.now() - (prompt.flash ?? 0) < SAY_MS ? C.peach : C.sub}in ${n === 1 ? 'its folder' : 'their folders'}, not git${C.reset}`
-      : `${choice('b', prompt.worktree ? 'worktree' : 'this branch')}${outside ? `${C.sub} · ${outside} not in git${C.reset}` : ''}`
+      ? `${Date.now() - (prompt.flash ?? 0) < SAY_MS ? C.peach : C.sub}in ${folders.length === 1 ? basename(folders[0]) : 'their folders'}, not git${C.reset}`
+      : `${choice('b', prompt.worktree ? 'worktree' : 'this branch')}${C.sub}${outside ? ` · ${outside} not in git` : away ? ` · ${away} without a repo → ${prompt.here.repo}` : ''}${C.reset}`
     const choices = [choice('t', prompt.runAs === 'tab' ? 'tab' : 'background'), branch, choice('m', prompt.model)].join('  ')
     const lead = `${C.claudeBg}${C.crust}${C.bold} HAND OFF ${C.reset} ${C.sub}${n} ${n === 1 ? 'todo' : 'todos'} →${C.reset} ${choices}`
-    const used = 11 + `${n} todos → `.length + 't background  b this branch · 9 not in git  m sonnet'.length
+    const used = 11 + `${n} todos → `.length + 't background  b this branch · 9 without a repo → dotfiles  m sonnet'.length
     return width() - used > 20 ? `${lead}  ${hint([['↵', 'start'], ['esc', 'cancel']])}` : lead
   }
   if (prompt?.kind === 'confirm') return `${fg(P.peach)}${prompt.text}${C.reset}`
@@ -649,8 +652,15 @@ function startHandoff() {
     ids = [item.id]
   }
   // Without a layout window there is no tab session to open tabs in.
-  const git = ids.filter(id => inGit(items.find(i => i.id === id) ?? {})).length
-  prompt = { kind: 'handoff', ids, inGit: git, runAs: WIN ? 'tab' : 'bg', worktree: git > 0, model: HANDOFF_MODELS[0] }
+  // Fixed as the row opens, so what it says is where the agents start.
+  const at = { ...here }
+  const places = ids.map(id => {
+    const item = items.find(i => i.id === id) ?? {}
+    const place = handoffPlace(item, at)
+    return { cwd: place.cwd, git: inGit(place), moved: place !== item }
+  })
+  const git = places.filter(p => p.git).length
+  prompt = { kind: 'handoff', ids, here: at, places, inGit: git, runAs: WIN ? 'tab' : 'bg', worktree: git > 0, model: HANDOFF_MODELS[0] }
   draw()
 }
 
@@ -669,9 +679,9 @@ function onHandoffKey(key) {
   }
   else if (key === 'm') prompt.model = HANDOFF_MODELS[(HANDOFF_MODELS.indexOf(prompt.model) + 1) % HANDOFF_MODELS.length]
   else if (key === '\r') {
-    const { ids, inGit: _, flash: __, ...how } = prompt
+    const { ids, here: at, runAs, worktree, model } = prompt
     prompt = null
-    return void handOff(ids, how)
+    return void handOff(ids, at, { runAs, worktree, model })
   }
   draw()
 }
@@ -685,15 +695,16 @@ function claudePath() {
 }
 
 // Starts one agent per item, one after another so the tabs open in order,
-// and records on each item who has it.
-async function handOff(ids, how) {
+// and records on each item who has it. An item without a repo goes to the
+// folder the viewer had open (at) when the row opened.
+async function handOff(ids, at, how) {
   say(`Starting ${ids.length === 1 ? 'an agent' : `${ids.length} agents`}…`, P.peach)
   const started = []
   const failed = []
   for (const id of ids) {
     const item = items.find(i => i.id === id)
     if (!item) continue
-    const spec = handoffSpec(item, how)
+    const spec = handoffSpec(handoffPlace(item, at), how)
     const error = spec ? await startAgent(item, spec) : `${item.repo} is gone from disk`
     if (error) failed.push(`${item.title}: ${error}`)
     else started.push(item)

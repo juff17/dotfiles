@@ -222,6 +222,14 @@ export const HANDOFF_MODELS = ['opus', 'sonnet', 'haiku']
 // Whether the item's repo is a git repo still, which claude -w needs.
 export const inGit = (item, exists = existsSync) => item.repo !== 'none' && !!item.root && exists(join(item.root, '.git'))
 
+// Where an item's agent works: its own repo, or, for an item added outside
+// git, the folder the viewer has open (`here`: repoOf's fields plus folder).
+// That folder's repo stands in, without the branch the item was added on.
+export function handoffPlace(item, here, exists = existsSync) {
+  if (inGit(item, exists) || !here?.folder) return item
+  return { ...item, root: here.root, worktree: here.worktree, cwd: here.folder, repo: here.repo, branch: '' }
+}
+
 export function handoffSpec(item, { runAs = 'tab', worktree = true, model = 'opus' } = {}, exists = existsSync) {
   worktree = worktree && inGit(item, exists)
   const places = worktree ? [item.root, item.worktree, item.cwd] : [item.worktree, item.cwd, item.root]

@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 
 import { launch } from '../hub/model.mjs'
-import { FILING_TIMEOUT_MS, KEEP_DONE_MS, add, age, arrange, category, change, fill, filingState, find, handoffSpec, inGit, load, newId, prune, remove, repoOf } from './todo.mjs'
+import { FILING_TIMEOUT_MS, KEEP_DONE_MS, add, age, arrange, category, change, fill, filingState, find, handoffPlace, handoffSpec, inGit, load, newId, prune, remove, repoOf } from './todo.mjs'
 
 const now = new Date(2026, 10, 7, 15, 0).getTime()
 const item = (id, cat, root, created, done = null) => ({ id, cat, root, repo: root.split('/').pop(), title: id, created, done })
@@ -142,4 +142,19 @@ test('a hand-off starts one task agent per item, in its repo', () => {
   const bg = launch(handoffSpec({ ...it, note: '' }, { runAs: 'bg', model: 'sonnet' }, all))
   assert.deepEqual(bg.argv.slice(0, 6), ['claude', '--bg', '-w', 'make-todo-edit-show-k2x', '--name', 'make-todo-edit-show-k2x'])
   assert.doesNotMatch(bg.argv.at(-1), /\. {2}|\n/, 'no gap for a missing note, no newline')
+})
+
+test('an item outside git is handed off in the folder the viewer has open', () => {
+  const all = () => true
+  const loose = { id: 'xp9', title: 'Show task type', cat: 'feature', repo: 'none', root: '/r/pix', worktree: '', cwd: '/r/pix', branch: '' }
+  const dot = { folder: '/r/dot/.claude/worktrees/w', root: '/r/dot', repo: 'dot', worktree: '/r/dot/.claude/worktrees/w', branch: 'wt' }
+  const placed = handoffPlace(loose, dot, all)
+  assert.equal(handoffSpec(placed, {}, all).cwd, '/r/dot', 'a worktree from the open repo')
+  assert.equal(handoffSpec(placed, { worktree: false }, all).cwd, '/r/dot/.claude/worktrees/w', 'or the open worktree itself')
+  assert.match(handoffSpec(placed, {}, all).prompt, /\(todo xp9, a feature in dot\):/, 'no branch it was never added on')
+  const plain = handoffPlace(loose, { folder: '/home/me/notes', root: '/home/me/notes', repo: 'none', worktree: '', branch: '' }, all)
+  assert.deepEqual([plain.cwd, inGit(plain, all)], ['/home/me/notes', false], 'an open folder outside git, as it is')
+  const own = { ...loose, repo: 'gad', root: '/r/gad', cwd: '/r/gad' }
+  assert.equal(handoffPlace(own, dot, all), own, 'an item in git keeps its repo')
+  assert.equal(handoffPlace(loose, { folder: '' }, all), loose, 'nothing open: its own folder')
 })
