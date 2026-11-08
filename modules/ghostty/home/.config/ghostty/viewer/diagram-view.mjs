@@ -12,13 +12,33 @@
 //     tab's pane (DV_PANE).
 
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, watch, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, renameSync, watch, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname } from 'node:path'
 
 import { BOLD, CAP_L, CAP_R, ITALIC, P, bg, clean, fg, pill, render, split, width } from '../hub/term.mjs'
 import { compose, frameBox, slice } from './backdrop.mjs'
-import { deleteImage, gridRow, placeGrid, transmitFile } from './kitty.mjs'
+import {
+  cellAt,
+  clampIndex,
+  dropPicture as dropIds,
+  dropTab,
+  fitHints,
+  hints,
+  keyAction,
+  modeAt as modeIn,
+  newestPane,
+  paneFile as paneFileFor,
+  parseInput,
+  picture,
+  placeIn,
+  pointer as pointerAt,
+  reread,
+  showFile,
+  tabTitle as titleOf,
+  truncate,
+} from './diagram.mjs'
+import { gridRow } from './kitty.mjs'
 import { clampView, fitChips, home, panBy, placement, zoomAt } from './view.mjs'
 
 const DIR = `${process.env.XDG_CACHE_HOME || `${homedir()}/.cache`}/claude-diagram-pane`
@@ -38,7 +58,6 @@ const TAB_CHANGED = `${process.env.XDG_RUNTIME_DIR || '/tmp'}/ghostty-layout/tab
 const FRAME = Boolean(process.env.DV_FRAME)
 const ZOOM_STEP = 1.15
 const PAN_STEP = 0.2
-const TAB_MAX = 24
 const TAB_EXIT = Number(process.env.DV_TAB_EXIT) || 0
 const DIFF_EXIT = Number(process.env.DV_DIFF_EXIT) || 0
 const TODO_EXIT = Number(process.env.DV_TODO_EXIT) || 0
@@ -88,15 +107,8 @@ let cell = { cw: 10, ch: 20 }
 let pixelMouse = false
 let drag
 let chips = []
-// Two ids taken in turn, so a new picture lands before the old one goes.
-let shownId = 0
-let shownFile = ''
-// The grid the picture was last placed in, so a pan doesn't place it again.
-// A new grid goes to the other of two placements: tmux sends a placement on to
-// the terminal at once but the cells only at its next redraw, and old cells
-// naming the old placement keep drawing the right slice until then.
-let placedGrid = ''
-let placedId = 1
+// The picture's kitty ids (diagram.mjs).
+const pic = picture()
 
 const inner = () => box().w - 2 * EDGE
 
@@ -131,17 +143,12 @@ function source() {
         .trim()
         .split('\t')
       if (!pane) return { file: '', title: '', gone: true }
-      const title = name === dir ? `${dir} · tab ${tab}` : `${dir} · ${tab}:${name}`
-      return { file: `${PANES}/${socket}-${pane.replace('%', '')}.json`, title, gone: false }
+      return { file: paneFileFor(PANES, socket, pane), title: titleOf(dir, tab, name), gone: false }
     } catch {
       return { file: '', title: '', gone: true }
     }
   }
-  const newest = readdirSync(PANES)
-    .filter(name => name.endsWith('.json'))
-    .map(name => ({ name, at: statSync(`${PANES}/${name}`).mtimeMs }))
-    .sort((a, b) => b.at - a.at)[0]
-  return { file: newest ? `${PANES}/${newest.name}` : '', title: '', gone: false }
+  return { file: newestPane(PANES), title: '', gone: false }
 }
 
 function readState() {
@@ -159,9 +166,9 @@ function readState() {
   try {
     const next = JSON.parse(readFileSync(paneFile, 'utf8'))
     if (!Array.isArray(next.diagrams)) return
-    const jumped = next.current !== state.current || next.diagrams.length !== state.diagrams.length
+    const to = reread(state, next, index)
     state = next
-    if (jumped || !diagram()) select(Math.min(state.current, state.diagrams.length - 1))
+    if (to !== undefined) select(to)
     else schedule()
   } catch {
     // Read while Claude Code was still writing it; the next change event reads it whole.
@@ -169,15 +176,11 @@ function readState() {
 }
 
 function select(i) {
-  index = Math.max(0, Math.min(i, state.diagrams.length - 1))
+  index = clampIndex(i, state.diagrams.length)
   view = diagram() ? home(diagram()) : undefined
   schedule()
 }
 
-const truncate = title => (title.length > TAB_MAX ? `${title.slice(0, TAB_MAX - 1)}…` : title)
-
-// Keys in the text color, what they do dimmed, as the hub's footer has them.
-const hints = pairs => pairs.flatMap(([key, what], i) => [[`${i ? '  ' : ''}${key}`, fg(P.text)], [` ${what}`, fg(P.sub)]])
 
 function header() {
   const line = MODES.map((m, i) => (i === 0 ? `\x1b[7;1m${m.label}\x1b[0m` : `\x1b[2m${m.label}\x1b[0m`)).join(' ')
@@ -185,14 +188,7 @@ function header() {
   return `${line}\x1b[${process.stdout.columns - 'tab switch'.length + 1}G\x1b[34mtab\x1b[0;2m switch\x1b[0m`
 }
 
-// The mode under a column of the header, counted from 1.
-function modeAt(col) {
-  let from = 1
-  for (const m of MODES) {
-    if (col >= from && col < from + m.label.length) return m
-    from += m.label.length + 1
-  }
-}
+const modeAt = col => modeIn(MODES, col)
 
 // One diagram's chip: a pill with its number for the 1–9 keys, its title and
 // a × that closes it, solid blue when it's the one showing.
@@ -248,11 +244,8 @@ function footer(w) {
   const right = d
     ? [[`${d.width}×${d.height} `, fg(P.overlay1)], ...pill(view && view.zoom > 1 ? ` ${view.zoom.toFixed(1)}× ` : ' fit ', P.surface0, P.base, fg(P.text))]
     : []
-  // Whole hints only: drop them from the end until they fit.
-  let shown = keys
   const rw = right.reduce((n, [t]) => n + width(t), 0)
-  while (shown.length > 1 && hints(shown).reduce((n, [t]) => n + width(t), 0) > w - rw - 2) shown = shown.slice(0, -1)
-  return split(hints(shown), right, w)
+  return split(hints(fitHints(keys, w - rw - 2)), right, w)
 }
 
 // Lines of text in the middle of the picture panel.
@@ -285,28 +278,15 @@ function pictureRows() {
     const lines = [['This PNG is gone from the cache. Open its tab in Claude to draw it again.', ITALIC + fg(P.sub)]]
     return { rows: panelMessage(lines, r.rows, r.cols), setup: dropPicture() }
   }
-  let setup = ''
-  if (d.file !== shownFile) {
-    const id = shownId === 1 ? 2 : 1
-    setup += transmitFile(id, d.file)
-    if (shownId) setup += deleteImage(shownId)
-    shownId = id
-    shownFile = d.file
-    placedGrid = ''
-  }
+  let setup = showFile(pic, d.file)
   view = clampView(d, r, view ?? home(d))
   const at = placement(d, r, view)
-  const grid = `${shownId} ${at.gridCols} ${at.gridRows}`
-  if (grid !== placedGrid) {
-    placedId = placedId === 1 ? 2 : 1
-    setup += placeGrid(shownId, placedId, at.gridCols, at.gridRows)
-    placedGrid = grid
-  }
+  setup += placeIn(pic, at.gridCols, at.gridRows)
   // The panel's color stays on under the placeholders, so it shows through
   // the PNG's transparent background.
   const rows = Array(r.rows).fill(render([], r.cols, PANEL))
   for (let k = 0; k < at.rows; k++) {
-    const cells = gridRow(shownId, placedId, at.gridRow + k, at.gridCol, at.cols)
+    const cells = gridRow(pic.shownId, pic.placedId, at.gridRow + k, at.gridCol, at.cols)
     rows[at.row + k] = `${PANEL}${' '.repeat(r.cols)}\x1b[${box().left + EDGE + at.col + 1}G${PANEL}${cells}\x1b[0m`
   }
   return { rows, setup }
@@ -377,13 +357,7 @@ function draw() {
   out(`${frame}\x1b[?2026l`)
 }
 
-function dropPicture() {
-  const s = shownId ? deleteImage(shownId) : ''
-  shownId = 0
-  shownFile = ''
-  placedGrid = ''
-  return s
-}
+const dropPicture = () => dropIds(pic)
 
 let pending = false
 function schedule() {
@@ -399,12 +373,10 @@ function schedule() {
 // change. Written whole and renamed in, so neither side reads half a file.
 function closeTab(i) {
   if (!paneFile || !state.diagrams[i]) return
-  const diagrams = state.diagrams.filter((_, n) => n !== i)
-  const current = Math.max(0, Math.min(i < index ? index - 1 : index, diagrams.length - 1))
-  state = { ...state, diagrams, current }
+  state = dropTab(state, i, index)
   writeFileSync(`${paneFile}.tmp`, JSON.stringify(state))
   renameSync(`${paneFile}.tmp`, paneFile)
-  select(current)
+  select(state.current)
 }
 
 function zoom(factor, px, py) {
@@ -422,13 +394,7 @@ function pan(dx, dy) {
 }
 
 // Pointer position in pixels from the picture region's top left.
-function pointer(x, y) {
-  const left = box().left + EDGE
-  const top = pictureTop()
-  return pixelMouse
-    ? { px: x - 1 - left * cell.cw, py: y - 1 - (top - 1) * cell.ch }
-    : { px: (x - left - 0.5) * cell.cw, py: (y - top + 0.5) * cell.ch }
-}
+const pointer = (x, y) => pointerAt(x, y, { left: box().left + EDGE, top: pictureTop(), cell, pixelMouse })
 
 function onMouse(button, x, y, released) {
   const { px, py } = pointer(x, y)
@@ -443,8 +409,7 @@ function onMouse(button, x, y, released) {
     return
   }
   if ((button & 3) !== 0) return
-  const row = pixelMouse ? Math.floor((y - 1) / cell.ch) + 1 : y
-  const col = pixelMouse ? Math.floor((x - 1) / cell.cw) + 1 : x
+  const { row, col } = cellAt(x, y, { cell, pixelMouse })
   // A click on the dimmed window round the frame closes it, as a click
   // outside a popup would.
   const b = box()
@@ -462,48 +427,27 @@ function onKey(key) {
   const stepX = r.cols * r.cw * PAN_STEP
   const stepY = r.rows * r.ch * PAN_STEP
   const center = [(r.cols * r.cw) / 2, (r.rows * r.ch) / 2]
-  const actions = {
-    q: () => quit(),
-    '\x03': () => quit(),
-    // A wrapper that shares the split with another program (the Ghostty
-    // viewer) sets DV_TAB_EXIT to the exit code it switches on.
-    '\t': () => TAB_EXIT && quit(TAB_EXIT),
-    h: () => pan(stepX, 0),
-    l: () => pan(-stepX, 0),
-    k: () => pan(0, stepY),
-    j: () => pan(0, -stepY),
-    '\x1b[D': () => pan(stepX, 0),
-    '\x1b[C': () => pan(-stepX, 0),
-    '\x1b[A': () => pan(0, stepY),
-    '\x1b[B': () => pan(0, -stepY),
-    '+': () => zoom(ZOOM_STEP, ...center),
-    '=': () => zoom(ZOOM_STEP, ...center),
-    '-': () => zoom(1 / ZOOM_STEP, ...center),
-    0: () => select(index),
-    '[': () => select(index - 1),
-    ']': () => select(index + 1),
-    x: () => closeTab(index),
-  }
-  // In the diagrams window, Esc and Alt+D close it, as they close the hub's
-  // popups. layout.conf passes Alt+D through to it.
-  if (FRAME && (key === '\x1b' || key === '\x1bd')) return quit()
-  if (/^[1-9]$/.test(key)) return Number(key) <= state.diagrams.length && select(Number(key) - 1)
-  actions[key]?.()
+  const [action, a, b] = keyAction(key, { frame: FRAME, count: state.diagrams.length }) ?? []
+  if (action === 'quit') quit()
+  // A wrapper that shares the split with another program (the Ghostty
+  // viewer) sets DV_TAB_EXIT to the exit code it switches on.
+  else if (action === 'tab') TAB_EXIT && quit(TAB_EXIT)
+  else if (action === 'pan') pan(a * stepX, b * stepY)
+  else if (action === 'zoom') zoom(a > 0 ? ZOOM_STEP : 1 / ZOOM_STEP, ...center)
+  else if (action === 'home') select(index)
+  else if (action === 'step') select(index + a)
+  else if (action === 'jump') select(a)
+  else if (action === 'close') closeTab(index)
 }
 
-const INPUT =
-  /\x1b\[<(\d+);(\d+);(\d+)([Mm])|\x1b\[6;(\d+);(\d+)t|\x1b\[\?1016;(\d)\$y|\x1b\[[ABCD]|\x1b\[[^a-zA-Z]*[a-zA-Z~]|\x1b[a-z]|[\s\S]/g
-
 function onInput(data) {
-  for (const m of data.toString('utf8').matchAll(INPUT)) {
-    if (m[1] !== undefined) onMouse(Number(m[1]), Number(m[2]), Number(m[3]), m[4] === 'm')
-    else if (m[5] !== undefined) {
-      const ch = Number(m[5]) || cell.ch
-      const cw = Number(m[6]) || cell.cw
-      cell = { cw, ch }
+  for (const t of parseInput(data.toString('utf8'))) {
+    if (t.mouse) onMouse(t.mouse.button, t.mouse.x, t.mouse.y, t.mouse.released)
+    else if (t.cell) {
+      cell = { cw: t.cell.cw || cell.cw, ch: t.cell.ch || cell.ch }
       schedule()
-    } else if (m[7] !== undefined) pixelMouse = m[7] === '1' || m[7] === '3'
-    else onKey(m[0])
+    } else if (t.pixels !== undefined) pixelMouse = t.pixels
+    else onKey(t.key)
   }
 }
 
