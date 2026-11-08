@@ -52,7 +52,8 @@ const MODES = [
   { label: ' Todo ', exit: 0 },
 ]
 const REFRESH_MS = 2000
-const SAY_MS = 4000
+// How long a note under the list shows: Settings' todo.noteSecs.
+const sayMs = () => settings()['todo.noteSecs'] * 1000
 // The mode header and summary above the list, the status row below.
 const TOP = 3
 const CHROME_ROWS = 3
@@ -126,9 +127,9 @@ const tabs = (...args) => run(['-L', TABS_SOCKET, ...args])
 const outer = (...args) => run(['-L', LAYOUT_SOCKET, ...args])
 
 function say(text, color = P.sub) {
-  said = { text, color, until: Date.now() + SAY_MS }
+  said = { text, color, until: Date.now() + sayMs() }
   draw()
-  setTimeout(draw, SAY_MS + 50)
+  setTimeout(draw, sayMs() + 50)
 }
 
 // The active tab's folder, or dir when DV_TABS isn't set or tmux can't say.
@@ -438,7 +439,7 @@ function statusRow(list, current) {
     const folders = [...new Set(prompt.places.filter(p => !p.git).map(p => p.cwd))]
     const away = prompt.places.filter(p => p.moved).length
     const branch = !prompt.inGit
-      ? `${Date.now() - (prompt.flash ?? 0) < SAY_MS ? C.peach : C.sub}in ${folders.length === 1 ? basename(folders[0]) : 'their folders'}, not git${C.reset}`
+      ? `${Date.now() - (prompt.flash ?? 0) < sayMs() ? C.peach : C.sub}in ${folders.length === 1 ? basename(folders[0]) : 'their folders'}, not git${C.reset}`
       : `${choice('b', prompt.worktree ? 'worktree' : 'this branch')}${C.sub}${outside ? ` · ${outside} not in git` : away ? ` · ${away} without a repo → ${prompt.here.repo}` : ''}${C.reset}`
     const choices = [choice('t', prompt.runAs === 'tab' ? 'tab' : 'background'), branch, choice('m', prompt.model)].join('  ')
     const lead = `${C.claudeBg}${C.crust}${C.bold} HAND OFF ${C.reset} ${C.sub}${n} ${n === 1 ? 'todo' : 'todos'} →${C.reset} ${choices}`
@@ -625,7 +626,7 @@ function onHandoffKey(key) {
   if (result === 'no-git') {
     // The row covers the status line, so the note itself lights up.
     prompt.flash = Date.now()
-    setTimeout(draw, SAY_MS + 50)
+    setTimeout(draw, sayMs() + 50)
     return draw()
   }
   if (result === 'start') {

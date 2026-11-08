@@ -79,6 +79,7 @@ export const SECTIONS = [
       number('todo.filing.limit', 'Give up after', 3, { min: 1, max: 10, unit: 'm' }, 'then the item shows the error'),
       head('List'),
       number('todo.keepDone', 'Keep done items', 7, { min: 1, max: 60, unit: 'd' }, 'under “done today”, then dropped'),
+      number('todo.noteSecs', 'Notes show for', 4, { min: 2, max: 30, unit: 's' }, 'what the list says after you add, hand off or finish something'),
     ],
   },
   {
