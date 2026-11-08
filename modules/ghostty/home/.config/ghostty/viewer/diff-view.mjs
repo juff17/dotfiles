@@ -20,6 +20,7 @@ import { dirname } from 'node:path'
 import {
   addShare,
   bodyRows as listRows,
+  cardSize,
   changeCells,
   changeWords,
   clampScroll,
@@ -227,13 +228,12 @@ function header() {
   const tabs = MODES.map((mode, i) =>
     i === 2 ? `${C.tabBg}${C.crust}${C.bold}${mode}${C.reset}` : `${C.sub}${C.bold}${mode}${C.reset}`,
   ).join(' ')
-  return `${tabs}\x1b[${width() - 'tab switch'.length + 1}G${hint([['tab', 'switch']])}`
+  return `${tabs}\x1b[${Math.max(1, width() - 'tab switch'.length + 1)}G${hint([['tab', 'switch']])}`
 }
 
 // The summary card: totals, and a bar split by the share of added lines.
 function card() {
-  const w = width() - 2
-  const inner = w - 4
+  const { w, inner } = cardSize(width())
   const add = files.reduce((n, f) => n + f.add, 0)
   const del = files.reduce((n, f) => n + f.del, 0)
   const count = `${files.length} file${files.length === 1 ? '' : 's'}`
@@ -292,7 +292,7 @@ function statusRow() {
   const left = `${C.pillBg}${C.crust}${C.bold} DIFF ${C.reset}  ${hint([['enter', 'open'], ['j k', 'move']])}`
   if (!files.length) return left
   const position = `${cursor + 1}/${files.length} `
-  return `${left}\x1b[${width() - position.length + 1}G${C.text}${position}${C.reset}`
+  return `${left}\x1b[${Math.max(1, width() - position.length + 1)}G${C.text}${position}${C.reset}`
 }
 
 // Each frame goes out in one write, inside synchronized output, every row

@@ -8,6 +8,7 @@ import {
   MAX_COUNT_BYTES,
   addShare,
   bodyRows,
+  cardSize,
   changeCells,
   changeWords,
   clampScroll,
@@ -321,6 +322,15 @@ test('change bars share one square-rooted scale', () => {
   assert.deepEqual(changeCells({ add: 0, del: 0 }, most, 10), [0, 0, 10])
   assert.equal(addShare(0, 0, 40), 0)
   assert.equal(addShare(1, 3, 40), 10)
+})
+
+test('the card shrinks to nothing inside on a tiny pane, never below zero', () => {
+  assert.deepEqual(cardSize(80), { w: 78, inner: 74 })
+  for (const cols of [0, 1, 3, 5, 6]) {
+    const { w, inner } = cardSize(cols)
+    assert.ok(w - 2 >= 0 && inner >= 0, `${cols} cols`)
+    assert.ok(addShare(5, 1, inner) <= inner)
+  }
 })
 
 test('long paths keep the end of the name, the folder going first', () => {

@@ -148,6 +148,14 @@ export function changeWords(files) {
     .join(', ')
 }
 
+// The summary card's width and the room inside its border and padding, for
+// a pane `cols` wide. Never below zero, so a pane narrower than the card
+// draws its corners and nothing between rather than throwing.
+export const cardSize = cols => {
+  const w = Math.max(2, cols - 2)
+  return { w, inner: Math.max(0, w - 4) }
+}
+
 // How many of `cells` go to added lines, the rest to removed ones.
 export const addShare = (add, del, cells) => (add + del ? Math.round((cells * add) / (add + del)) : 0)
 
