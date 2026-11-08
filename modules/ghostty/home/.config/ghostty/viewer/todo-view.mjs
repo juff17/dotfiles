@@ -228,7 +228,7 @@ function itemRow(item, selected) {
   const right = `${item.repo} · ${age(Date.now() - (item.done || item.created))}`
   // The type leads the right side, in its own color.
   const type = item.type ? `${item.type} · ` : ''
-  const room = Math.max(4, width() - 4 - type.length - right.length - (agent ? 2 : 0) - 3)
+  const room = Math.max(4, width() - 4 - type.length - ui.cells(right) - (agent ? 2 : 0) - 3)
   const fitted = fit(item.title, room)
   const words = fitted.trimEnd()
   const title = item.done
@@ -312,7 +312,7 @@ function filingRow(item, selected) {
   const failed = filingState(item) === 'failed'
   const mark = failed ? `${C.red}✕` : `${C.peach}${SPINNER[Math.floor(Date.now() / SPIN_MS) % SPINNER.length]}`
   const right = `${item.repo} · ${age(Date.now() - item.created)}`
-  const room = Math.max(4, width() - 4 - right.length - 3)
+  const room = Math.max(4, width() - 4 - ui.cells(right) - 3)
   const text = fit(item.title, room)
   const title = failed ? `${selected ? C.bold : ''}${text}` : `${C.sub}${C.italic}${text}`
   return `${back}  ${mark}${C.reset}${back} ${title}${C.reset}${back} ${C.sub}${right} ${C.reset}`
@@ -368,7 +368,7 @@ function emptyRows(height) {
   const rows = Array.from({ length: height }, () => ({ text: '' }))
   const top = Math.max(0, Math.floor(height / 2) - 1)
   lines.forEach((line, i) => {
-    const padding = Math.max(0, Math.floor((width() - line.length) / 2))
+    const padding = Math.max(0, Math.floor((width() - ui.cells(line)) / 2))
     if (rows[top + i]) rows[top + i] = { text: `${' '.repeat(padding)}${C.sub}${line}${C.reset}` }
   })
   return rows
@@ -399,11 +399,11 @@ function trail(at) {
 function inputRow(label, pillBg, text, placeholder = '', right = null) {
   const pill = `${pillBg}${C.crust}${C.bold} ${label} ${C.reset} `
   const lead = label.length + 3
-  const need = text ? 30 : [...placeholder].length + 3
+  const need = text ? 30 : ui.cells(placeholder) + 3
   const side = right && width() - lead - right.width >= need ? right : null
   const room = width() - lead - 1 - (side ? side.width + 2 : 0)
   const body = text
-    ? `${C.text}${[...text].slice(-room).join('')}${C.reset}${CARET}`
+    ? `${C.text}${ui.tail(text, room)}${C.reset}${CARET}`
     : `${CARET}${C.hint}${fit(placeholder, room).trimEnd()}${C.reset}`
   return side ? `${pill}${body}\x1b[${width() - side.width + 1}G${side.text}` : `${pill}${body}`
 }

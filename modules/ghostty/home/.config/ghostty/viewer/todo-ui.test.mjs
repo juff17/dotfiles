@@ -479,14 +479,30 @@ test('the status row’s keys follow the marks and the filter, and it says where
   assert.equal(ui.position([], undefined, 0), '')
 })
 
-test('fit pads or cuts to a width by code point, with an ellipsis', () => {
+test('fit pads or cuts to a width in cells, with an ellipsis', () => {
   assert.equal(ui.fit('abc', 5), 'abc  ')
   assert.equal(ui.fit('abcdef', 4), 'abc…')
   assert.equal(ui.fit('abc', 3), 'abc')
   assert.equal(ui.fit('abc', 0), '…')
   assert.equal(ui.fit('a\tb\x1b[31m', 6), 'a  b[…', 'tabs widen, control characters go (not the rest of a sequence)')
-  assert.equal(ui.fit('漢字かな', 3), '漢字…', 'by code point, though each of these takes two cells')
-  assert.equal(ui.fit('😀😀', 2), '😀😀')
+  assert.equal(ui.fit('漢字かな', 3), '漢…', 'each of these takes two cells')
+  assert.equal(ui.fit('漢字かな', 4), '漢… ', 'a wide character can’t straddle the ellipsis: a space fills in')
+  assert.equal(ui.fit('漢字かな', 8), '漢字かな')
+  assert.equal(ui.fit('漢字', 6), '漢字  ')
+  assert.equal(ui.fit('😀😀', 2), '… ')
+  assert.equal(ui.fit('fix 😀 now', 12), 'fix 😀 now  ')
+  for (const text of ['漢字かな漢字', 'ok 😀😀 done', 'plain words here', 'é and ü']) {
+    for (const w of [1, 3, 5, 8, 20]) assert.equal(ui.cells(ui.fit(text, w)), w, `${text} at ${w}`)
+  }
+})
+
+test('the start or end of a line that fits in a width, in cells', () => {
+  assert.equal(ui.head('漢字abc', 3), '漢')
+  assert.equal(ui.head('漢字abc', 5), '漢字a')
+  assert.equal(ui.tail('abc漢字', 3), '字', 'a long prompt shows its end')
+  assert.equal(ui.tail('abc漢字', 5), 'c漢字')
+  assert.equal(ui.tail('short', 10), 'short')
+  assert.equal(ui.cells('Press a to add 漢字'), 19, 'what the empty list centres by')
 })
 
 test('wrap breaks on spaces, splits words too long, and keeps line breaks', () => {
@@ -494,13 +510,17 @@ test('wrap breaks on spaces, splits words too long, and keeps line breaks', () =
   assert.deepEqual(ui.wrap('abcdefghij', 4), ['abcd', 'efgh', 'ij'])
   assert.deepEqual(ui.wrap('a\n\nb', 10), ['a', '', 'b'])
   assert.deepEqual(ui.wrap('', 10), [''])
-  assert.deepEqual(ui.wrap('漢字漢字漢', 2), ['漢字', '漢字', '漢'])
-  assert.deepEqual(ui.wrap('x 😀😀😀', 2), ['x', '😀😀', '😀'], 'never splits an emoji')
+  assert.deepEqual(ui.wrap('漢字漢字漢', 4), ['漢字', '漢字', '漢'], 'two cells a character')
+  assert.deepEqual(ui.wrap('漢字 漢字', 5), ['漢字', '漢字'])
+  assert.deepEqual(ui.wrap('x 😀😀😀', 4), ['x', '😀😀', '😀'], 'never splits an emoji')
+  assert.deepEqual(ui.wrap('漢字', 1), ['漢', '字'], 'one wide character a line when even one doesn’t fit')
+  assert.deepEqual(ui.wrap('abc', 0), ['a', 'b', 'c'], 'a zero width still ends')
+  for (const line of ui.wrap('日本語のテキストを折り返す 😀 and some ascii words too', 10)) assert.ok(ui.cells(line) <= 10, line)
 })
 
 test('visible counts what shows, not the color codes', () => {
   assert.equal(ui.visible('\x1b[38;2;1;2;3mab\x1b[0m'), 2)
-  assert.equal(ui.visible('\x1b[?2026h漢'), 1)
+  assert.equal(ui.visible('\x1b[?2026h漢'), 2, 'a wide character is two cells')
 })
 
 test('shellQuote escapes everything but word characters, dots, slashes and dashes', () => {

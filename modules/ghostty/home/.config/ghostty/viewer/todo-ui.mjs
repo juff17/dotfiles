@@ -7,12 +7,43 @@
 
 import { existsSync } from 'node:fs'
 
+import { charWidth, width as cells } from '../hub/term.mjs'
 import { CATEGORIES, DEFAULT_CATEGORY, HANDOFF_MODELS, TYPES, filingState, handoffPlace, inGit } from './todo.mjs'
 
+// Widths are in terminal cells: a CJK character or an emoji takes two.
+export { cells }
+
 export const tidy = text => String(text).replace(/\t/g, '  ').replace(/[\x00-\x1f\x7f]/g, '')
+
+// The most of text, from its start or its end, that fits in w cells.
+export function head(text, w) {
+  let out = ''
+  let used = 0
+  for (const ch of text) {
+    if (used + charWidth(ch) > w) break
+    out += ch
+    used += charWidth(ch)
+  }
+  return out
+}
+export function tail(text, w) {
+  let out = ''
+  let used = 0
+  for (const ch of [...text].reverse()) {
+    if (used + charWidth(ch) > w) break
+    out = ch + out
+    used += charWidth(ch)
+  }
+  return out
+}
+
+// Exactly w cells: padded, or cut with an ellipsis. A wide character that
+// would straddle the edge goes, and a space fills its place.
 export const fit = (text, w) => {
-  const chars = [...tidy(text)]
-  return chars.length > w ? `${chars.slice(0, Math.max(0, w - 1)).join('')}…` : chars.join('') + ' '.repeat(w - chars.length)
+  const clean = tidy(text)
+  if (cells(clean) <= w) return clean + ' '.repeat(w - cells(clean))
+  const cut = head(clean, Math.max(0, w - 1))
+  return `${cut}…${' '.repeat(Math.max(0, w - 1 - cells(cut)))}`
 }
 export const wrap = (text, w) =>
   String(text)
@@ -21,19 +52,22 @@ export const wrap = (text, w) =>
       const lines = []
       let line = ''
       for (const word of tidy(para).split(' ')) {
-        if (line && [...line].length + 1 + [...word].length > w) {
+        if (line && cells(line) + 1 + cells(word) > w) {
           lines.push(line)
           line = word
         } else line = line ? `${line} ${word}` : word
-        while ([...line].length > w) {
-          lines.push([...line].slice(0, w).join(''))
-          line = [...line].slice(w).join('')
+        // At least one character a line, so a wide one in a narrow column
+        // can't stall it.
+        while (cells(line) > w && [...line].length > 1) {
+          const cut = head(line, w) || [...line][0]
+          lines.push(cut)
+          line = line.slice(cut.length)
         }
       }
       return [...lines, line]
     })
 
-export const visible = text => [...text.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '')].length
+export const visible = text => cells(text.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, ''))
 
 export const shellQuote = text => text.replace(/[^\w./-]/g, '\\$&')
 
