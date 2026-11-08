@@ -17,11 +17,15 @@ export const tabTitle = (dir, tab, name) => (name === dir ? `${dir} · tab ${tab
 // The mod's file for a tmux pane, `%12` on socket `s` being `s-12.json`.
 export const paneFile = (panes, socket, pane) => `${panes}/${socket}-${pane.replace('%', '')}.json`
 
-// The pane file written last in panes, or '' when there's none.
+// The pane file written last in panes, or '' when there's none. A file the
+// mod removes between listing and stat is skipped.
 export function newestPane(panes) {
   const newest = readdirSync(panes)
     .filter(name => name.endsWith('.json'))
-    .map(name => ({ name, at: statSync(`${panes}/${name}`).mtimeMs }))
+    .flatMap(name => {
+      const stat = statSync(`${panes}/${name}`, { throwIfNoEntry: false })
+      return stat ? [{ name, at: stat.mtimeMs }] : []
+    })
     .sort((a, b) => b.at - a.at)[0]
   return newest ? `${panes}/${newest.name}` : ''
 }

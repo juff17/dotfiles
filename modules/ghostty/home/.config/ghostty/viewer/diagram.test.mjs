@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
@@ -68,6 +68,15 @@ test('with nothing to follow, the newest pane file shows', t => {
     utimesSync(join(dir, name), at, at)
   }
   assert.equal(newestPane(dir), `${dir}/b.json`)
+})
+
+test('a pane file gone before it could be read is skipped', t => {
+  const dir = tmp(t)
+  writeFileSync(join(dir, 'a.json'), '{}')
+  // A dangling link lists like a file but has nothing to stat, as a file
+  // removed between the listing and the stat does.
+  symlinkSync(join(dir, 'missing'), join(dir, 'gone.json'))
+  assert.equal(newestPane(dir), `${dir}/a.json`)
 })
 
 test('the index stays in the list, and at 0 when it is empty', () => {
