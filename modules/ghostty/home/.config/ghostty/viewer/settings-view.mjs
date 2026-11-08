@@ -7,6 +7,8 @@
 // is in settings-nav.mjs; it takes no clicks.
 //   settings-view.mjs [section id]   the section it opens on
 
+import { existsSync } from 'node:fs'
+
 import { BOLD, P, bg, enter, fg, leave, paint, render, split, tokens, width } from '../hub/term.mjs'
 import { SECTIONS, settingsFile, load, show } from '../hub/settings.mjs'
 import { fileOf, instructions } from '../hub/prompts.mjs'
@@ -37,9 +39,10 @@ function content(w, values) {
     }
     if (r.prompt) {
       const count = instructions(r.prompt).split('\n').filter(l => l.trim()).length
+      // Install copies it from its .example (after-link.sh).
+      const value = !existsSync(fileOf(r.prompt)) ? 'no file yet: run install' : count ? `${count} line${count === 1 ? '' : 's'}` : 'none'
       lines.push(
-        render([['  Your instructions', fg(P.text)]], w - VALUE, BASE) +
-          render([[count ? `${count} line${count === 1 ? '' : 's'}` : 'none', fg(count ? P.text : P.overlay1)]], VALUE, BASE),
+        render([['  Your instructions', fg(P.text)]], w - VALUE, BASE) + render([[value, fg(count ? P.text : P.overlay1)]], VALUE, BASE),
       )
       lines.push(render([[`  ${tilde(fileOf(r.prompt))}`, fg(P.overlay1)]], w, BASE))
       continue

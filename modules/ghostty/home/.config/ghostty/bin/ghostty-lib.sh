@@ -76,6 +76,17 @@ setting() {
 }
 
 rail_cols() { setting layout.railCols GHOSTTY_RAIL_COLS 6; }
+
+# copy_prompt_examples [dir]: each <name>.md.example in prompts/ copied to
+# <name>.md, the file the agents read (hub/prompts.mjs), where it isn't there
+# yet. Git ignores the copies, so edits to them stay on this machine.
+copy_prompt_examples() {
+  local dir=${1:-$GHOSTTY_CONF/prompts} example
+  for example in "$dir"/*.md.example; do
+    [[ -e $example ]] || continue
+    [[ -e ${example%.example} ]] || cp "$example" "${example%.example}"
+  done
+}
 top_rows() { setting layout.topRows GHOSTTY_TOP_ROWS 10; }
 
 # Adds the agent hub to window <win>'s outer session: the rail down the left

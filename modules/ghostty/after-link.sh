@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# The layout treats any window it hasn't seen as new and builds its tmux layout
-# there, so record the windows already open as existing; only windows opened
-# from now on get the layout. Skipped for a dry-run target.
+# Links the Agents widget, copies the agent instructions' examples, and, as
+# the layout treats any window it hasn't seen as new and builds its tmux
+# layout there, records the windows already open as existing; only windows
+# opened from now on get the layout. That last part is skipped for a dry-run
+# target.
 set -e
 
 # The Agents panel widget is linked as one folder, not file by file like
@@ -24,9 +26,14 @@ fi
 ln -sfn "$here/plasmoid/dev.dotfiles.agents" "$widget"
 echo "  link    ~/.local/share/plasma/plasmoids/dev.dotfiles.agents (the folder)"
 
+source "$(dirname "${BASH_SOURCE[0]}")/home/.config/ghostty/bin/ghostty-lib.sh"
+
+# Your instructions for agents, from the examples the repo keeps.
+copy_prompt_examples
+echo "  copied  any missing prompts/*.md from their .example"
+
 [ "$DEST" = "$HOME" ] && pgrep -x ghostty >/dev/null || exit 0
 
-source "$(dirname "${BASH_SOURCE[0]}")/home/.config/ghostty/bin/ghostty-lib.sh"
 if state=$(state_dir); then
   windows >>"$state/known"
   echo "  marked open Ghostty windows as existing"

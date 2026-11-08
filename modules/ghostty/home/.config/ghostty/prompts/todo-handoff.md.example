@@ -1,0 +1,1 @@
+<!-- Your instructions for each todo handed to an agent with w: sent after the hand-off prompt (viewer/todo.mjs, handoffSpec), joined into one line. Write them below; this comment is left out. Install copies this file from todo-handoff.md.example once; git ignores todo-handoff.md, so your edits stay on this machine. -->

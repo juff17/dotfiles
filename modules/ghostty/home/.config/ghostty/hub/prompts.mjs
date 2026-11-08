@@ -3,9 +3,11 @@
 // handed off with w, and the Claude that files a todo typed with a.
 //
 // They're a Markdown file per agent in prompts/ beside hub/, in the dotfiles
-// repo; edit the file to change them. Node follows install.sh's links to this
-// module's real path, so the path Settings shows is the repo's. HTML comments
-// in a file are left out, so each can say what it's for.
+// repo; edit the file to change them. Git ignores them: install copies each
+// from the <name>.md.example the repo keeps (ghostty-lib.sh,
+// copy_prompt_examples). Node follows install.sh's links to this module's
+// real path, so the path Settings shows is the repo's. HTML comments in a
+// file are left out, so each can say what it's for.
 
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'

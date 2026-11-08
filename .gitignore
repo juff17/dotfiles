@@ -5,6 +5,9 @@
 # machine-local shell settings (sourced by .zshrc, never committed)
 modules/shell/home/.zshrc.local
 
+# your instructions for agents, copied from prompts/*.md.example at install
+modules/ghostty/home/.config/ghostty/prompts/*.md
+
 # python runtime artifacts
 __pycache__/
 *.pyc

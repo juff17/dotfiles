@@ -1,0 +1,1 @@
+<!-- Your instructions for the Claude that files a todo typed with a: added to its system prompt after the fixed one (viewer/todo.mjs, filerPrompt). Write them below; this comment is left out. Install copies this file from todo-filing.md.example once; git ignores todo-filing.md, so your edits stay on this machine. -->

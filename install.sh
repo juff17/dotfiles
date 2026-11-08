@@ -50,7 +50,8 @@ link_module() {
     while IFS= read -r -d '' f; do
       local rel="${f#"$dir/home"/}"
       place "$f" "$DEST/$rel" "$rel"
-    done < <(find "$dir/home" -type f ! -name '.gitkeep' -print0)
+    # A .example is copied by its module's after-link.sh, not linked.
+    done < <(find "$dir/home" -type f ! -name '.gitkeep' ! -name '*.example' -print0)
   fi
   if [ -f "$dir/after-link.sh" ]; then
     bash "$dir/after-link.sh"

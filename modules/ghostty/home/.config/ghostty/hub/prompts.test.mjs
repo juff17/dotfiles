@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { beforeEach, test } from 'node:test'
 
 import { launch } from './model.mjs'
-import { compose, fileOf, instructions, promptsDir } from './prompts.mjs'
+import { AGENTS, compose, fileOf, instructions, promptsDir } from './prompts.mjs'
 import { filerSystem, handoffSpec } from '../viewer/todo.mjs'
 
 beforeEach(() => {
@@ -49,4 +51,31 @@ test('the filer gets its instructions after its system prompt, lines kept', () =
   const bare = filerSystem(item, [], [], 'ghostty-todo')
   write('todo-filing', 'Prefer the dotfiles repo.\nNever file under none.')
   assert.equal(filerSystem(item, [], [], 'ghostty-todo'), `${bare}\nPrefer the dotfiles repo.\nNever file under none.`)
+})
+
+const REPO_PROMPTS = fileURLToPath(new URL('../prompts', import.meta.url))
+
+test('the repo keeps an example for each agent’s instructions, with nothing to send', () => {
+  for (const id of AGENTS) {
+    const example = join(REPO_PROMPTS, `${id}.md.example`)
+    assert.ok(existsSync(example), example)
+    process.env.AGENT_HUB_PROMPTS = mkdtempSync(join(tmpdir(), 'prompts-'))
+    writeFileSync(fileOf(id), readFileSync(example))
+    assert.equal(instructions(id), '', `${id}.md.example is only a comment`)
+  }
+})
+
+test('install copies the examples once, leaving your own files alone', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'prompts-'))
+  writeFileSync(join(dir, 'task.md.example'), 'example task')
+  writeFileSync(join(dir, 'todo-filing.md.example'), 'example filing')
+  writeFileSync(join(dir, 'todo-filing.md'), 'mine')
+  const lib = fileURLToPath(new URL('../bin/ghostty-lib.sh', import.meta.url))
+  const copy = () => execFileSync('bash', ['-c', 'source "$1"; copy_prompt_examples "$2"', 'bash', lib, dir])
+  copy()
+  assert.equal(readFileSync(join(dir, 'task.md'), 'utf8'), 'example task')
+  assert.equal(readFileSync(join(dir, 'todo-filing.md'), 'utf8'), 'mine')
+  writeFileSync(join(dir, 'task.md'), 'edited')
+  copy()
+  assert.equal(readFileSync(join(dir, 'task.md'), 'utf8'), 'edited', 'a second install keeps your edits')
 })
