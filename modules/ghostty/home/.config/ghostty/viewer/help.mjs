@@ -137,7 +137,7 @@ export const SECTIONS = [
     color: '#94e2d5',
     where: '⚙ set on the rail',
     keys: [
-      ['j / k', 'Move between settings'],
+      ['↑ / ↓', 'Move between settings'],
       ['tab / shift+tab', 'Next / previous section'],
       ['← / →', 'Change a setting'],
       ['space', 'Turn on or off, or the next choice'],

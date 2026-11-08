@@ -106,7 +106,7 @@ Diagrams come from the claude module's diagram-pane mod (`modules/claude/mods/ge
 | `x` in the hub | Close a done or idle agent's tab, and any monitors it still runs (asks first); for a tab parked on a background job, stop the job too (its conversation is kept); on a monitor, stop only that monitor (asks first, until you answer `a`: yes, don't ask again) |
 | `/` in the hub | Filter agents by name, repo or command |
 | `ctrl+s`, `esc` in New agent | Start, cancel (`↑`/`↓` fields, `←`/`→` choices, `tab` completes the folder) |
-| **⚙ set** on the rail | Settings in a popup: `j` / `k` a setting, `tab` / `shift+tab` (or click) a section, `←` / `→` change it, `space` turns it on or off (on a row of flags, `←` / `→` pick one), `r` puts it back to its default; `esc` or `q` close it |
+| **⚙ set** on the rail | Settings in a popup, keys only (it takes no clicks): `↑` / `↓` (or `j` / `k`) a setting, `tab` / `shift+tab` a section, `←` / `→` change it, `space` turns it on or off (on a row of flags, `←` / `→` pick one), `r` puts it back to its default; `esc` or `q` close it |
 | `shift`+drag | Select text with Ghostty instead of tmux |
 | click a pane | Focus btop, the viewer or the tabs |
 
