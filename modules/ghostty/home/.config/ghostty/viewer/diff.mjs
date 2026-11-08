@@ -9,6 +9,7 @@ import { join } from 'node:path'
 export const MAX_COUNT_BYTES = 2 * 1024 * 1024
 
 // `git status -z` entries: `XY path`, and for a rename `XY new` then `old`.
+// A rename can be in either column: unstaged ones come from `git add -N`.
 export function parseStatus(text) {
   const parts = text.split('\0')
   const list = []
@@ -18,7 +19,7 @@ export function parseStatus(text) {
     const x = entry[0]
     const y = entry[1]
     const path = entry.slice(3)
-    const old = x === 'R' || x === 'C' ? parts[++i] : undefined
+    const old = 'RC'.includes(x) || 'RC'.includes(y) ? parts[++i] : undefined
     const untracked = x === '?'
     const status = untracked ? '?' : x === 'U' || y === 'U' ? 'U' : x !== ' ' ? x : y
     list.push({ path, old, status, untracked, add: 0, del: 0, binary: false })

@@ -61,6 +61,18 @@ test('status: a staged rename or copy takes the old path from the next entry', (
   )
 })
 
+test('status: an unstaged rename takes the old path too', () => {
+  // `git add -N` on a moved file.
+  const files = parseStatus(' R new.txt\0old.txt\0 M other.txt\0')
+  assert.deepEqual(
+    files.map(f => [f.path, f.old, f.status]),
+    [
+      ['new.txt', 'old.txt', 'R'],
+      ['other.txt', undefined, 'M'],
+    ],
+  )
+})
+
 test('status: a conflict on either side shows U', () => {
   const files = parseStatus('UU both.txt\0AU ours.txt\0DU theirs.txt\0')
   assert.deepEqual(
