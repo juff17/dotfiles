@@ -4,11 +4,12 @@
 //   ghostty-todo add [--cat C] [--type T] [--note N] [--dir D] [--by claude|you] title…
 //   ghostty-todo file [--dir D] message…  |  file --retry id
 //   ghostty-todo list [--all] [--done] [--json]
+//   ghostty-todo repos                 the git repos an item can go in
 //   ghostty-todo done|undo|rm id…
 //   ghostty-todo edit id [--title T] [--cat C] [--type T] [--note N]
-// add records the repo, branch and worktree of D (default: here), and, when
-// run from a tab of the Ghostty layout, that tab's tmux pane and the Claude
-// session it runs under, so the viewer can go back to it. file has Claude
+// add records the repo, branch and worktree of D (default: here; none for no
+// repo), and, when run from a tab of the Ghostty layout, that tab's tmux pane
+// and the Claude session it runs under, so the viewer can go back to it. file has Claude
 // Haiku write the title, category, type and note from a message: the message
 // shows as a filing item until Claude's add --filing id replaces it, or as
 // failed. list shows this repo's open items; --all every repo's. Categories:
@@ -206,7 +207,9 @@ switch (command) {
       console.log(`Filed ${item.id}: ${item.title} (${[item.cat, item.type, item.repo].filter(Boolean).join(', ')})`)
       break
     }
-    const dir = opts.dir || process.cwd()
+    // --dir none: about no repo, so it goes under home, as outside git.
+    const dir = opts.dir === 'none' ? homedir() : opts.dir || process.cwd()
+    if (!existsSync(dir)) fail(`--dir ${opts.dir} doesn't exist`)
     const claude = claudeSession()
     const by = opts.by ?? (claude.session ? 'claude' : 'you')
     if (by !== 'claude' && by !== 'you') fail('--by is claude or you')
@@ -247,6 +250,11 @@ switch (command) {
     console.log(filed ? `Filed ${filed.id}: ${filed.title} (${filed.cat}, ${filed.repo})` : `Dropped ${item.id}`)
     break
   }
+  case 'repos': {
+    const repos = todo.knownRepos(todo.load())
+    console.log(repos.length ? repos.map(r => `${r.repo}\t${r.root}`).join('\n') : 'No git repos known yet: none are on the list.')
+    break
+  }
   case 'list': {
     const { opts } = parse(args, { all: 'bool', done: 'bool', json: 'bool' })
     const { root } = await todo.repoOf(process.cwd())
@@ -285,6 +293,10 @@ switch (command) {
     break
   }
   default:
-    console.log(readFileSync(fileURLToPath(import.meta.url), 'utf8').split('\n').slice(1, 17).map(l => l.slice(3)).join('\n'))
+    {
+      // The comment at the top, up to the first blank line.
+      const lines = readFileSync(fileURLToPath(import.meta.url), 'utf8').split('\n').slice(1)
+      console.log(lines.slice(0, lines.indexOf('')).map(l => l.slice(3)).join('\n'))
+    }
     process.exit(command && command !== 'help' && command !== '--help' ? 1 : 0)
 }
