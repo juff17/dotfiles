@@ -126,9 +126,11 @@ export const filingHint = item =>
 
 // Keeps the selected item's whole card in view, its row first.
 export function scrollTo(rows, current, scroll, height) {
-  const first = rows.findIndex(r => r.item === current)
+  // With nothing selected, rows without an item (headers, and past the end)
+  // would all match it.
+  const first = current ? rows.findIndex(r => r.item === current) : -1
   let last = first
-  while (rows[last + 1]?.item === current) last++
+  while (first >= 0 && rows[last + 1]?.item === current) last++
   if (first >= 0) {
     if (last >= scroll + height) scroll = last - height + 1
     if (first < scroll) scroll = first

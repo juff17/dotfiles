@@ -440,8 +440,8 @@ test('scrolling keeps the selected item’s card in view, its row first', () => 
   assert.equal(ui.scrollTo(rows, a, 3, 20), 0, 'everything fits')
   assert.equal(ui.scrollTo(rows, { id: 'gone' }, 7, 4), 5, 'an item not drawn: only clamped')
   assert.equal(ui.scrollTo([], { id: 'gone' }, 3, 4), 0)
-  // With no selection at all it never returns (rows past the end have no
-  // item either); draw() only calls it when there is one.
+  assert.equal(ui.scrollTo(rows, undefined, 7, 4), 5, 'nothing selected: only clamped')
+  assert.equal(ui.scrollTo([], undefined, 3, 4), 0)
 })
 
 test('the empty list says why it is empty', () => {
