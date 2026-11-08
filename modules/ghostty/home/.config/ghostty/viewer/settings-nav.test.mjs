@@ -108,8 +108,8 @@ test('tab and shift+tab move between sections, round the list', () => {
   assert.equal(s.sec, SECTIONS.length - 1)
 })
 
-test('esc, q and ctrl+c close it; other keys don’t', () => {
-  for (const k of ['\x1b', 'q', '\x03']) assert.equal(onKey(start(), k), true, JSON.stringify(k))
+test('esc, q, ctrl+c and alt+s close it; other keys don’t', () => {
+  for (const k of ['\x1b', 'q', '\x03', '\x1bs']) assert.equal(onKey(start(), k), true, JSON.stringify(k))
   for (const k of [LEFT, RIGHT, UP, DOWN, ' ', 'x']) assert.equal(onKey(start(), k), false, JSON.stringify(k))
 })
 

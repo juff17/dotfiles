@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # The settings panel (viewer/settings-view.mjs) in a tmux popup over the whole
-# window, from the rail's ⚙ button (hub/rail.mjs). Esc or q closes it.
+# window, from Alt+S (layout.conf) or the rail's ⚙ button (hub/rail.mjs).
+# Alt+S, Esc or q closes it.
 #   ghostty-settings <client>        open it on that tmux client
 #   ghostty-settings --panel         what runs inside the popup
 

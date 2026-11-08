@@ -20,7 +20,7 @@ My [Ghostty](https://ghostty.org) configuration, in [`modules/ghostty/home/.conf
 - **Diff:** a mode of the left pane, beside Files. It shows the uncommitted changes of the repository your active tmux tab is in, against the last commit (staged, unstaged and new files): a summary of what changed, a row per file with its added and removed lines, and one file open in place under its row with its diff. It checks git every second, so it empties once you commit.
 - **Ping:** when Claude finishes or asks for permission in a tab you're not on, that tab turns red. Claude sends no desktop notification; the Agents widget below shows it.
 - **Alt+H:** the keys, in a popup over the workspace or the hub. Each feature (Anywhere, Tabs, Viewer pane, Diff, Diagrams, Todo, Hub, New agent) is a section down the left, with its keys on the right; it opens on Hub in the hub, Diagrams over the Alt+D window and Anywhere elsewhere. `/` filters every section at once. Keys that are easy to forget are peach. The keys come from one table, `viewer/help.mjs`, so change it along with the table below.
-- **Rail:** a strip down the far left. **work** and **hub** switch the window between this workspace and the agent hub, the counts under them are the agents that need you (▲), are working (✻), are done (✓) and are idle (○), **+ new** starts an agent, **? help** shows the keys (Alt+H), and **⚙ set** opens Settings. The hub button gets an orange dot while anything needs you. A tab running Claude carries the same glyph in the tab bar.
+- **Rail:** a strip down the far left. **work** and **hub** switch the window between this workspace and the agent hub, the counts under them are the agents that need you (▲), are working (✻), are done (✓) and are idle (○), **+ new** starts an agent, **? help** shows the keys (Alt+H), and **⚙ set** opens Settings (Alt+S). The hub button gets an orange dot while anything needs you. A tab running Claude carries the same glyph in the tab bar.
 
 ## Agent hub
 
@@ -98,7 +98,7 @@ Diagrams come from the claude module's diagram-pane mod (`modules/claude/mods/ge
 | `alt+n` anywhere in the window, **+ new** on the rail, or `n` in the hub | New agent |
 | `h` / `l`, `j` / `k` in the hub | Move between lanes and agents (`tab`: the monitors strip) |
 | `enter` in the hub (a click only selects) | Open that agent's live session beside the list, with focus in it |
-| `alt+s` in the hub | Swap focus between the list and the open session |
+| `alt+w` in the hub | Swap focus between the list and the open session |
 | `ctrl+shift+b` (or `ctrl+]` in the session) | Close the session the hub opened and go back to the board; in the workspace, go to the board |
 | `a` / `d` in the hub | Allow or deny the selected permission prompt |
 | `e` / `E` in the hub | Mark the selected done agent, or all of them, as seen |
@@ -106,7 +106,7 @@ Diagrams come from the claude module's diagram-pane mod (`modules/claude/mods/ge
 | `x` in the hub | Close a done or idle agent's tab, and any monitors it still runs (asks first); for a tab parked on a background job, stop the job too (its conversation is kept); on a monitor, stop only that monitor (asks first, until you answer `a`: yes, don't ask again) |
 | `/` in the hub | Filter agents by name, repo or command |
 | `ctrl+s`, `esc` in New agent | Start, cancel (`↑`/`↓` fields, `←`/`→` choices, `tab` completes the folder) |
-| **⚙ set** on the rail | Settings in a popup, keys only (it takes no clicks): `↑` / `↓` (or `j` / `k`) a setting, `tab` / `shift+tab` a section, `←` / `→` change it, `space` turns it on or off (on a row of flags, `←` / `→` pick one), `r` puts it back to its default; `esc` or `q` close it |
+| `alt+s` anywhere in the window, or **⚙ set** on the rail | Settings in a popup, keys only (it takes no clicks): `↑` / `↓` (or `j` / `k`) a setting, `tab` / `shift+tab` a section, `←` / `→` change it, `space` turns it on or off (on a row of flags, `←` / `→` pick one), `r` puts it back to its default; `alt+s`, `esc` or `q` close it |
 | `shift`+drag | Select text with Ghostty instead of tmux |
 | click a pane | Focus btop, the viewer or the tabs |
 

@@ -12,6 +12,7 @@ export const SECTIONS = [
     keys: [
       ['alt+h', 'This help'],
       ['alt+t', 'Todo list in a popup'],
+      ['alt+s', 'Settings'],
       ['alt+d', 'Diagrams of the active tab, open session or selected card'],
       ['alt+n', 'New agent'],
       ['alt+v', "Open the current tab's repo or worktree in VS Code"],
@@ -108,7 +109,7 @@ export const SECTIONS = [
       ['h / l  j / k', 'Move between lanes and agents'],
       ['tab', 'The monitors strip', true],
       ['↵', 'Open the agent’s live session beside the list'],
-      ['alt+s', 'Swap focus between the list and the session', true],
+      ['alt+w', 'Swap focus between the list and the session', true],
       ['ctrl+]', 'Close the session, back to the board', true],
       ['a / d', 'Allow / deny the permission prompt'],
       ['e / E', 'Mark the done agent seen / all of them', true],
@@ -142,7 +143,7 @@ export const SECTIONS = [
       ['← / →', 'Change a setting'],
       ['space', 'Turn on or off, or the next choice'],
       ['r', 'Put a setting back to its default', true],
-      ['esc', 'Close'],
+      ['esc or alt+s', 'Close'],
     ],
   },
 ].map(s => ({ ...s, keys: s.keys.map(([key, what, rare = false]) => ({ key, what, rare })) }))

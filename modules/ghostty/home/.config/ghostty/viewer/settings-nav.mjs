@@ -78,6 +78,8 @@ export function onKey(s, key) {
     q: () => true,
     '\x1b': () => true,
     '\x03': () => true,
+    // Alt+S opened it; in the popup it reaches here.
+    '\x1bs': () => true,
     j: () => pickRow(s, s.sel + 1),
     k: () => pickRow(s, s.sel - 1),
     '\x1b[B': () => pickRow(s, s.sel + 1),
