@@ -7,6 +7,9 @@ import { test } from 'node:test'
 import { launch } from '../hub/model.mjs'
 import { FILING_TIMEOUT_MS, KEEP_DONE_MS, add, age, arrange, category, change, fill, filingState, find, handoffPlace, handoffSpec, inGit, knownRepos, load, newId, prune, remove, repoOf, taskType } from './todo.mjs'
 
+// No settings file, so every setting reads as its default.
+process.env.AGENT_HUB_SETTINGS = '/nonexistent/agent-hub/settings.json'
+
 const now = new Date(2026, 10, 7, 15, 0).getTime()
 const item = (id, cat, root, created, done = null) => ({ id, cat, root, repo: root.split('/').pop(), title: id, created, done })
 

@@ -26,6 +26,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { RUN, alivePid, follow, markReviewed, readState } from './client.mjs'
 import { lanes, monitorsOf } from './model.mjs'
+import { load as settings } from './settings.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const SEEN = join(RUN, 'tray-seen.json')
@@ -42,8 +43,13 @@ const LAYOUT = ['-L', process.env.GHOSTTY_LAYOUT_SOCKET || 'ghostty-layout']
 // counts it while it was touched in the last few seconds (agentd.mjs).
 export const TRAY_CLIENT = 'tray'
 
-// Monitor event tags that mean something broke, rather than something to do.
-const BROKE = new Set(['failed', 'stuck', 'conflict', 'conflicts', 'error', 'crash'])
+// Monitor event tags that mean something broke, rather than something to do:
+// Settings' hub.broke, with conflicts (GitLab's word) going with conflict.
+function broke() {
+  const tags = new Set(settings()['hub.broke'])
+  if (tags.has('conflict')) tags.add('conflicts')
+  return tags
+}
 
 const where = a => (a.pane ? `${a.pane.hub ? 'hub tab' : 'tab'} ${a.pane.tab}` : a.kind === 'bg' ? 'background' : 'terminal')
 const place = a => (a.worktree ? `${a.repo} ⑂ ${a.worktree}` : a.repo)
@@ -55,11 +61,12 @@ const row = (section, glyph, id, agent, title, meta, since, actions) => ({ secti
 
 export function trayItems(agents, seen = new Set(), dismissed = new Set(), notes = []) {
   const l = lanes(agents)
+  const brokeTags = broke()
   const items = []
   for (const a of l.needs) {
     const raised = a.need === 'monitor' ? a.monitors.find(m => m.state === 'action') : null
     if (raised) {
-      const broke = BROKE.has(raised.event?.tag)
+      const broke = brokeTags.has(raised.event?.tag)
       items.push(
         row(broke ? 'broke' : 'you', broke ? '✗' : '▲', `m:${raised.key}:${raised.event?.at ?? 0}`, a, a.cmd, `${place(a)} · ${raised.description}`, a.since, ['go']),
       )

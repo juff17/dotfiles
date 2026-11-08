@@ -4,6 +4,9 @@ import { test } from 'node:test'
 import { addEntry, cardHeights, classify, counts, describeTool, emptyTranscript, lanes, launch, monitorProcess, monitorsOf, pairParked, parseNotification, repoOf, scrollTo } from './model.mjs'
 import { clean, render, width } from './term.mjs'
 
+// No settings file, so every setting reads as its default.
+process.env.AGENT_HUB_SETTINGS = '/nonexistent/agent-hub/settings.json'
+
 const ts = s => new Date(Date.UTC(2026, 10, 7, 12, 0, s)).toISOString()
 const at = s => Date.parse(ts(s))
 const user = (s, content, extra = {}) => ({ type: 'user', timestamp: ts(s), message: { role: 'user', content }, ...extra })
@@ -264,6 +267,8 @@ test('overflow: working compacts, done folds, needs never shrinks', () => {
   assert.deepEqual(cardHeights('working', 3, 20), [4, 4, 4])
   assert.deepEqual(cardHeights('working', 8, 20), Array(8).fill(3))
   assert.deepEqual(cardHeights('done', 5, 20), [4, 4, 1, 1, 1])
+  assert.deepEqual(cardHeights('done', 5, 20, 3), [4, 4, 4, 1, 1], 'Settings can keep more done cards')
+  assert.deepEqual(cardHeights('done', 2, 20, 0), [1, 1])
   assert.deepEqual(cardHeights('needs', 9, 10), Array(9).fill(4))
   assert.deepEqual(cardHeights('idle', 3, 10), [1, 1, 1])
 })

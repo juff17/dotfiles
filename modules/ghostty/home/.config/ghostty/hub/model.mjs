@@ -8,6 +8,7 @@
 // Everything here is pure, so model.test.mjs covers it without a terminal.
 
 import { basename, relative } from 'node:path'
+import { load as settings } from './settings.mjs'
 
 // ---------------------------------------------------------------- transcript
 
@@ -72,7 +73,6 @@ export function parseNotification(text) {
   return { id, ids, summary, lines }
 }
 
-const MAX_EVENTS = 20
 
 // A notification that arrives while Claude is busy is written twice: when
 // it's queued and again when Claude reads it. The second copy is skipped by
@@ -107,7 +107,7 @@ function addNotification(t, text, at, queued = false) {
     }
     const tag = line.match(/^\[([a-z-]+)\]/i)?.[1]?.toLowerCase() ?? ''
     m.events.push({ line, tag, at })
-    if (m.events.length > MAX_EVENTS) m.events.shift()
+    while (m.events.length > settings()['hub.maxEvents']) m.events.shift()
   }
 }
 
@@ -212,10 +212,9 @@ export function describeTool(tool, cwd = '') {
 
 // Event tags from pr-babysit and logger that mean a person has to decide.
 const ATTENTION = new Set(['failed', 'manual', 'stuck', 'conflict', 'conflicts', 'error', 'crash', 'auth', 'setup', 'blocked'])
-// How long a monitor that ended on its own (expired, failed, its session
-// restarted) stays on the board, so you see it went. One you stopped leaves
-// at once.
-const ENDED_FOR = 5 * 60 * 1000
+// A monitor that ended on its own (expired, failed, its session restarted)
+// stays on the board for Settings' hub.endedFor minutes, so you see it went.
+// One you stopped leaves at once.
 
 export function monitorKind(command) {
   if (/watch_pr\.py/.test(command)) return 'pr-babysit'
@@ -332,7 +331,7 @@ export function classify({ session, t, pane, reviewedAt = 0, alive = () => null,
   for (const m of Object.values(latest)) {
     const ended = m.ended ?? (m.at < started ? { reason: 'restarted', at: started } : null)
     if (stopped.has(m.task) || ended?.reason === 'stopped') continue
-    if (ended && now - ended.at > ENDED_FOR) continue
+    if (ended && now - ended.at > settings()['hub.endedFor'] * 60 * 1000) continue
     const event = m.events.at(-1) ?? null
     let mstate = 'watching'
     if (ended) mstate = 'ended'
@@ -433,11 +432,11 @@ export function counts(agents) {
 // folds the rest to a line each; Idle is always one line. Returns each item's
 // height: a full card is its top border (the title), two lines and its
 // bottom border.
-export function cardHeights(lane, n, height) {
+export function cardHeights(lane, n, height, doneCards = 2) {
   const FULL = 4
   if (lane === 'needs') return Array(n).fill(FULL)
   if (lane === 'working') return Array(n).fill(n * FULL <= height ? FULL : 3)
-  if (lane === 'done') return Array.from({ length: n }, (_, i) => (i < 2 ? FULL : 1))
+  if (lane === 'done') return Array.from({ length: n }, (_, i) => (i < doneCards ? FULL : 1))
   return Array(n).fill(1)
 }
 

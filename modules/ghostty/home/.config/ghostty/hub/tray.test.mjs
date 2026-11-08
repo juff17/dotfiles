@@ -1,7 +1,13 @@
 // node --test modules/ghostty/home/.config/ghostty/hub/tray.test.mjs
 import assert from 'node:assert/strict'
+import { mkdtempSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { test } from 'node:test'
 import { trayItems } from './tray.mjs'
+
+// No settings file, so every setting reads as its default.
+process.env.AGENT_HUB_SETTINGS = '/nonexistent/agent-hub/settings.json'
 
 const agent = (id, state, extra = {}) => ({
   id,
@@ -58,6 +64,20 @@ test('a monitor that saw a failure is ✗ broke; one asking for a manual step is
     ],
   )
   assert.equal(t.items[0].meta, 'dotfiles · PR !14 pipeline')
+})
+
+test('Settings decides which events count as broke', () => {
+  const file = join(mkdtempSync(join(tmpdir(), 'tray-')), 'settings.json')
+  writeFileSync(file, JSON.stringify({ 'hub.broke': ['stuck', 'conflict'] }))
+  const before = process.env.AGENT_HUB_SETTINGS
+  process.env.AGENT_HUB_SETTINGS = file
+  try {
+    const fail = agent('a', 'needs', { need: 'monitor', cmd: '[failed] job', monitor: true, monitors: [monitor('a:t1', 'action', 'failed')] })
+    const gl = agent('b', 'needs', { need: 'monitor', cmd: '[conflicts] main', monitor: true, monitors: [monitor('b:t1', 'action', 'conflicts')] })
+    assert.deepEqual(trayItems([fail, gl]).items.map(i => i.section), ['you', 'broke'])
+  } finally {
+    process.env.AGENT_HUB_SETTINGS = before
+  }
 })
 
 test('working agents count but are never new; watching monitors and done agents are', () => {

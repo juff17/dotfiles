@@ -10,9 +10,10 @@ import { mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'no
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 
-const STATE = process.env.XDG_STATE_HOME || join(homedir(), '.local', 'state')
-// AGENT_HUB_SETTINGS points everything at another file, for tests.
-export const FILE = process.env.AGENT_HUB_SETTINGS || join(STATE, 'agent-hub', 'settings.json')
+// AGENT_HUB_SETTINGS points everything at another file. It's read on each
+// call, so a test can set it after importing a module that reads settings.
+export const settingsFile = () =>
+  process.env.AGENT_HUB_SETTINGS || join(process.env.XDG_STATE_HOME || join(homedir(), '.local', 'state'), 'agent-hub', 'settings.json')
 
 const opts = list => list.map(c => (Array.isArray(c) ? { value: c[0], label: c[1] } : { value: c, label: c }))
 const head = name => ({ head: name })
@@ -145,7 +146,7 @@ const raw = file => ({ ...legacy(file), ...readJson(file) })
 // Every setting's value. The hub and agentd read it often, so it's read
 // again only when the file changes.
 let cache = { file: '', mtime: -1, values: null }
-export function load(file = FILE) {
+export function load(file = settingsFile()) {
   let mtime = 0
   try {
     mtime = statSync(file).mtimeMs
@@ -158,7 +159,7 @@ export function load(file = FILE) {
   return cache.values
 }
 
-export const get = (key, file = FILE) => load(file)[key]
+export const get = (key, file = settingsFile()) => load(file)[key]
 
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b)
 
@@ -166,7 +167,7 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b)
 // never sees half of it. A value back at its default is left out, so a
 // default changed here later reaches everyone who never changed it. Keys the
 // file has that this version doesn't know are kept.
-export function set(key, value, file = FILE) {
+export function set(key, value, file = settingsFile()) {
   const r = row(key)
   if (!r || !valid(r, value)) throw new Error(`Not a value for ${key}: ${JSON.stringify(value)}`)
   const saved = raw(file)
@@ -181,7 +182,7 @@ export function set(key, value, file = FILE) {
   return load(file)
 }
 
-export const reset = (key, file = FILE) => set(key, row(key).default, file)
+export const reset = (key, file = settingsFile()) => set(key, row(key).default, file)
 
 // The next value ←/→ (dir -1 or 1) gives: the next choice round the list,
 // or a number a step further, kept in range. Flags and switches don't step.

@@ -7,7 +7,7 @@
 //   settings-view.mjs [section id]   the section it opens on
 
 import { BOLD, P, bg, enter, fg, leave, paint, render, split, tokens, width } from '../hub/term.mjs'
-import { FILE, SECTIONS, load, reset, set, show, step, toggleFlag } from '../hub/settings.mjs'
+import { SECTIONS, settingsFile, load, reset, set, show, step, toggleFlag } from '../hub/settings.mjs'
 
 const NAV = 22
 // Title, gap, the section's note, gap above the body; footer below it.
@@ -126,7 +126,7 @@ function draw() {
           [` ${what}  `, fg(P.sub)],
         ]),
       ],
-      note ? [[`${note.text} `, fg(note.color)]] : [[`saved to ${tilde(FILE)} `, fg(P.overlay1)]],
+      note ? [[`${note.text} `, fg(note.color)]] : [[`saved to ${tilde(settingsFile())} `, fg(P.overlay1)]],
       w,
       BASE,
     ),

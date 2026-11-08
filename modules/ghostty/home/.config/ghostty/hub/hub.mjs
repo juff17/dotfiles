@@ -21,6 +21,7 @@ import { fileURLToPath } from 'node:url'
 import { RUN, follow, markReviewed, markStopped } from './client.mjs'
 import { HUB_OPEN } from './tray.mjs'
 import { cardHeights, counts, lanes, launch, monitorProcess, monitorsOf, scrollTo } from './model.mjs'
+import { load as settings, set as setSetting } from './settings.mjs'
 import { POPUP } from './newagent.mjs'
 import { BOLD, CAP_L, CAP_R, ITALIC, MONITOR, P, STATE, ago, bar, bg, clean, enter, fg, leave, mix, paint, pill, render, split, tokens, width } from './term.mjs'
 
@@ -34,21 +35,18 @@ const TABS = ['-L', process.env.AGENT_HUB_TABS_SOCKET || 'ghostty']
 const HOME = homedir()
 const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR || join(HOME, '.claude')
 const RECENTS = join(process.env.XDG_CACHE_HOME || join(HOME, '.cache'), 'agent-hub', 'recents.json')
-// Choices that outlive the hub and a reboot, such as questions you said not
-// to ask again: state, not cache or the runtime folder, which a reboot clears.
-const PREFS = join(process.env.XDG_STATE_HOME || join(HOME, '.local', 'state'), 'agent-hub', 'prefs.json')
 const LANES = ['needs', 'working', 'done', 'idle']
 // Below this width the lanes get too narrow to read, so the hub draws the
 // list it shows beside an open session.
 const MIN_BOARD_COLS = 96
-// Rows the monitors tray keeps for monitors even when few or none run, so
-// the board doesn't jump as monitors come and go. It grows past this, up to
-// about a third of the screen, when more are running.
-const MONITOR_ROWS = 5
+// Rows the monitors tray keeps for monitors even when few or none run
+// (Settings' hub.monitorRows), so the board doesn't jump as monitors come and
+// go. It grows past this, up to about a third of the screen, when more run.
+const keptMonitorRows = () => settings()['hub.monitorRows']
 // The fewest rows the lanes keep on a short screen, before the tray gives up
 // its minimum.
 const MIN_LANE_ROWS = 10
-const LIST_COLS = 46
+const listCols = () => settings()['hub.listCols']
 // What Alt+N (layout.conf) and the rail's + new send the hub to open New
 // agent, whatever it's in the middle of.
 const NEW_AGENT_KEY = '\x1b[9100~'
@@ -81,7 +79,7 @@ let filter = ''
 let filtering = false
 let peek = null // { pane, id }
 let listSel = null // id in the list beside an open session
-let confirm = null // { text, yes, skip }: skip names a question you can stop being asked
+let confirm = null // { text, yes, skip }: skip names the setting that asks it, which answering a turns off
 let note = null // { text, color, until }
 let hits = [] // clickable regions of the last frame
 
@@ -213,7 +211,7 @@ function lane(name, w, h, laneIndex, x) {
   const { i: sel } = current(name)
   const out = [header(look, items.length, w), render([], w, LANE_BG)]
   const room = h - 2
-  const heights = cardHeights(name, items.length, room)
+  const heights = cardHeights(name, items.length, room, settings()['hub.doneCards'])
   const top = scrollTo(heights, room, focus === laneIndex ? sel : -1, scroll[name])
   scroll[name] = top
   if (top > 0) out.push(render([[` ▴ ${top} above`, fg(P.sub)]], w, LANE_BG))
@@ -384,11 +382,11 @@ function drawBoard() {
   const lines = [summary(c, W), render([], W)]
   const mons = strip().length
   // The tray's header and the row under it, then its rows: at least
-  // MONITOR_ROWS, more with more monitors, up to about a third of the screen;
+  // keptMonitorRows(), more with more monitors, up to about a third of the screen;
   // on a short screen the lanes keep MIN_LANE_ROWS first.
-  const most = Math.max(MONITOR_ROWS, Math.floor(H / 3) - 2)
+  const most = Math.max(keptMonitorRows(), Math.floor(H / 3) - 2)
   const fit = Math.max(1, H - 4 - MIN_LANE_ROWS - 2)
-  const stripH = 2 + Math.min(Math.min(Math.max(mons, MONITOR_ROWS), most), fit)
+  const stripH = 2 + Math.min(Math.min(Math.max(mons, keptMonitorRows()), most), fit)
   const laneH = Math.max(6, H - 2 - stripH - 2)
   const gap = 2
   const w = Math.floor((W - 3 * gap) / 4)
@@ -659,7 +657,7 @@ async function open(a) {
     peek.id = a.id
     peek.window = a.pane?.window ?? null
   } else {
-    const size = Math.max(20, cols() - LIST_COLS - 1)
+    const size = Math.max(20, cols() - listCols() - 1)
     const made = await outer('split-window', '-h', '-t', process.env.TMUX_PANE, '-l', String(size), '-P', '-F', '#{pane_id}', cmd)
     if (!made.ok) return say(`Couldn't open the session: ${made.err}`, P.red)
     peek = { pane: made.out.trim(), id: a.id, window: a.pane?.window ?? null }
@@ -843,24 +841,15 @@ function stopMonitor(m) {
       say(`Couldn't stop ${clean(m.description)}: ${err.code ?? err.message}`, P.red, 8000)
     }
   }
-  if (prefs().skip?.['stop-monitor']) return kill()
-  confirm = { text: `Stop monitor ${clean(m.description)}? ${m.agent.title} and its other monitors keep running.`, yes: kill, skip: 'stop-monitor' }
+  if (!settings()['hub.askStopMonitor']) return kill()
+  confirm = { text: `Stop monitor ${clean(m.description)}? ${m.agent.title} and its other monitors keep running.`, yes: kill, skip: 'hub.askStopMonitor' }
 }
 
-function prefs() {
+// "Don't ask again" turns the question's setting off, which Settings can
+// turn back on.
+function dontAsk(key) {
   try {
-    return JSON.parse(readFileSync(PREFS, 'utf8'))
-  } catch {
-    return {}
-  }
-}
-
-function dontAsk(name) {
-  const p = prefs()
-  p.skip = { ...p.skip, [name]: true }
-  try {
-    mkdirSync(dirname(PREFS), { recursive: true })
-    writeFileSync(PREFS, `${JSON.stringify(p, null, 2)}\n`)
+    setSetting(key, false)
   } catch (err) {
     say(`Couldn't save that choice: ${err.code ?? err.message}`, P.red, 8000)
   }
@@ -1000,8 +989,8 @@ process.stdin.on('data', data => {
 // rail does. Not once the session's pane is gone, when the hub should widen.
 process.stdout.on('resize', async () => {
   draw()
-  if (peek && cols() !== LIST_COLS && (await paneAlive(peek.pane)))
-    await outer('resize-pane', '-t', process.env.TMUX_PANE, '-x', String(LIST_COLS))
+  if (peek && cols() !== listCols() && (await paneAlive(peek.pane)))
+    await outer('resize-pane', '-t', process.env.TMUX_PANE, '-x', String(listCols()))
 })
 const bye = () => {
   leave()
