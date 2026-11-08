@@ -38,7 +38,7 @@ export const clampIndex = (i, count) => Math.max(0, Math.min(i, count - 1))
 // which select() shows from its home view.
 export function reread(prev, next, index, switched = false) {
   const jumped = switched || next.current !== prev.current || next.diagrams.length !== prev.diagrams.length
-  if (jumped || !next.diagrams[index]) return Math.min(next.current, next.diagrams.length - 1)
+  if (jumped || !next.diagrams[index]) return Math.min(next.current ?? 0, next.diagrams.length - 1)
 }
 
 // The pane file's state with diagram i closed. The one showing stays showing,

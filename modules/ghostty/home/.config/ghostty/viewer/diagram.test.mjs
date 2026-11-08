@@ -117,10 +117,8 @@ test('an unchanged list whose diagram at the index went still reselects', () => 
   assert.equal(reread(list(3, 0), list(3, 0), 5), 0)
 })
 
-test('a pane file without current selects NaN', () => {
-  // How it behaves today: select() clamps NaN to NaN, so nothing shows.
-  assert.ok(Number.isNaN(reread(list(1, 0), { diagrams: list(1).diagrams }, 0)))
-  assert.ok(Number.isNaN(clampIndex(NaN, 1)))
+test('a pane file without current selects the first diagram', () => {
+  assert.equal(reread(list(1, 0), { diagrams: list(2).diagrams }, 0), 0)
 })
 
 test('closing the diagram before the one showing keeps it showing', () => {
