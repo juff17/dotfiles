@@ -15,7 +15,9 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { follow } from './client.mjs'
 import { counts } from './model.mjs'
-import { BOLD, P, bg, enter, fg, leave, paint, render, tokens } from './term.mjs'
+import { NEW_AGENT_KEY } from './keys.mjs'
+import { frame, pressed } from './railview.mjs'
+import { enter, leave, paint, tokens } from './term.mjs'
 
 const VIEW = process.argv[2] === 'hub' ? 'hub' : 'work'
 const WIN = Number(process.env.HUB_WIN) || 0
@@ -25,8 +27,7 @@ let c = { needs: 0, working: 0, done: 0, idle: 0 }
 const tmux = (...args) => new Promise(r => execFile('tmux', args, () => r()))
 const show = view => tmux('select-window', '-t', `${session}:${view}`)
 
-// The hub's pane, to hand it the key that opens New agent (hub.mjs).
-const NEW_AGENT_KEY = '\x1b[9100~'
+// The hub's pane, to hand it the key that opens New agent (keys.mjs).
 async function newAgent() {
   await show('hub')
   execFile('tmux', ['list-panes', '-t', `${session}:hub`, '-F', '#{pane_id} #{@hub}'], (err, out) => {
@@ -45,49 +46,14 @@ function help() {
   })
 }
 
-const BG = bg(P.crust)
 const cols = () => process.stdout.columns || 6
 const rows = () => process.stdout.rows || 24
 let buttons = []
 
-function button(icon, label, on, dot = false) {
-  const w = cols()
-  const fill = on ? bg(P.surface0) : BG
-  const color = fg(on ? P.blue : P.sub)
-  return [
-    render([[` ${icon}`, color], ...(dot ? [[' ●', fg(P.peach)]] : [])], w, fill),
-    render([[` ${label}`, color]], w, fill),
-  ]
-}
-
 function draw() {
-  const w = cols()
-  const lines = [render([], w, BG)]
-  buttons = []
-  const add = (act, ls) => {
-    buttons.push({ y1: lines.length + 1, y2: lines.length + ls.length, act })
-    lines.push(...ls, render([], w, BG))
-  }
-  add(() => show('work'), button('▣', 'work', VIEW === 'work'))
-  add(() => show('hub'), button('◫', 'hub', VIEW === 'hub', c.needs > 0))
-  lines.push(render([[` ${'─'.repeat(Math.max(1, w - 2))}`, fg(P.surface1)]], w, BG))
-  const count = (glyph, n, color, bold = false) => render([[` ${glyph} ${n}`, (bold ? BOLD : '') + fg(color)]], w, BG)
-  lines.push(count('▲', c.needs, c.needs ? P.peach : P.overlay1, c.needs > 0))
-  lines.push(count('✻', c.working, P.blue))
-  lines.push(count('✓', c.done, P.green))
-  lines.push(count('○', c.idle, P.sub))
-  const tail = (icon, label, key) => [render([[` ${icon}`, fg(P.sub)]], w, BG), render([[` ${label}`, fg(P.sub)]], w, BG), render([[` ${key}`, fg(P.overlay0)]], w, BG)]
-  const bottom = [
-    [newAgent, tail('+', 'new', 'alt+n')],
-    [help, tail('?', 'help', 'alt+h')],
-  ]
-  const height = bottom.reduce((n, [, ls]) => n + ls.length + 1, 0)
-  while (lines.length < rows() - height) lines.push(render([], w, BG))
-  for (const [act, ls] of bottom) {
-    buttons.push({ y1: lines.length + 1, y2: lines.length + ls.length, act })
-    lines.push(...ls, render([], w, BG))
-  }
-  paint(lines.slice(0, rows()))
+  const f = frame(cols(), rows(), VIEW, c, { work: () => show('work'), hub: () => show('hub'), newAgent, help })
+  buttons = f.buttons
+  paint(f.lines)
 }
 
 if (!process.stdin.isTTY) {
@@ -97,9 +63,7 @@ if (!process.stdin.isTTY) {
 process.stdin.setRawMode(true)
 process.stdin.on('data', data => {
   for (const t of tokens(data.toString('utf8'))) {
-    if (!t.mouse || t.mouse.up || (t.mouse.button & 3) !== 0 || t.mouse.button & 96) continue
-    const b = buttons.find(b => t.mouse.y >= b.y1 && t.mouse.y <= b.y2)
-    void b?.act()
+    if (t.mouse) void pressed(buttons, t.mouse)?.act()
   }
 })
 // tmux shares a resize out between the panes, the rail included, and the

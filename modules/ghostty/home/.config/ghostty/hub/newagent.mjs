@@ -69,7 +69,7 @@ let hits = []
 // names and which one is in the field.
 let menu = null
 
-function fields() {
+export function fields() {
   const k = KINDS[d.kind].id
   return ['kind', 'folder', 'recent', k === 'task' ? 'prompt' : 'target', ...(k === 'task' ? ['runAs', 'branch'] : []), 'model', 'mode', 'effort', 'start']
 }
@@ -94,7 +94,7 @@ function input(field, w, on, ghost = '') {
 // The folders the Folder field's last part could be: those that start with
 // it, or, when none does, those that do ignoring case. Hidden ones only when
 // the part starts with a dot, as in a shell.
-function matchesOf(text) {
+export function matchesOf(text) {
   const full = expand(text)
   const dir = full.endsWith('/') ? full : dirname(full)
   const part = full.endsWith('/') ? '' : basename(full)
@@ -125,7 +125,7 @@ const pathTo = (dir, name) => tilde(join(dir, name))
 
 // What's left of the first match, while the cursor is at the end of a part
 // it extends.
-function suggestion() {
+export function suggestion() {
   if (d.field !== 'folder' || menu || d.folder.at !== d.folder.text.length) return ''
   const { part, names } = matchesOf(d.folder.text)
   return part && names[0]?.startsWith(part) ? `${names[0].slice(part.length)}/` : ''
@@ -253,7 +253,9 @@ function draw() {
   paint(lines.slice(0, H))
 }
 
-function key(k, paste) {
+// One key, or pasted text, for the field you're on. Returns { done } once
+// the form is finished: the spec to start, or null for cancel.
+export function key(k, paste) {
   const fs = fields()
   const at = fs.indexOf(d.field)
   const move = n => (d.field = fs[Math.min(fs.length - 1, Math.max(0, at + n))])
@@ -266,7 +268,7 @@ function key(k, paste) {
   const text = ['folder', 'prompt', 'target'].includes(d.field) ? d[d.field] : null
   const choice = { kind: [KINDS.length, 'kind'], runAs: [RUN_AS.length, 'runAs'], branch: [BRANCH.length, 'branch'], recent: [recents.length, 'recent'] }[d.field] ??
     (CHOICES[d.field] ? [CHOICES[d.field].length, d.field] : null)
-  if (k === '\x1b' || k === '\x03') return finish(null)
+  if (k === '\x1b' || k === '\x03') return { done: null }
   if (k === '\x13') return submit()
   if (d.field === 'folder' && (k === '\t' || (k === '\x1b[Z' && menu))) return tab(k === '\x1b[Z')
   if (k === '\x1b[A' || k === '\x1b[Z') return move(-1)
@@ -318,6 +320,8 @@ function insert(text, s) {
   text.at += c.length
 }
 
+// The spec for the hub, or nothing with an error beside Start and the
+// field to fix selected.
 function submit() {
   const kind = KINDS[d.kind].id
   const cwd = expand(d.folder.text.trim()).replace(/\/+$/, '') || HOME
@@ -338,17 +342,19 @@ function submit() {
     d.error = kind === 'pr' ? 'Paste the PR or MR link' : 'Say what to watch'
     return
   }
-  finish({
-    kind,
-    cwd,
-    prompt: d.prompt.text,
-    target: d.target.text,
-    runAs: RUN_AS[d.runAs].id,
-    worktree: BRANCH[d.branch].id === 'worktree',
-    model: CHOICES.model[d.model],
-    mode: CHOICES.mode[d.mode],
-    effort: CHOICES.effort[d.effort],
-  })
+  return {
+    done: {
+      kind,
+      cwd,
+      prompt: d.prompt.text,
+      target: d.target.text,
+      runAs: RUN_AS[d.runAs].id,
+      worktree: BRANCH[d.branch].id === 'worktree',
+      model: CHOICES.model[d.model],
+      mode: CHOICES.mode[d.mode],
+      effort: CHOICES.effort[d.effort],
+    },
+  }
 }
 
 // Model, mode and effort go back to what the kind starts with.
@@ -362,15 +368,12 @@ function finish(spec) {
   process.exit(0)
 }
 
-function main() {
-  const [result, opts] = process.argv.slice(2)
-  if (!result || !process.stdin.isTTY) {
-    console.error('newagent.mjs <result file> <options json>, in a terminal; the hub runs it.')
-    process.exit(1)
-  }
-  RESULT = result
-  const { folder = '', recents: given = [] } = JSON.parse(opts || '{}')
+// A fresh form: on a task, in the folder given (a worktree's repo, so the
+// new agent doesn't nest in another's worktree), or else the newest recent.
+// Returns the form's state, which key() changes.
+export function form({ folder = '', recents: given = [] } = {}) {
   recents = given
+  menu = null
   const root = (folder || recents[0] || join(HOME, 'projects')).replace(/\/\.claude\/worktrees\/.*$/, '')
   d = {
     kind: 0,
@@ -388,6 +391,17 @@ function main() {
     error: null,
   }
   startWith(KINDS[d.kind].id)
+  return d
+}
+
+function main() {
+  const [result, opts] = process.argv.slice(2)
+  if (!result || !process.stdin.isTTY) {
+    console.error('newagent.mjs <result file> <options json>, in a terminal; the hub runs it.')
+    process.exit(1)
+  }
+  RESULT = result
+  form(JSON.parse(opts || '{}'))
   process.stdin.setRawMode(true)
   process.stdin.on('data', data => {
     for (const t of tokens(data.toString('utf8'))) {
@@ -396,8 +410,12 @@ function main() {
         const h = hits.find(r => r.y === t.mouse.y)
         if (!h) continue
         d.field = h.f
-        if (h.f === 'start') submit()
-      } else key(t.key ?? '', t.paste)
+        const r = h.f === 'start' ? submit() : null
+        if (r) return finish(r.done)
+      } else {
+        const r = key(t.key ?? '', t.paste)
+        if (r?.done !== undefined) return finish(r.done)
+      }
     }
     draw()
   })
