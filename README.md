@@ -63,6 +63,8 @@ its own `setup`, which links the module's settings, hooks, skills, commands, age
 `~/.claude/` and installs the plugins they name. It has its own linker rather than a `home/` folder
 because skills and commands are grouped by category in the repo but flat (or namespaced) once installed.
 See [modules/claude/README.md](modules/claude/README.md). Run it from the main checkout, not a worktree.
+MCP connectors (Atlassian, Figma, Slack, Elastic, Linear) are added by hand once per machine; see
+[Connectors](modules/claude/README.md#connectors) for which skills need them and the commands.
 Claude Code sends no desktop notifications: what needs you shows in the Agents panel widget from the
 `ghostty` module (see [docs/ghostty.md](docs/ghostty.md#agents-widget)).
 

@@ -79,6 +79,51 @@ cases after changing its description, and add a case for each miss you see in
 real use. A new skill needs a case file: `tests/test_run_triggers.py` fails
 without one.
 
+## Connectors
+
+`./setup` installs no MCP servers: each one signs in with OAuth to your own
+account, so it is added once per machine by hand. Skills find a connector's
+tools with ToolSearch by keyword (`jira`, `figma`, ...), so a server added
+with `claude mcp add` and the same service connected at claude.ai (Settings,
+Connectors, which Claude Code loads when you sign in with a claude.ai account)
+both work.
+
+| Connector | Used by | Needed for | Without it |
+|---|---|---|---|
+| Atlassian (Jira, Confluence) | `ticket-implement`, `ticket-fleet`, `standup-prep`; `ticket-write`, `create-spec` to publish | Fetching tickets, epics and their links; yesterday's Jira activity; filing tickets or Confluence pages | `ticket-implement` and `standup-prep` can't run. `ticket-fleet` says it's missing and asks; a local spec file still works. `ticket-write` and `create-spec` write files instead |
+| Figma | `ticket-implement`, `ticket-fleet` | Layout, spacing, colors and assets from Figma links in a ticket | The design details are left out |
+| Slack | `standup-prep` | Public-channel threads you took part in (never DMs, never posts) | The standup has only Jira activity |
+| Elastic (Kibana Agent Builder) | `logger` | Past logs, shareable Kibana links, deep dives | Live tail (Docker, kubectl) still works; share and deep dive stop and ask. Setup in [elastic.md](skills/general/logger/references/elastic.md) |
+| Linear | `ticket-fleet`; `ticket-write` to publish | Linear issue links or keys | Same as Atlassian above |
+
+`diagram-pane` (used by `make-diagram`) is this repo's own mod and is
+installed by `./setup`, so it needs no step here.
+
+Add them for every project (`--scope user`), then run `/mcp` in a session to
+sign in to each:
+
+```sh
+claude mcp add --transport http --scope user atlassian https://mcp.atlassian.com/v2/mcp
+claude mcp add --transport http --scope user figma https://mcp.figma.com/mcp
+claude mcp add --transport http --scope user linear https://mcp.linear.app/mcp
+claude plugin install slack    # Slack's server needs the plugin's app; a bare mcp add can't sign in
+```
+
+Sources: [Atlassian](https://support.atlassian.com/rovo/docs/getting-started-with-the-atlassian-remote-mcp-server/),
+[Figma](https://developers.figma.com/docs/figma-mcp-server/remote-server-installation),
+[Linear](https://linear.app/docs/mcp),
+[Slack](https://docs.slack.dev/ai/slack-mcp-server/connect-to-claude) (a
+workspace admin has to approve the integration). Elastic's endpoint is your
+own Kibana, so its steps are in the logger skill.
+
+Some skills also use CLIs:
+
+| CLI | Used by | Installed by |
+|---|---|---|
+| `gh` / `glab`, signed in | `pr-babysit`; `ticket-fleet` for GitHub issues | Nothing here: install them by hand |
+| `docker` | `logger` live tail (local) | the `dev` module |
+| `kubectl` | `logger` live tail (an environment) | Nothing here: install it by hand |
+
 ## Install
 
 ```sh

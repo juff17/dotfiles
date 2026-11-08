@@ -57,10 +57,11 @@ ticket for review"*; promises from yesterday's Slack become follow-ups.
 
 ### 1. Connect the MCPs (OAuth, read-only Jira)
 ```bash
-claude mcp add --transport sse --scope user atlassian https://mcp.atlassian.com/v1/sse
+claude mcp add --transport http --scope user atlassian https://mcp.atlassian.com/v2/mcp
+claude plugin install slack
 ```
-Complete the OAuth flow; verify with `claude mcp list` and a trivial JQL search. Then add
-your **Slack MCP** (OAuth) — **read-only public-channel access is all that's needed**; the
+Run `/mcp` in a session to sign in to each; verify with `claude mcp list` and a trivial JQL
+search. For **Slack**, **read-only public-channel access is all that's needed**; the
 skill never posts and never reads DMs. Make sure the Slack app is invited to the public
 channels you want included.
 
