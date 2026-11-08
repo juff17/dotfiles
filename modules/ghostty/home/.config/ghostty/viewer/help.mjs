@@ -90,7 +90,7 @@ export const SECTIONS = [
       ['a', 'Add with Claude: describe it and Haiku files it'],
       ['shift+a', 'Add by hand: title, category 1–6, then a note'],
       ['r', 'Retry a filing Claude couldn’t finish', true],
-      ['e', 'Edit: title, category and note in one form; tab moves, ↵ saves'],
+      ['e', 'Edit: title, category, type, repo and note in one form; tab moves, ↵ saves'],
       ['c', 'Next category', true],
       ['m  shift+m', 'Mark for hand-off, clear the marks'],
       ['w', 'Hand the marked todos, or this one, to agents: t tab or background, b worktree or branch, m model', true],
