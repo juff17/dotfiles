@@ -38,13 +38,18 @@ export function frame(w, h, view, c, acts) {
     [acts.newAgent, tail('+', 'new', 'alt+n')],
     [acts.help, tail('?', 'help', 'alt+h')],
   ]
-  const height = bottom.reduce((n, [, ls]) => n + ls.length + 1, 0)
-  while (lines.length < h - height) lines.push(render([], w, BG))
+  // A rail too short for both drops ? help, then + new, rather than drawing
+  // them past its bottom edge.
+  const height = () => bottom.reduce((n, [, ls]) => n + ls.length + 1, 0)
+  while (bottom.length && lines.length + height() > h) bottom.pop()
+  while (lines.length < h - height()) lines.push(render([], w, BG))
   for (const [act, ls] of bottom) {
     buttons.push({ y1: lines.length + 1, y2: lines.length + ls.length, act })
     lines.push(...ls, render([], w, BG))
   }
-  return { lines: lines.slice(0, h), buttons }
+  // Only buttons drawn whole can be clicked: on a very short rail work and
+  // hub can be cut off too.
+  return { lines: lines.slice(0, h), buttons: buttons.filter(b => b.y2 <= h) }
 }
 
 // The button a mouse report presses: a left press on its rows. Releases,

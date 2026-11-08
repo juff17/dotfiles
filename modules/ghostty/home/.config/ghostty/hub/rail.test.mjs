@@ -39,10 +39,25 @@ test('the window the rail sits in is the highlighted button', () => {
   assert.equal(work[1], hub[4].replace('◫', '▣'))
 })
 
-test('on a short rail the bottom buttons follow straight on and the frame is cut', () => {
-  const { lines, buttons } = frame(6, 14, 'work', none, ACTS)
-  assert.equal(lines.length, 14)
+test('the bottom buttons fit exactly at 20 rows', () => {
+  const { lines, buttons } = frame(6, 20, 'work', none, ACTS)
   assert.deepEqual(by(buttons), { work: [2, 3], hub: [5, 6], new: [13, 15], help: [17, 19] })
+  assert.equal(text(lines[18]).trim(), 'alt+h')
+})
+
+test('a short rail drops ? help, then + new, rather than drawing past its edge', () => {
+  for (const h of [6, 10, 14, 15, 16, 19]) {
+    const { lines, buttons } = frame(6, h, 'work', none, ACTS)
+    assert.equal(lines.length, h)
+    for (const b of buttons) assert.ok(b.y2 <= h, `${b.act} ends at ${b.y2} of ${h}`)
+  }
+  assert.deepEqual(by(frame(6, 19, 'work', none, ACTS).buttons), { work: [2, 3], hub: [5, 6], new: [16, 18] })
+  assert.equal(text(frame(6, 19, 'work', none, ACTS).lines[17]).trim(), 'alt+n')
+  assert.deepEqual(by(frame(6, 16, 'work', none, ACTS).buttons), { work: [2, 3], hub: [5, 6], new: [13, 15] })
+  assert.deepEqual(by(frame(6, 15, 'work', none, ACTS).buttons), { work: [2, 3], hub: [5, 6] })
+  // Too short even for hub: only what's drawn whole is clickable.
+  assert.deepEqual(by(frame(6, 5, 'work', none, ACTS).buttons), { work: [2, 3] })
+  assert.equal(pressed(frame(6, 14, 'work', none, ACTS).buttons, { button: 0, x: 1, y: 13 }), null)
 })
 
 test('a left press on a button\'s rows presses it, wherever the column', () => {
