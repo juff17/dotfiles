@@ -166,8 +166,10 @@ If the chip shows **"Sorry! There was an error loading dev.dotfiles.agents … p
 `dv`'s zoom and pan math, the todo store (categories, grouping, pruning, writes), the help filter, the agent hub's model (reading transcripts and monitor events, sorting agents into lanes, fitting a full lane, the commands a new agent runs) and the Agents widget's items (sections, what's new, dismissing) have tests. They use only Node's built-in test runner:
 
 ```bash
-node --test modules/ghostty/home/.config/ghostty/viewer/view.test.mjs modules/ghostty/home/.config/ghostty/viewer/todo.test.mjs modules/ghostty/home/.config/ghostty/viewer/help.test.mjs modules/ghostty/home/.config/ghostty/hub/hub.test.mjs modules/ghostty/home/.config/ghostty/hub/tray.test.mjs
+./test.sh ghostty
 ```
+
+That runs every `*.test.mjs` under `viewer/` and `hub/`, so a new test file is picked up on its own.
 
 ## Limits
 
