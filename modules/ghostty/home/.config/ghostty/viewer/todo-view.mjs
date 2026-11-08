@@ -299,9 +299,9 @@ function editRows(w) {
     } else if (field === 'repo') lines = [on ? repoPicks(room) : prompt.repo === ui.NO_REPO ? `${C.hint}none${C.reset}` : `${C.text}${prompt.repo.repo}${C.reset}`]
     else if (!prompt[field]) lines = [on ? `${CARET}${C.hint}${fit(field === 'note' ? 'Details for later' : PLACEHOLDER.title, room - 1).trimEnd()}${C.reset}` : `${C.hint}none${C.reset}`]
     else {
-      // Room for the caret after the last character.
-      lines = wrap(prompt[field], on ? room - 1 : room).map(line => `${C.text}${line}${C.reset}`)
-      if (on) lines[lines.length - 1] += CARET
+      // Wrapped with the caret's mark in, so it lands where the wrap puts it.
+      const text = on ? ui.withCaret(prompt[field], prompt.at) : prompt[field]
+      lines = wrap(text, room).map(line => `${C.text}${ui.caretShown(line)}${C.reset}`)
     }
     lines.forEach((line, i) => rows.push(cardLine(`${i ? ' '.repeat(LABEL_W) : label}${line}`)))
   }
@@ -416,17 +416,17 @@ function trail(at) {
   }
 }
 
-// A pill, then what's typed so far (its end, when it's long) or the
+// A pill, then what's typed so far (around the caret, when it's long) or the
 // placeholder, then something set against the right edge if there's room.
 // The placeholder says what to do, so it keeps its room over the right side.
-function inputRow(label, pillBg, text, placeholder = '', right = null) {
+function inputRow(label, pillBg, text, placeholder = '', right = null, at = undefined) {
   const pill = `${pillBg}${C.crust}${C.bold} ${label} ${C.reset} `
   const lead = label.length + 3
   const need = text ? 30 : ui.cells(placeholder) + 3
   const side = right && width() - lead - right.width >= need ? right : null
   const room = width() - lead - 1 - (side ? side.width + 2 : 0)
   const body = text
-    ? `${C.text}${ui.tail(text, room)}${C.reset}${CARET}`
+    ? `${C.text}${ui.caretShown(ui.caretWindow(text, at, room + 1))}${C.reset}`
     : `${CARET}${C.hint}${fit(placeholder, room).trimEnd()}${C.reset}`
   return side ? `${pill}${body}\x1b[${width() - side.width + 1}G${side.text}` : `${pill}${body}`
 }
@@ -435,7 +435,7 @@ function statusRow(list, current) {
   if (prompt?.kind === 'claude') {
     const s = settings()
     const model = `${s['todo.filing.model']} 5.5 · ${s['todo.filing.effort']}`
-    return inputRow('CLAUDE', C.claudeBg, prompt.text, PLACEHOLDER.claude, { text: `${C.hint}${model}${C.reset}`, width: model.length })
+    return inputRow('CLAUDE', C.claudeBg, prompt.text, PLACEHOLDER.claude, { text: `${C.hint}${model}${C.reset}`, width: model.length }, prompt.at)
   }
   if (prompt?.kind === 'edit') {
     const picks = { cat: [['1–6', 'pick']], type: [['0–5', 'pick']], repo: [['←/→', 'pick'], ['type', 'filter']] }[prompt.field] ?? []
@@ -443,7 +443,7 @@ function statusRow(list, current) {
     return `${C.pillBg}${C.crust}${C.bold} EDIT ${C.reset}  ${hint(8 + hintWidth(pairs) < width() ? pairs : pairs.slice(-2))}`
   }
   if (prompt?.kind === 'title' || prompt?.kind === 'note')
-    return inputRow(prompt.kind.toUpperCase(), C.pillBg, prompt.text, PLACEHOLDER[prompt.kind], trail(prompt.kind))
+    return inputRow(prompt.kind.toUpperCase(), C.pillBg, prompt.text, PLACEHOLDER[prompt.kind], trail(prompt.kind), prompt.at)
   if (prompt?.kind === 'cat') {
     const picks = CATEGORIES.map((c, i) => `${C.blue}${i + 1}${C.reset} ${c.name === prompt.cat ? `${C.bold}${fg(c.color)}` : fg(c.color)}${c.short}${C.reset}`)
     const line = `${C.pillBg}${C.crust}${C.bold} CATEGORY ${C.reset} ${picks.join(' ')}`
@@ -609,6 +609,7 @@ function onEditKey(key) {
     const save = ui.editChanges(prompt)
     if (!save) {
       prompt.field = 'title'
+      delete prompt.at
       return say('A todo needs a title', P.peach)
     }
     prompt = null
