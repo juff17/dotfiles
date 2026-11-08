@@ -9,7 +9,7 @@
 
 import { BOLD, P, bg, enter, fg, leave, paint, render, split, tokens, width } from '../hub/term.mjs'
 import { SECTIONS, settingsFile, load, show } from '../hub/settings.mjs'
-import { AGENTS, instructions } from '../hub/prompts.mjs'
+import { AGENTS, agent, defaultOf, instructions } from '../hub/prompts.mjs'
 import { BOTTOM, NAV, TOP, VALUE, current, fullPrompt, onKey, onPaste, start, valueSpans, wrap } from './settings-nav.mjs'
 import { layout } from './textarea.mjs'
 
@@ -41,7 +41,7 @@ function content(w, values) {
     const fill = on ? SEL : BASE
     if (r.prompt) {
       at.push(lines.length)
-      const { lines: own, cursorLine } = promptLines(r.prompt, w, on, fill)
+      const { lines: own, cursorLine } = promptLines(r, w, on, fill)
       // While typing, the field's cursor is what has to stay in view.
       end.push(cursorLine === undefined ? lines.length + own.length - 1 : lines.length + cursorLine)
       lines.push(...own)
@@ -66,16 +66,20 @@ function content(w, values) {
 
 // An agent's prompt: the start of what it's sent, then your instructions'
 // first line, or while you type them, the field with every line.
-function promptLines(id, w, on, fill) {
+function promptLines(r, w, on, fill) {
+  const id = r.prompt
   const yours = instructions(id)
   const count = yours ? yours.split('\n').filter(l => l.trim()).length : 0
+  // Changed from its default: none for most, the two rules for the worktree.
+  const changed = yours !== defaultOf(id)
   const typing = s.typing?.id === id
-  const value = typing ? 'typing' : count ? `your ${count} line${count === 1 ? '' : 's'}` : 'e to add instructions'
+  const lineCount = `${count} line${count === 1 ? '' : 's'}`
+  const value = typing ? 'typing' : !count ? 'e to add instructions' : changed ? `your ${lineCount}` : `default, ${lineCount}`
   const sent = fullPrompt(id)[0].text.replace(/\s*\n\s*/g, ' ')
   const lines = [
-    render([[count ? '• ' : '  ', fg(P.peach)], ['Prompt', (on ? BOLD : '') + fg(P.text)]], w - VALUE, fill) +
+    render([[changed ? '• ' : '  ', fg(P.peach)], [r.label, (on ? BOLD : '') + fg(P.text)]], w - VALUE, fill) +
       render([[value, count || typing ? (on ? BOLD : '') + fg(P.text) : fg(P.overlay1)]], VALUE, fill),
-    render([[`  ${sent}`, fg(P.overlay1)]], w, fill),
+    render([[`  ${agent(id).partOf ? `added to the hand-off’s prompt when its agent gets its own worktree` : sent}`, fg(P.overlay1)]], w, fill),
   ]
   if (!typing) {
     if (yours) lines.push(render([[`  ${wrap(yours, w)[0]}`, fg(P.text)]], w, fill))

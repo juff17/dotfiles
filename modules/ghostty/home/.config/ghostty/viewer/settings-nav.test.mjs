@@ -165,7 +165,8 @@ test('every agent’s prompt sits in a section with its settings, after its skil
     assert.equal(sec.length, 1, a.id)
     const rows = sec[0].rows
     const at = rows.findIndex(r => r.prompt === a.id)
-    if (a.skillKey) assert.equal(rows[at - 1].key, a.skillKey, `${a.id}'s skill is the row above it`)
+    if (a.partOf) assert.equal(rows[at - 1].prompt, a.partOf, `${a.id} follows the prompt it's part of`)
+    else if (a.skillKey) assert.equal(rows[at - 1].key, a.skillKey, `${a.id}'s skill is the row above it`)
     else assert.ok(!rows.some(r => r.type === 'skill'), `${a.id} has its own skill`)
   }
   assert.ok(!SECTIONS.some(x => x.id === 'prompts'), 'no section of prompts on their own')
@@ -175,7 +176,7 @@ test('↑↓ moves through settings and prompts alike', () => {
   const s = onSkill('prompts.handoff.skill')
   press(s, DOWN)
   assert.equal(current(s).prompt, 'todo-handoff')
-  press(s, DOWN)
+  press(s, DOWN, DOWN)
   assert.equal(current(s).key, 'todo.filing.model')
 })
 
@@ -301,6 +302,21 @@ test('the filer gets your instructions in its system prompt and the skill in its
   assert.ok(system.text.startsWith(fixedPart('todo-filing')))
   assert.ok(system.text.endsWith('\nPrefer the dotfiles repo.'))
   assert.equal(message.text, '/beta add todo: {what you typed}')
+})
+
+test('the worktree rules start at their default, and r twice puts it back', () => {
+  const s = onAgent('todo-worktree')
+  assert.match(instructions('todo-worktree'), /ask me whether to merge it/)
+  press(s, 'r')
+  assert.equal(s.note, null, 'nothing to put back')
+  press(s, 'e', '\x15', '\x7f', '\x15', 'N', 'o', ' ', 'm', 'e', 'r', 'g', 'e', '.', '\x13')
+  assert.equal(instructions('todo-worktree'), 'No merge.')
+  press(s, 'r', 'r')
+  assert.match(instructions('todo-worktree'), /^When the work is ready/)
+})
+
+test('the worktree rules show the whole hand-off prompt', () => {
+  assert.deepEqual(fullPrompt('todo-worktree'), fullPrompt('todo-handoff'))
 })
 
 test('wrap cuts text at spaces, and a long word where the line ends', () => {

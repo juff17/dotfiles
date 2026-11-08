@@ -33,27 +33,43 @@ export const AGENTS = [
   { id: 'logger', name: 'Log watcher', linked: 'logger', about: 'a log watcher started from New agent' },
   { id: 'todo-handoff', name: 'Todo hand-off', skillKey: 'prompts.handoff.skill', about: 'each todo handed to an agent with w' },
   { id: 'todo-filing', name: 'Todo filing', skillKey: 'prompts.filing.skill', about: 'the Claude that files a todo typed with a' },
+  // Part of the hand-off's prompt, there only when its agent gets its own
+  // worktree: merging is your call, and the worktree may still hold work you
+  // want, so by default the agent asks before doing either.
+  {
+    id: 'todo-worktree',
+    name: 'Worktree rules',
+    partOf: 'todo-handoff',
+    about: 'a todo hand-off whose agent gets its own worktree',
+    default:
+      "When the work is ready, commit it in the worktree and ask me whether to merge it; never merge unasked.\nAfter it's merged, ask me whether to remove the worktree; never remove it unasked.",
+  },
 ]
 export const agent = id => AGENTS.find(a => a.id === id)
 
 export const fileOf = id => join(promptsDir(), `${id}.md`)
 
 // What a file starts as, and goes back to when cleared.
+const HOW = {
+  'todo-filing': 'added to its system prompt after the fixed one',
+  'todo-worktree': 'sent after the hand-off’s prompt, joined into one line; empty sends none',
+}
 export const header = id =>
-  `<!-- Your instructions for ${agent(id).about}: ${
-    id === 'todo-filing' ? 'added to its system prompt after the fixed one' : 'sent after the fixed prompt, joined into one line'
-  }. Settings edits this file, on the agent's Prompt row. -->\n`
+  `<!-- Your instructions for ${agent(id).about}: ${HOW[id] ?? 'sent after the fixed prompt, joined into one line'}. Settings edits this file, on the agent's row. -->\n`
 
-// Your instructions for an agent, without comments; '' when there are none.
+// Your instructions for an agent, without comments; with no file, its
+// default, else none ('').
 export function instructions(id) {
   try {
     return readFileSync(fileOf(id), 'utf8')
       .replace(/<!--[\s\S]*?-->/g, '')
       .trim()
   } catch {
-    return ''
+    return agent(id).default ?? ''
   }
 }
+
+export const defaultOf = id => agent(id).default ?? ''
 
 // Your instructions for an agent, saved under the file's header; none
 // leaves just the header.
@@ -63,7 +79,8 @@ export function save(id, text) {
   writeFileSync(fileOf(id), `${header(id)}${body ? `${body}\n` : ''}`)
 }
 
-export const clear = id => save(id, '')
+// Back to the default, or to none for an agent without one.
+export const clear = id => save(id, defaultOf(id))
 
 // The skills that can be picked: each folder in ~/.claude/skills with a
 // SKILL.md, by name.
