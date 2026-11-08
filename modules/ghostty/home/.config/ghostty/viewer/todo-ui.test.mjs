@@ -64,13 +64,17 @@ test('marking an item done moves the cursor on, or back from the last', () => {
   assert.equal(ui.neighbour([list[0]], list[0]), undefined, 'the only one done: nowhere to go')
 })
 
-test('marks drop items that are done, filing, deleted or filtered out', () => {
-  const list = ui.selectable(view(), true)
-  const marked = new Set(['a1', 'd1', 'f1', 'gone', 'b1'])
-  assert.deepEqual([...ui.pruneMarks(marked, list)], ['a1', 'b1'])
-  // f (this repo only) takes a2 out of the list, and with it its mark.
+test('marks drop items that are done, filing or deleted, but not ones f hides', () => {
+  const marked = new Set(['a1', 'd1', 'f1', 'gone', 'b1', 'a2'])
+  assert.deepEqual([...ui.pruneMarks(marked, sample())], ['a1', 'b1', 'a2'])
+  // f (this repo only) hides a2: its mark stays for when f is off again,
+  // but w only hands off what shows.
   const only = ui.selectable(view(sample(), { only: true }), false)
-  assert.deepEqual([...ui.pruneMarks(new Set(['a2', 'a1']), only)], ['a1'])
+  const kept = ui.pruneMarks(new Set(['a2', 'a1']), sample())
+  assert.deepEqual([...kept], ['a2', 'a1'])
+  assert.deepEqual(ui.markedIds(only, kept), ['a1'])
+  assert.deepEqual(ui.markedIds(ui.selectable(view(), false), kept), ['a1', 'a2'], 'back with f off')
+  assert.deepEqual(ui.markedIds(only, new Set(['a2'])), [], 'only hidden marks: w takes the selected item instead')
 })
 
 test('hand-off takes the marks in list order, not the order they were marked', () => {

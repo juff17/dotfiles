@@ -445,8 +445,10 @@ function statusRow(list, current) {
   }
   if (prompt?.kind === 'confirm') return `${fg(P.peach)}${prompt.text}${C.reset}`
   if (said && Date.now() < said.until) return `${fg(said.color)}${fit(said.text, width() - 1)}${C.reset}`
-  const pairs = ui.statusPairs(marked.size, only)
-  const position = ui.position(list, current, marked.size)
+  // Marks on items f hides don't count: w wouldn't hand them off.
+  const marks = ui.markedIds(list, marked).length
+  const pairs = ui.statusPairs(marks, only)
+  const position = ui.position(list, current, marks)
   const fits = 8 + hintWidth(pairs) + position.length < width()
   const left = `${C.pillBg}${C.crust}${C.bold} TODO ${C.reset}  ${fits ? hint(pairs) : hint(pairs.slice(0, 2))}`
   return position ? `${left}\x1b[${width() - position.length + 1}G${C.text}${position}${C.reset}` : left
@@ -459,7 +461,7 @@ function draw() {
   const list = selectable(view)
   const current = cursorItem(list)
   if (current) cursorId = current.id
-  ui.pruneMarks(marked, list)
+  ui.pruneMarks(marked, items)
   const height = bodyHeight()
   let rows
   if (!view.groups.length && !view.filing.length && !(showDone && view.doneToday.length)) {

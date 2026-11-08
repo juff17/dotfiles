@@ -106,9 +106,11 @@ export function moveTo(list, cursorId, by) {
 // before it at the end.
 export const neighbour = (list, item) => list[list.indexOf(item) + 1] ?? list[list.indexOf(item) - 1]
 
-// Marks only hold open, real items still in the list.
-export function pruneMarks(marked, list) {
-  for (const id of marked) if (!list.some(i => i.id === id && !i.done && !i.filing)) marked.delete(id)
+// Marks only hold open, real items still in the store. `items` is the whole
+// store, not the list as shown, so an item f hides keeps its mark for when
+// it shows again; what acts on marks takes only the shown ones (markedIds).
+export function pruneMarks(marked, items) {
+  for (const id of marked) if (!items.some(i => i.id === id && !i.done && !i.filing)) marked.delete(id)
   return marked
 }
 
@@ -250,7 +252,7 @@ export function promptKey(prompt, key, current) {
   return { prompt }
 }
 
-// The marked items, in the list's order.
+// The marked items the list shows, in its order.
 export const markedIds = (list, marked) => list.filter(i => marked.has(i.id)).map(i => i.id)
 
 // The hand-off row for these items. Fixed as the row opens, so what it says
