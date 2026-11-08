@@ -1,0 +1,42 @@
+[
+ {
+  "query": "babysit https://github.com/juff17/dotfiles/pull/14 until it merges",
+  "should_trigger": true
+ },
+ {
+  "query": "keep an eye on my MR !482 on gitlab, the pipeline takes like 3 hours",
+  "should_trigger": true
+ },
+ {
+  "query": "watch the CI on my PR and tell me if anything fails, rebase it if main moves",
+  "should_trigger": true
+ },
+ {
+  "query": "can you monitor review comments on PR 14 and fix the easy ones",
+  "should_trigger": true
+ },
+ {
+  "query": "my pr keeps going stale behind main, look after it in the background",
+  "should_trigger": true
+ },
+ {
+  "query": "watch https://gitlab.com/acme/api/-/merge_requests/77 pipeline please",
+  "should_trigger": true
+ },
+ {
+  "query": "review PR 14 for bugs",
+  "should_trigger": false
+ },
+ {
+  "query": "open a pull request for this branch",
+  "should_trigger": false
+ },
+ {
+  "query": "why did the last github actions run fail? here's the log",
+  "should_trigger": false
+ },
+ {
+  "query": "babysit the docker logs for the api container",
+  "should_trigger": false
+ }
+]

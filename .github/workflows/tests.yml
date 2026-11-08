@@ -1,0 +1,31 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  claude:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: modules/claude
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - run: python3 -m unittest discover -s tests
+
+  ghostty:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: modules/ghostty/home/.config/ghostty
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: node --test hub/*.test.mjs viewer/*.test.mjs

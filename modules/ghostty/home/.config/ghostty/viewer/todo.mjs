@@ -241,10 +241,10 @@ export async function repoOf(dir) {
   return { root, repo: basename(root), worktree: top === root ? '' : top, branch }
 }
 
-// The repos the filer may put an item in when the message names one: those
-// already on the list, and the git repos beside them (a projects folder).
-// A message typed in one tab is often about another repo, and without the
-// paths Claude can only file it where the tab is.
+// The repos the filer may put an item in: those already on the list, and
+// the git repos beside them (a projects folder), which it searches when the
+// message doesn't name one. A message typed in one tab is often about
+// another repo, and without the paths Claude can only file it where the tab is.
 export function knownRepos(items, { exists = existsSync, list = dir => readdirSync(dir) } = {}) {
   const roots = new Set(items.filter(i => i.repo !== 'none' && i.root).map(i => i.root))
   for (const parent of new Set([...roots].map(r => dirname(r)))) {

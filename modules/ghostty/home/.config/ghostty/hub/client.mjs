@@ -38,7 +38,8 @@ export function readState() {
 
 // Calls onState with each new state, and checks every few seconds that
 // agentd still runs (it exits when it finds no clients for a while, and a
-// client can outlive a crash of it).
+// client can outlive a crash of it). Returns a function that stops
+// following, for tests: the hub and the rail follow until they exit.
 export function follow(onState) {
   mkdirSync(join(RUN, 'clients'), { recursive: true })
   const me = join(RUN, 'clients', String(process.pid))
@@ -57,15 +58,20 @@ export function follow(onState) {
       onState(s)
     }
   }
+  let watcher = null
   try {
-    watch(RUN, (_, name) => name === 'state.json' && check())
+    watcher = watch(RUN, (_, name) => name === 'state.json' && check())
   } catch {}
-  setInterval(() => {
+  const timer = setInterval(() => {
     writeFileSync(me, '')
     ensureDaemon()
     check()
   }, 3000)
   check()
+  return () => {
+    clearInterval(timer)
+    watcher?.close()
+  }
 }
 
 // A monitor the hub stopped, as <session id>.<task id> in stopped/, so it

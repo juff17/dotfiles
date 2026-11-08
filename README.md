@@ -63,8 +63,31 @@ its own `setup`, which links the module's settings, hooks, skills, commands, age
 `~/.claude/` and installs the plugins they name. It has its own linker rather than a `home/` folder
 because skills and commands are grouped by category in the repo but flat (or namespaced) once installed.
 See [modules/claude/README.md](modules/claude/README.md). Run it from the main checkout, not a worktree.
+MCP connectors (Atlassian, Figma, Slack, Elastic, Linear) are added by hand once per machine; see
+[Connectors](modules/claude/README.md#connectors) for which skills need them and the commands.
 Claude Code sends no desktop notifications: what needs you shows in the Agents panel widget from the
 `ghostty` module (see [docs/ghostty.md](docs/ghostty.md#agents-widget)).
+
+## Tests
+
+Run every suite before committing a change, agents included:
+
+```bash
+./test.sh                # every suite
+./test.sh ghostty        # one or more of: ghostty, claude, mods
+```
+
+| Suite | Covers | Runner |
+|---|---|---|
+| `ghostty` | the agent hub and `agentd`, the Agents widget, and the logic of every viewer (`dv`, todo, diff, diagrams, help) | `node --test`, nothing to install |
+| `claude` | the claude module's skill and hook scripts | Python's `unittest`, nothing to install |
+| `mods` | Claude Code mods with a `hooks/*.test.tsx` | `claude plugin test`, skipped when `claude` isn't installed |
+
+Tests sit next to the code they test: `*.test.mjs` beside the ghostty module's `.mjs` files,
+`modules/claude/tests/test_<tool>.py`, and each mod's `hooks/*.test.tsx`. A new test file in one of
+those places is picked up without changing `test.sh`. When you change a behaviour, add or update the
+test that pins it in the same commit. See [docs/ghostty.md](docs/ghostty.md#tests) and
+[modules/claude/README.md](modules/claude/README.md#tests) for what each suite covers.
 
 ## Machine-local shell settings
 `.zshrc` sources `~/.zshrc.local` last if it exists. Put anything specific to one machine there (CA bundle

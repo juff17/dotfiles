@@ -1,0 +1,42 @@
+[
+ {
+  "query": "what can go wrong in this PR",
+  "should_trigger": true
+ },
+ {
+  "query": "audit the error handling on my branch",
+  "should_trigger": true
+ },
+ {
+  "query": "walk through this PR from each endpoint and tell me where failures aren't handled",
+  "should_trigger": true
+ },
+ {
+  "query": "do a failure-path audit of feature/billing against develop",
+  "should_trigger": true
+ },
+ {
+  "query": "check whether every failure in my branch gets surfaced and leaves data consistent",
+  "should_trigger": true
+ },
+ {
+  "query": "PR walkthrough please, start from the entry points",
+  "should_trigger": true
+ },
+ {
+  "query": "review my diff for style issues",
+  "should_trigger": false
+ },
+ {
+  "query": "open a PR for this branch",
+  "should_trigger": false
+ },
+ {
+  "query": "babysit PR 14",
+  "should_trigger": false
+ },
+ {
+  "query": "explain this PR to me, I didn't write it",
+  "should_trigger": false
+ }
+]

@@ -1,0 +1,42 @@
+[
+ {
+  "query": "remind me to bump the node version in the ghostty module after this lands",
+  "should_trigger": true
+ },
+ {
+  "query": "put 'figure out why the hub flickers on resize' on my list",
+  "should_trigger": true
+ },
+ {
+  "query": "whats on my todo list for this repo",
+  "should_trigger": true
+ },
+ {
+  "query": "mark the rm-guard symlink todo as done, I fixed it",
+  "should_trigger": true
+ },
+ {
+  "query": "note for later: the statusline should show cost. don't do it now",
+  "should_trigger": true
+ },
+ {
+  "query": "add 'look into the flaky tray test' to my todos",
+  "should_trigger": true
+ },
+ {
+  "query": "add a TODO comment above the retry loop in client.mjs saying we need backoff",
+  "should_trigger": false
+ },
+ {
+  "query": "grep the repo for TODO and FIXME comments and summarize them",
+  "should_trigger": false
+ },
+ {
+  "query": "build me a todo list app in react with local storage",
+  "should_trigger": false
+ },
+ {
+  "query": "what's left to do before I can open this PR?",
+  "should_trigger": false
+ }
+]

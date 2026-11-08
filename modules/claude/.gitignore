@@ -22,3 +22,6 @@ mods/**/.claude-plugin/types/
 .tours/
 
 .claude/docs/
+
+# Trigger eval runs (evals/run_triggers.py); one JSON per run
+evals/results/

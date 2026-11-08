@@ -13,9 +13,30 @@
 // to Todo, q to Files.
 
 import { execFile } from 'node:child_process'
-import { readFileSync, statSync, watch } from 'node:fs'
+import { watch } from 'node:fs'
 import { homedir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { dirname } from 'node:path'
+
+import {
+  addShare,
+  bodyRows as listRows,
+  cardSize,
+  changeCells,
+  changeWords,
+  clampScroll,
+  countLines,
+  fit,
+  fitPath,
+  followCursor,
+  keepCursor,
+  keyAction,
+  modeAt as modeIn,
+  openAfter,
+  parseDiff,
+  parseInput,
+  parseNumstat,
+  parseStatus,
+} from './diff.mjs'
 
 const DIR = process.argv[2] || process.cwd()
 const [TABS_SOCKET, TABS_SESSION] = (process.env.DV_TABS ?? '').split(':')
@@ -28,8 +49,6 @@ const MODES = [' Diagrams ', ' Files ', ' Diff ', ...(TODO_EXIT ? [' Todo '] : [
 // The empty tree, to diff against in a repository with no commits yet.
 const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904'
 const REFRESH_MS = 1000
-// Untracked files past this size aren't read to count their lines.
-const MAX_COUNT_BYTES = 2 * 1024 * 1024
 // Rows besides the file list: the mode header, the path row and the summary
 // card above, the status row below.
 const TOP = 7
@@ -85,89 +104,6 @@ const git = (args, cwd = root) =>
       resolve({ code: error ? (typeof error.code === 'number' ? error.code : 1) : 0, stdout: stdout ?? '' })
     })
   })
-
-// `git status -z` entries: `XY path`, and for a rename `XY new` then `old`.
-function parseStatus(text) {
-  const parts = text.split('\0')
-  const list = []
-  for (let i = 0; i < parts.length; i++) {
-    const entry = parts[i]
-    if (entry.length < 4) continue
-    const x = entry[0]
-    const y = entry[1]
-    const path = entry.slice(3)
-    const old = x === 'R' || x === 'C' ? parts[++i] : undefined
-    const untracked = x === '?'
-    const status = untracked ? '?' : x === 'U' || y === 'U' ? 'U' : x !== ' ' ? x : y
-    list.push({ path, old, status, untracked, add: 0, del: 0, binary: false })
-  }
-  return list.sort((a, b) => a.path.localeCompare(b.path))
-}
-
-// `git diff --numstat -z`: `add\tdel\tpath`, or for a rename `add\tdel\t`
-// then `old` and `new`; a binary file counts `-`.
-function parseNumstat(text) {
-  const counts = new Map()
-  const parts = text.split('\0')
-  for (let i = 0; i < parts.length; i++) {
-    const [add, del, path] = parts[i].split('\t')
-    if (del === undefined) continue
-    const key = path || (i++, parts[++i])
-    counts.set(key, { add: Number(add) || 0, del: Number(del) || 0, binary: add === '-' })
-  }
-  return counts
-}
-
-// An untracked file's lines, all added; kept until the file changes.
-function countLines(path) {
-  try {
-    const full = join(root, path)
-    const { size, mtimeMs } = statSync(full)
-    const key = `${path}\0${size}\0${mtimeMs}`
-    if (!lineCounts.has(key)) {
-      if (size > MAX_COUNT_BYTES) return { add: 0, binary: true }
-      const data = readFileSync(full)
-      const binary = data.includes(0)
-      let lines = 0
-      if (!binary) for (const byte of data) if (byte === 10) lines++
-      if (!binary && size > 0 && data[size - 1] !== 10) lines++
-      lineCounts.set(key, { add: lines, binary })
-    }
-    return lineCounts.get(key)
-  } catch {
-    return { add: 0, binary: false }
-  }
-}
-
-// A unified diff as rows to draw: hunk headers, and lines with the line
-// number they sit at (the new one, or the old one for a removed line).
-function parseDiff(text) {
-  const rows = []
-  let oldLine = 0
-  let newLine = 0
-  let inHunk = false
-  for (const line of text.split('\n')) {
-    const hunk = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@(.*)/.exec(line)
-    if (hunk) {
-      oldLine = Number(hunk[1])
-      newLine = Number(hunk[2])
-      inHunk = true
-      rows.push({ kind: 'hunk', text: line })
-    } else if (!inHunk) {
-      if (line.startsWith('Binary files')) rows.push({ kind: 'note', text: 'Binary file changed' })
-    } else if (line.startsWith('+')) {
-      rows.push({ kind: 'add', num: newLine++, text: line.slice(1) })
-    } else if (line.startsWith('-')) {
-      rows.push({ kind: 'del', num: oldLine++, text: line.slice(1) })
-    } else if (line.startsWith(' ')) {
-      oldLine++
-      rows.push({ kind: 'ctx', num: newLine++, text: line.slice(1) })
-    } else if (line.startsWith('\\')) {
-      rows.push({ kind: 'note', text: line.slice(2) })
-    }
-  }
-  return rows
-}
 
 async function readDiff(file, base) {
   if (file.untracked) {
@@ -226,13 +162,13 @@ async function refresh() {
     const cursorPath = files[cursor]?.path
     if (status !== lastStatus) {
       lastStatus = status
+      const before = files
       files = parseStatus(status)
-      const keep = files.findIndex(f => f.path === cursorPath)
-      cursor = keep >= 0 ? keep : Math.min(cursor, Math.max(0, files.length - 1))
-      if (!openPath && files.length) openPath = files[0].path
+      cursor = keepCursor(files, cursorPath, cursor)
+      openPath = openAfter(openPath, before, files)
     }
     for (const file of files) {
-      Object.assign(file, file.untracked ? { del: 0, ...countLines(file.path) } : (numstat.get(file.path) ?? {}))
+      Object.assign(file, file.untracked ? { del: 0, ...countLines(root, file.path, lineCounts) } : (numstat.get(file.path) ?? {}))
     }
     message = files.length === 0 ? 'No uncommitted changes' : ''
     const open = files.find(f => f.path === openPath)
@@ -273,8 +209,7 @@ function toggleOpen(i = cursor) {
 }
 
 function scrollBy(by) {
-  const max = Math.max(0, bodyRows().length - bodyHeight())
-  scroll = Math.max(0, Math.min(scroll + by, max))
+  scroll = clampScroll(scroll + by, bodyRows().length, bodyHeight())
   follow = false
   draw()
 }
@@ -282,24 +217,8 @@ function scrollBy(by) {
 const bodyHeight = () => Math.max(1, process.stdout.rows - CHROME_ROWS)
 const width = () => process.stdout.columns
 
-// The file list's rows: each file, and under the open one its diff.
-function bodyRows() {
-  const rows = []
-  files.forEach((file, i) => {
-    rows.push({ kind: 'file', i })
-    if (file.path === openPath) {
-      for (const row of openRows) rows.push({ kind: 'diff', row })
-      rows.push({ kind: 'gap' })
-    }
-  })
-  return rows
-}
+const bodyRows = () => listRows(files, openPath, openRows)
 
-const tidy = text => text.replace(/\t/g, '  ').replace(/[\x00-\x1f\x7f]/g, '')
-const fit = (text, w) => {
-  const chars = [...tidy(text)]
-  return chars.length > w ? chars.slice(0, w).join('') : chars.join('') + ' '.repeat(w - chars.length)
-}
 const home = path => (path.startsWith(homedir()) ? `~${path.slice(homedir().length)}` : path)
 
 // Keys in blue, what they do in the dimmer text color.
@@ -309,37 +228,20 @@ function header() {
   const tabs = MODES.map((mode, i) =>
     i === 2 ? `${C.tabBg}${C.crust}${C.bold}${mode}${C.reset}` : `${C.sub}${C.bold}${mode}${C.reset}`,
   ).join(' ')
-  return `${tabs}\x1b[${width() - 'tab switch'.length + 1}G${hint([['tab', 'switch']])}`
-}
-
-// What changed, in words: "5 modified, 1 new".
-function changeWords() {
-  const kinds = { modified: 0, new: 0, deleted: 0, renamed: 0, conflicted: 0 }
-  for (const f of files) {
-    if (f.status === '?' || f.status === 'A') kinds.new++
-    else if (f.status === 'D') kinds.deleted++
-    else if (f.status === 'R' || f.status === 'C') kinds.renamed++
-    else if (f.status === 'U') kinds.conflicted++
-    else kinds.modified++
-  }
-  return Object.entries(kinds)
-    .filter(([, n]) => n)
-    .map(([kind, n]) => `${n} ${kind}`)
-    .join(', ')
+  return `${tabs}\x1b[${Math.max(1, width() - 'tab switch'.length + 1)}G${hint([['tab', 'switch']])}`
 }
 
 // The summary card: totals, and a bar split by the share of added lines.
 function card() {
-  const w = width() - 2
-  const inner = w - 4
+  const { w, inner } = cardSize(width())
   const add = files.reduce((n, f) => n + f.add, 0)
   const del = files.reduce((n, f) => n + f.del, 0)
   const count = `${files.length} file${files.length === 1 ? '' : 's'}`
-  const left = `${C.text}${C.bold}${count}${C.reset}${C.sub} changed  ·  ${changeWords()}${C.reset}`
-  const leftWidth = `${count} changed  ·  ${changeWords()}`.length
+  const left = `${C.text}${C.bold}${count}${C.reset}${C.sub} changed  ·  ${changeWords(files)}${C.reset}`
+  const leftWidth = `${count} changed  ·  ${changeWords(files)}`.length
   const right = `${C.green}${C.bold}+${add}${C.reset}  ${C.red}${C.bold}−${del}${C.reset}`
   const rightWidth = `+${add}  −${del}`.length
-  const green = add + del ? Math.round((inner * add) / (add + del)) : 0
+  const green = addShare(add, del, inner)
   const bar = `${C.green}${'━'.repeat(green)}${C.red}${'━'.repeat(inner - green)}${C.reset}`
   const side = `${C.line}│${C.reset}`
   return [
@@ -350,12 +252,9 @@ function card() {
   ]
 }
 
-// Bars share one scale, square-rooted so one big file doesn't flatten the rest.
 function changeBar(file, most) {
-  const total = file.add + file.del
-  const cells = total ? Math.max(1, Math.round((BAR * Math.sqrt(total)) / most)) : 0
-  const green = total ? Math.round((cells * file.add) / total) : 0
-  return `${C.green}${'━'.repeat(green)}${C.red}${'━'.repeat(cells - green)}${C.track}${'━'.repeat(BAR - cells)}${C.reset}`
+  const [green, red, track] = changeCells(file, most, BAR)
+  return `${C.green}${'━'.repeat(green)}${C.red}${'━'.repeat(red)}${C.track}${'━'.repeat(track)}${C.reset}`
 }
 
 function fileRow(file, i, most) {
@@ -365,11 +264,7 @@ function fileRow(file, i, most) {
   const countsText = file.binary ? `${C.sub}binary` : `${C.green}+${file.add} ${file.del ? C.red : C.line}−${file.del}`
   const right = ` ${' '.repeat(Math.max(0, 11 - counts.length))}${countsText}${C.reset}${back} ${changeBar(file, most)}${back} `
   const room = Math.max(4, width() - 5 - 11 - BAR - 3)
-  const cut = file.path.lastIndexOf('/') + 1
-  let dir = file.path.slice(0, cut)
-  let name = file.path.slice(cut)
-  if (name.length > room) name = `…${name.slice(name.length - room + 1)}`
-  if (dir.length + name.length > room) dir = dir.length ? `…${dir.slice(dir.length - Math.max(0, room - name.length - 1))}` : ''
+  const { dir, name } = fitPath(file.path, room)
   const nameColor = open ? C.blue : C.text
   const pad = ' '.repeat(Math.max(0, room - dir.length - name.length))
   const status = `${STATUS_COLORS[file.status] ?? C.text}${C.bold}${file.status}${C.reset}${back}`
@@ -397,7 +292,7 @@ function statusRow() {
   const left = `${C.pillBg}${C.crust}${C.bold} DIFF ${C.reset}  ${hint([['enter', 'open'], ['j k', 'move']])}`
   if (!files.length) return left
   const position = `${cursor + 1}/${files.length} `
-  return `${left}\x1b[${width() - position.length + 1}G${C.text}${position}${C.reset}`
+  return `${left}\x1b[${Math.max(1, width() - position.length + 1)}G${C.text}${position}${C.reset}`
 }
 
 // Each frame goes out in one write, inside synchronized output, every row
@@ -405,12 +300,8 @@ function statusRow() {
 function draw() {
   const height = bodyHeight()
   const rows = bodyRows()
-  if (follow) {
-    const at = rows.findIndex(r => r.kind === 'file' && r.i === cursor)
-    if (at >= 0 && at < scroll) scroll = at
-    if (at >= scroll + height) scroll = at - height + 1
-  }
-  scroll = Math.max(0, Math.min(scroll, Math.max(0, rows.length - height)))
+  if (follow) scroll = followCursor(rows, cursor, scroll, height)
+  scroll = clampScroll(scroll, rows.length, height)
   const path = root ? `${C.blue}${C.bold}${home(root)}${C.reset}${branch ? `${C.sub}  ${branch}${C.reset}` : ''}` : ''
   const lines = [header(), path]
   if (message) {
@@ -443,15 +334,7 @@ function quit(code = 0) {
   process.exit(code)
 }
 
-// The mode header's tabs, as column ranges from 1.
-function modeAt(col) {
-  let from = 1
-  for (const [i, mode] of MODES.entries()) {
-    if (col >= from && col < from + mode.length) return i
-    from += mode.length + 1
-  }
-  return -1
-}
+const modeAt = col => modeIn(MODES, col)
 
 function onMouse(button, x, y, released) {
   if (button & 64) return scrollBy((button & 1) === 0 ? -3 : 3)
@@ -469,36 +352,18 @@ function onMouse(button, x, y, released) {
 }
 
 function onKey(key) {
-  const page = Math.max(1, Math.floor(bodyHeight() / 2))
-  const actions = {
-    q: () => quit(FILES_EXIT),
-    '\x03': () => quit(FILES_EXIT),
-    '\t': () => (TODO_EXIT || DIAGRAMS_EXIT) && quit(TODO_EXIT || DIAGRAMS_EXIT),
-    j: () => moveCursor(cursor + 1),
-    k: () => moveCursor(cursor - 1),
-    '\x1b[B': () => moveCursor(cursor + 1),
-    '\x1b[A': () => moveCursor(cursor - 1),
-    '\r': () => toggleOpen(),
-    o: () => toggleOpen(),
-    J: () => scrollBy(3),
-    K: () => scrollBy(-3),
-    ' ': () => scrollBy(page),
-    '\x04': () => scrollBy(page),
-    '\x15': () => scrollBy(-page),
-    '\x1b[6~': () => scrollBy(page),
-    '\x1b[5~': () => scrollBy(-page),
-    g: () => scrollBy(-Infinity),
-    G: () => scrollBy(Infinity),
-  }
-  actions[key]?.()
+  const [action, by] = keyAction(key, Math.max(1, Math.floor(bodyHeight() / 2))) ?? []
+  if (action === 'quit') quit(FILES_EXIT)
+  else if (action === 'next') (TODO_EXIT || DIAGRAMS_EXIT) && quit(TODO_EXIT || DIAGRAMS_EXIT)
+  else if (action === 'move') moveCursor(cursor + by)
+  else if (action === 'toggle') toggleOpen()
+  else if (action === 'scroll') scrollBy(by)
 }
 
-const INPUT = /\x1b\[<(\d+);(\d+);(\d+)([Mm])|\x1b\[[^a-zA-Z~]*[a-zA-Z~]|[\s\S]/g
-
 function onInput(data) {
-  for (const m of data.toString('utf8').matchAll(INPUT)) {
-    if (m[1] !== undefined) onMouse(Number(m[1]), Number(m[2]), Number(m[3]), m[4] === 'm')
-    else onKey(m[0])
+  for (const t of parseInput(data.toString('utf8'))) {
+    if (t.mouse) onMouse(t.mouse.button, t.mouse.x, t.mouse.y, t.mouse.released)
+    else onKey(t.key)
   }
 }
 

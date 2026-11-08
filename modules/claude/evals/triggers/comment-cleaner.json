@@ -1,0 +1,42 @@
+[
+ {
+  "query": "clean up the AI comments on this branch",
+  "should_trigger": true
+ },
+ {
+  "query": "there's so much comment cruft in this repo, sweep it",
+  "should_trigger": true
+ },
+ {
+  "query": "audit the comments in my changes, a lot of them just restate the code",
+  "should_trigger": true
+ },
+ {
+  "query": "remove leaked ticket references from comments, like 'PROJ-212: fixed'",
+  "should_trigger": true
+ },
+ {
+  "query": "these comments are bloated, can you trim them across the repo",
+  "should_trigger": true
+ },
+ {
+  "query": "sweep the whole repo for useless AI-written comments",
+  "should_trigger": true
+ },
+ {
+  "query": "add comments to model.mjs explaining the lane logic",
+  "should_trigger": false
+ },
+ {
+  "query": "review this branch for bugs",
+  "should_trigger": false
+ },
+ {
+  "query": "delete the commented-out code in tray.mjs",
+  "should_trigger": false
+ },
+ {
+  "query": "how do I write a multi-line comment in lua",
+  "should_trigger": false
+ }
+]

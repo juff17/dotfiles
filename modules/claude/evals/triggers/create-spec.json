@@ -1,0 +1,42 @@
+[
+ {
+  "query": "write a technical spec for syncing todos across machines",
+  "should_trigger": true
+ },
+ {
+  "query": "turn this PRD into a technical plan: docs/prd-notifications.md",
+  "should_trigger": true
+ },
+ {
+  "query": "design the API and schema for a usage tracker that records cost per session",
+  "should_trigger": true
+ },
+ {
+  "query": "plan out the epic for the multi-machine agent hub, with stages",
+  "should_trigger": true
+ },
+ {
+  "query": "I need a design doc / TRD for moving the hub to a daemon with a socket API",
+  "should_trigger": true
+ },
+ {
+  "query": "update the spec in specs/agent-hub.md, we changed the data model to sqlite",
+  "should_trigger": true
+ },
+ {
+  "query": "write a jira ticket for the flaky tray test",
+  "should_trigger": false
+ },
+ {
+  "query": "what's the openapi spec format for a nullable field",
+  "should_trigger": false
+ },
+ {
+  "query": "write unit tests for model.mjs",
+  "should_trigger": false
+ },
+ {
+  "query": "double-check specs/agent-hub.md for mistakes",
+  "should_trigger": false
+ }
+]

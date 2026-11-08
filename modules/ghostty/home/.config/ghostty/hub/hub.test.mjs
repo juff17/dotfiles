@@ -99,6 +99,35 @@ test('a waiting session needs you: permission, question or input', () => {
   assert.equal(a.cmd, 'Waiting: dialog open')
 })
 
+test('a background subagent asking for permission is a permission prompt, not input', () => {
+  // The session's own turn ended; the subagent it left running asks.
+  const ended = feed([user(1, 'go'), assistant(2, [{ type: 'text', text: 'One agent still running.' }], { stop_reason: 'end_turn' })])
+  const sub = feed([user(1, 'test the hub keys'), assistant(3, [tool('s1', 'Bash', { command: 'rm -f /tmp/x; echo ok' })])])
+  const a = classify({ session: session('waiting', { waitingFor: 'permission prompt' }), t: ended, subs: [{ description: 'Test hub.mjs key handling', t: sub }] })
+  assert.equal(a.need, 'permission')
+  assert.equal(a.cmd, 'Allow Bash(rm -f /tmp/x; echo ok)?')
+  assert.equal(a.via, 'Test hub.mjs key handling')
+})
+
+test('inside an Agent call, the subagent\'s tool is the prompt, not the Agent call', () => {
+  const running = feed([user(1, 'go'), assistant(2, [tool('ag', 'Agent', { description: 'Fix lint' })])])
+  const sub = feed([user(2, 'fix lint'), assistant(4, [tool('s1', 'Edit', { file_path: '/home/u/projects/jstack/a.js' })])])
+  let a = classify({ session: session('waiting'), t: running, subs: [{ description: 'Fix lint', t: sub }] })
+  assert.equal(a.cmd, 'Allow Edit(a.js)?')
+  // No subagent call pending: the Agent call is all there is to show.
+  a = classify({ session: session('waiting'), t: running })
+  assert.equal(a.cmd, 'Allow Agent(Fix lint)?')
+  assert.equal(a.via, '')
+})
+
+test('the newest pending call wins between the session and its subagents', () => {
+  const own = feed([user(1, 'go'), assistant(5, [tool('t1', 'Bash', { command: 'git push' })])])
+  const older = feed([user(1, 'x'), assistant(3, [tool('s1', 'Bash', { command: 'ls' })])])
+  const a = classify({ session: session('waiting'), t: own, subs: [{ description: 'old', t: older }] })
+  assert.equal(a.cmd, 'Allow Bash(git push)?')
+  assert.equal(a.via, '')
+})
+
 test('busy is working, with the running tool', () => {
   const t = feed([user(1, 'go'), assistant(2, [tool('t1', 'Bash', { command: 'npm test' })])])
   const a = classify({ session: session('busy'), t })

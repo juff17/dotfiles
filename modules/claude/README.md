@@ -28,6 +28,8 @@ modules/claude/
     <category>/<file>        # -> ~/.claude/<file> (settings.json, statusline)
   tests/
     test_<tool>.py           # not installed; setup only links the folders above
+  evals/
+    triggers/<skill>.json    # not installed; trigger cases for each skill
 ```
 
 Tools are grouped by type first, then by **category**: `docify` (document
@@ -48,6 +50,79 @@ and they never call a real GitHub or GitLab:
 ```sh
 python3 -m unittest discover -s tests
 ```
+
+CI runs them on every push to main and every PR (`.github/workflows/tests.yml`
+at the dotfiles root).
+
+## Trigger evals
+
+`evals/run_triggers.py` checks that each skill's description makes it fire on
+the prompts it should, and not on near-misses. `evals/triggers/<skill>.json` is
+a list of `{"query", "should_trigger"}` cases: six that should fire it and four
+that share its words but want something else (`system-overview` runs only
+from its slash command, so it has near-misses only). Queries never start with
+`/`: `claude -p` runs a slash command itself, so no Skill call would show. Each query goes to `claude -p`
+with every installed skill loaded, so the skills compete as they do in real
+use, and the run stops at the first tool call. A failed case names the skill
+that fired instead, so a collision between two skills shows up as one.
+
+```sh
+python3 evals/run_triggers.py                # every skill, about 3 minutes
+python3 evals/run_triggers.py todo gitlink   # just these
+python3 evals/run_triggers.py -j 6 --runs 3  # 6 at once, majority of 3 runs
+```
+
+Runs use your Claude login and count against its usage, so they are not in CI.
+Hooks are off and nothing is saved, so runs don't show in the agent hub. Each
+run's full results go to `evals/results/` (git-ignored). Re-run a skill's
+cases after changing its description, and add a case for each miss you see in
+real use. A new skill needs a case file: `tests/test_run_triggers.py` fails
+without one.
+
+## Connectors
+
+`./setup` installs no MCP servers: each one signs in with OAuth to your own
+account, so it is added once per machine by hand. Skills find a connector's
+tools with ToolSearch by keyword (`jira`, `figma`, ...), so a server added
+with `claude mcp add` and the same service connected at claude.ai (Settings,
+Connectors, which Claude Code loads when you sign in with a claude.ai account)
+both work.
+
+| Connector | Used by | Needed for | Without it |
+|---|---|---|---|
+| Atlassian (Jira, Confluence) | `ticket-implement`, `ticket-fleet`, `standup-prep`; `ticket-write`, `create-spec` to publish | Fetching tickets, epics and their links; yesterday's Jira activity; filing tickets or Confluence pages | `ticket-implement` and `standup-prep` can't run. `ticket-fleet` says it's missing and asks; a local spec file still works. `ticket-write` and `create-spec` write files instead |
+| Figma | `ticket-implement`, `ticket-fleet` | Layout, spacing, colors and assets from Figma links in a ticket | The design details are left out |
+| Slack | `standup-prep` | Public-channel threads you took part in (never DMs, never posts) | The standup has only Jira activity |
+| Elastic (Kibana Agent Builder) | `logger` | Past logs, shareable Kibana links, deep dives | Live tail (Docker, kubectl) still works; share and deep dive stop and ask. Setup in [elastic.md](skills/general/logger/references/elastic.md) |
+| Linear | `ticket-fleet`; `ticket-write` to publish | Linear issue links or keys | Same as Atlassian above |
+
+`diagram-pane` (used by `make-diagram`) is this repo's own mod and is
+installed by `./setup`, so it needs no step here.
+
+Add them for every project (`--scope user`), then run `/mcp` in a session to
+sign in to each:
+
+```sh
+claude mcp add --transport http --scope user atlassian https://mcp.atlassian.com/v2/mcp
+claude mcp add --transport http --scope user figma https://mcp.figma.com/mcp
+claude mcp add --transport http --scope user linear https://mcp.linear.app/mcp
+claude plugin install slack    # Slack's server needs the plugin's app; a bare mcp add can't sign in
+```
+
+Sources: [Atlassian](https://support.atlassian.com/rovo/docs/getting-started-with-the-atlassian-remote-mcp-server/),
+[Figma](https://developers.figma.com/docs/figma-mcp-server/remote-server-installation),
+[Linear](https://linear.app/docs/mcp),
+[Slack](https://docs.slack.dev/ai/slack-mcp-server/connect-to-claude) (a
+workspace admin has to approve the integration). Elastic's endpoint is your
+own Kibana, so its steps are in the logger skill.
+
+Some skills also use CLIs:
+
+| CLI | Used by | Installed by |
+|---|---|---|
+| `gh` / `glab`, signed in | `pr-babysit`; `ticket-fleet` for GitHub issues | Nothing here: install them by hand |
+| `docker` | `logger` live tail (local) | the `dev` module |
+| `kubectl` | `logger` live tail (an environment) | Nothing here: install it by hand |
 
 ## Install
 

@@ -52,6 +52,12 @@ test('needs-you agents become ▲ rows, with allow and deny only for a permissio
   assert.equal(t.counts.you, 2)
 })
 
+test('a subagent\'s permission prompt names the subagent asking', () => {
+  const t = trayItems([agent('a', 'needs', { need: 'permission', cmd: 'Allow Bash(ls)?', via: 'Test hub.mjs key handling' })])
+  assert.deepEqual(t.items[0].actions, ['allow', 'deny', 'go'])
+  assert.equal(t.items[0].meta, 'dotfiles · tab 2 · agent: Test hub.mjs key handling')
+})
+
 test('a monitor that saw a failure is ✗ broke; one asking for a manual step is ▲', () => {
   const fail = agent('a', 'needs', { need: 'monitor', cmd: '[failed] job 4/9', monitor: true, monitors: [monitor('a:t1', 'action', 'failed')] })
   const manual = agent('b', 'needs', { need: 'monitor', cmd: '[manual] deploy', monitor: true, monitors: [monitor('b:t1', 'action', 'manual')] })

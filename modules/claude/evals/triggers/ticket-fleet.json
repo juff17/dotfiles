@@ -1,0 +1,42 @@
+[
+ {
+  "query": "implement PROJ-1, PROJ-2, PROJ-3 and PROJ-4 in parallel",
+  "should_trigger": true
+ },
+ {
+  "query": "build this epic: https://acme.atlassian.net/browse/PROJ-100",
+  "should_trigger": true
+ },
+ {
+  "query": "run the fleet on the tickets in specs/stages.md",
+  "should_trigger": true
+ },
+ {
+  "query": "work through these github issues at once: #12 #13 #15, 13 depends on 12",
+  "should_trigger": true
+ },
+ {
+  "query": "here are 5 linear issues, do them all in separate branches",
+  "should_trigger": true
+ },
+ {
+  "query": "knock out every ticket in the notifications epic",
+  "should_trigger": true
+ },
+ {
+  "query": "implement PROJ-212",
+  "should_trigger": false
+ },
+ {
+  "query": "write tickets for every stage of the spec",
+  "should_trigger": false
+ },
+ {
+  "query": "how many tickets are in the PROJ-100 epic",
+  "should_trigger": false
+ },
+ {
+  "query": "run these 4 test files in parallel",
+  "should_trigger": false
+ }
+]

@@ -1,0 +1,42 @@
+[
+ {
+  "query": "double-check docs/ghostty.md before I publish it, make sure the paths and keys are right",
+  "should_trigger": true
+ },
+ {
+  "query": "dual-review this spec: specs/agent-hub-v2.md",
+  "should_trigger": true
+ },
+ {
+  "query": "verify the README is accurate, every command and path in it",
+  "should_trigger": true
+ },
+ {
+  "query": "before I post this ticket can you have it checked independently",
+  "should_trigger": true
+ },
+ {
+  "query": "verify the numbers and API names in my TRD are correct, docs/trd-billing.md",
+  "should_trigger": true
+ },
+ {
+  "query": "check this system overview doc is correct before I share it with the team",
+  "should_trigger": true
+ },
+ {
+  "query": "review my code changes before I push",
+  "should_trigger": false
+ },
+ {
+  "query": "proofread this email to my manager",
+  "should_trigger": false
+ },
+ {
+  "query": "write a spec for the todo sync feature",
+  "should_trigger": false
+ },
+ {
+  "query": "is this function correct? def add(a,b): return a-b",
+  "should_trigger": false
+ }
+]

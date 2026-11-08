@@ -1,0 +1,42 @@
+[
+ {
+  "query": "explain the last commit to me, I didn't write it",
+  "should_trigger": true
+ },
+ {
+  "query": "walk me through hub/model.mjs, how does it decide which lane an agent goes in",
+  "should_trigger": true
+ },
+ {
+  "query": "give me a tour of the tray code, I need to change it tomorrow",
+  "should_trigger": true
+ },
+ {
+  "query": "help me understand what you just wrote in run_triggers.py",
+  "should_trigger": true
+ },
+ {
+  "query": "explain this PR: https://github.com/juff17/dotfiles/pull/12",
+  "should_trigger": true
+ },
+ {
+  "query": "what does agentd.mjs actually do? I'm new to this part",
+  "should_trigger": true
+ },
+ {
+  "query": "what does the -p flag do in claude code",
+  "should_trigger": false
+ },
+ {
+  "query": "why is this test failing: AssertionError in test_setup.py line 61",
+  "should_trigger": false
+ },
+ {
+  "query": "explain the difference between zsh and bash",
+  "should_trigger": false
+ },
+ {
+  "query": "add docstrings to every function in tray.mjs",
+  "should_trigger": false
+ }
+]
