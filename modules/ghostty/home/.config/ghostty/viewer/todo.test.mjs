@@ -65,7 +65,7 @@ test('ages read in minutes, hours, then days', () => {
 
 test('done items older than a week are dropped', () => {
   const items = [item('a', 'bug', '/r', 0, now - KEEP_DONE_MS - 1), item('b', 'bug', '/r', 0, now - 1000), item('c', 'bug', '/r', 0)]
-  assert.deepEqual(prune(items, now).map(i => i.id), ['b', 'c'])
+  assert.deepEqual(prune(items, now, KEEP_DONE_MS).map(i => i.id), ['b', 'c'])
 })
 
 test('groups follow category order, this repo first, then newest', () => {
@@ -118,7 +118,7 @@ test('a filing fails on an error, or once it has run too long', () => {
   assert.equal(filingState({ id: 'a' }, now), '')
   assert.equal(filingState({ filing: { started: now - 1000 } }, now), 'filing')
   assert.equal(filingState({ filing: { started: now - 1000, error: 'claude exited' } }, now), 'failed')
-  assert.equal(filingState({ filing: { started: now - FILING_TIMEOUT_MS - 1 } }, now), 'failed')
+  assert.equal(filingState({ filing: { started: now - FILING_TIMEOUT_MS - 1 } }, now, FILING_TIMEOUT_MS), 'failed')
 })
 
 test('fill turns a filing item into a real one, once', () => {

@@ -9,6 +9,7 @@ import { homedir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 
 import { slug } from '../hub/model.mjs'
+import { load as settings } from '../hub/settings.mjs'
 
 export const STORE =
   process.env.TODO_FILE || join(process.env.XDG_STATE_HOME || join(homedir(), '.local/state'), 'ghostty-layout/todos.json')
@@ -38,19 +39,23 @@ export const TYPES = [
 ]
 const TYPE_ALIASES = { do: 'action', act: 'action', task: 'action' }
 
-// Done items stay this long, then a write drops them.
+// Done items stay this long by default, then a write drops them; Settings
+// (todo.keepDone, in days) changes it.
 export const KEEP_DONE_MS = 7 * 24 * 60 * 60 * 1000
+const keepDoneMs = () => settings()['todo.keepDone'] * 24 * 60 * 60 * 1000
 
 // A filing item holds a message Claude is turning into a todo (ghostty-todo
 // file) until `add --filing` replaces it with the real one. ghostty-todo
 // stops Claude well before this; past it the item counts as failed anyway,
-// in case the filer died without saying so.
+// in case the filer died without saying so. Settings can give the filer
+// longer (todo.filing.limit), so this keeps two minutes past that.
 export const FILING_TIMEOUT_MS = 5 * 60 * 1000
+const filingTimeoutMs = () => Math.max(FILING_TIMEOUT_MS, (settings()['todo.filing.limit'] + 2) * 60 * 1000)
 
 // 'filing', 'failed', or '' for an ordinary item.
-export function filingState(item, now = Date.now()) {
+export function filingState(item, now = Date.now(), timeout = filingTimeoutMs()) {
   if (!item.filing) return ''
-  return item.filing.error || now - item.filing.started > FILING_TIMEOUT_MS ? 'failed' : 'filing'
+  return item.filing.error || now - item.filing.started > timeout ? 'failed' : 'filing'
 }
 
 // A category from what someone typed: a name, an alias or a unique prefix.
@@ -87,7 +92,7 @@ export function newId(items, random = Math.random) {
   }
 }
 
-export const prune = (items, now = Date.now()) => items.filter(i => !i.done || now - i.done < KEEP_DONE_MS)
+export const prune = (items, now = Date.now(), keep = keepDoneMs()) => items.filter(i => !i.done || now - i.done < keep)
 
 // Finds an item by its id, or by a unique start of one.
 export function find(items, id) {
@@ -274,7 +279,7 @@ export function handoffPlace(item, here, exists = existsSync) {
   return { ...item, root: here.root, worktree: here.worktree, cwd: here.folder, repo: here.repo, branch: '' }
 }
 
-export function handoffSpec(item, { runAs = 'tab', worktree = true, model = 'opus' } = {}, exists = existsSync) {
+export function handoffSpec(item, { runAs = 'tab', worktree = true, model = 'opus', mode = 'auto', effort = 'medium' } = {}, exists = existsSync) {
   worktree = worktree && inGit(item, exists)
   const places = worktree ? [item.root, item.worktree, item.cwd] : [item.worktree, item.cwd, item.root]
   const cwd = places.find(d => d && exists(d))
@@ -296,5 +301,5 @@ export function handoffSpec(item, { runAs = 'tab', worktree = true, model = 'opu
     .filter(Boolean)
     .join(' ')
     .replace(/\s*\n\s*/g, ' ')
-  return { kind: 'task', cwd, name, prompt, runAs, worktree, model, mode: 'auto', effort: 'medium' }
+  return { kind: 'task', cwd, name, prompt, runAs, worktree, model, mode, effort }
 }

@@ -25,6 +25,7 @@ import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { readState } from '../hub/client.mjs'
+import { load as settings } from '../hub/settings.mjs'
 import { launch } from '../hub/model.mjs'
 import { go as openInHub } from '../hub/tray.mjs'
 import { CATEGORIES, DEFAULT_CATEGORY, HANDOFF_MODELS, STORE, TYPES, add, age, arrange, change, colorOf, fill, filingState, handoffPlace, handoffSpec, inGit, load, remove, repoOf, stamp, typeColorOf } from './todo.mjs'
@@ -455,7 +456,8 @@ function inputRow(label, pillBg, text, placeholder = '', right = null) {
 
 function statusRow(list, current) {
   if (prompt?.kind === 'claude') {
-    const model = 'haiku 5.5 · medium'
+    const s = settings()
+    const model = `${s['todo.filing.model']} 5.5 · ${s['todo.filing.effort']}`
     return inputRow('CLAUDE', C.claudeBg, prompt.text, PLACEHOLDER.claude, { text: `${C.hint}${model}${C.reset}`, width: model.length })
   }
   if (prompt?.kind === 'edit') {
@@ -698,7 +700,17 @@ function startHandoff() {
     return { cwd: place.cwd, git: inGit(place), moved: place !== item }
   })
   const git = places.filter(p => p.git).length
-  prompt = { kind: 'handoff', ids, here: at, places, inGit: git, runAs: WIN ? 'tab' : 'bg', worktree: git > 0, model: HANDOFF_MODELS[0] }
+  const s = settings()
+  prompt = {
+    kind: 'handoff',
+    ids,
+    here: at,
+    places,
+    inGit: git,
+    runAs: WIN ? s['todo.handoff.runAs'] : 'bg',
+    worktree: git > 0 && s['todo.handoff.branch'] === 'worktree',
+    model: s['todo.handoff.model'],
+  }
   draw()
 }
 
@@ -742,7 +754,8 @@ async function handOff(ids, at, how) {
   for (const id of ids) {
     const item = items.find(i => i.id === id)
     if (!item) continue
-    const spec = handoffSpec(handoffPlace(item, at), how)
+    const s = settings()
+    const spec = handoffSpec(handoffPlace(item, at), { ...how, mode: s['todo.handoff.mode'], effort: s['todo.handoff.effort'] })
     const error = spec ? await startAgent(item, spec) : `${item.repo} is gone from disk`
     if (error) failed.push(`${item.title}: ${error}`)
     else started.push(item)
