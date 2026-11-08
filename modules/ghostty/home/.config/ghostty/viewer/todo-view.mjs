@@ -481,16 +481,21 @@ function draw() {
   out(`${frame}\x1b[?2026l`)
 }
 
-function write(action) {
+// The action's result as { value }, or { error } when the store threw,
+// which the status row then shows.
+function attempt(action) {
   try {
-    return action()
+    return { value: action() }
   } catch (error) {
     say(error.message, P.red)
+    return { error }
   } finally {
     readStore(true)
     draw()
   }
 }
+
+const write = action => attempt(action).value
 
 // The item under the cursor, unless Claude is still filing it: until then
 // it has nothing to mark done, edit or recategorize.
@@ -581,8 +586,9 @@ function onEditKey(key) {
       return say('A todo needs a title', P.peach)
     }
     prompt = null
-    const saved = write(() => change(save.id, save.fields))
-    return say(saved ? `Saved: ${saved.title}` : 'That todo is gone', saved ? P.green : P.peach)
+    const { value, error } = attempt(() => change(save.id, save.fields))
+    const note = ui.savedNote(value, error)
+    return note && say(note.text, note.ok ? P.green : P.peach)
   }
   ui.editKey(prompt, key)
   draw()

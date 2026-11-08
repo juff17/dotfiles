@@ -298,6 +298,12 @@ test('saving an edit trims the title and note, and refuses an empty title', () =
   assert.deepEqual(ui.editChanges(edit()).fields.type, null, 'no type is saved as null, which clears it')
 })
 
+test('a saved edit says so; a failed one leaves the store’s error showing', () => {
+  assert.deepEqual(ui.savedNote({ title: 'New' }, undefined), { ok: true, text: 'Saved: New' })
+  assert.deepEqual(ui.savedNote(undefined, undefined), { ok: false, text: 'That todo is gone' }, 'deleted while it was being edited')
+  assert.equal(ui.savedNote(undefined, new Error('todos.json.lock is held')), null)
+})
+
 const all = () => true
 const repo = { id: 'k2x', title: 'Make todo edit show title', cat: 'feature', repo: 'dot', root: '/r/dot', worktree: '/r/dot/wt', cwd: '/r/dot/wt', branch: 'wt' }
 const loose = { id: 'xp9', title: 'Show task type', cat: 'feature', repo: 'none', root: '/r/pix', worktree: '', cwd: '/r/pix', branch: '' }

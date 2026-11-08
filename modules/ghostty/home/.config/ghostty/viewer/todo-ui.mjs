@@ -205,6 +205,14 @@ export function editChanges({ id, title, cat, type, note }) {
   return { id, fields: { title: title.trim(), cat, type, note: note.trim() } }
 }
 
+// What the status row says after an edit is saved: null when the store
+// failed, so its error stays showing; that the todo is gone only when the
+// save found no such item.
+export function savedNote(saved, error) {
+  if (error) return null
+  return saved ? { ok: true, text: `Saved: ${saved.title}` } : { ok: false, text: 'That todo is gone' }
+}
+
 // What a key does to the open prompt: the prompt after it (null closes it)
 // and what the viewer has to do besides (run), if anything:
 //   yes      the confirm was answered with its key
