@@ -59,7 +59,7 @@ export const SECTIONS = [
   },
   {
     id: 'todo',
-    name: 'Todo hand-off',
+    name: 'Todo',
     where: 'the Todo list: w hands todos to agents, a files one with Claude',
     rows: [
       head('Hand-off'),
