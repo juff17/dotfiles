@@ -320,5 +320,4 @@ Search only to find the repo: don't work on the item.`
 // What the filer is sent (Settings › Prompts): the system prompt above with
 // your instructions after it, and the message with its skill first.
 export const filerSystem = (item, repos, roots, cli) => [filerPrompt(item, repos, roots, cli), instructions('todo-filing')].filter(Boolean).join('\n')
-export const filerSkill = () => skillOf('todo-filing')
-export const filerMessage = text => [filerSkill() && `/${filerSkill()}`, `add todo: ${text}`].filter(Boolean).join(' ')
+export const filerMessage = text => [skillOf('todo-filing') && `/${skillOf('todo-filing')}`, `add todo: ${text}`].filter(Boolean).join(' ')
