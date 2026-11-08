@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# The settings panel (viewer/settings-view.mjs) in a tmux popup over the whole
+# window, from the rail's ⚙ button (hub/rail.mjs). Esc or q closes it.
+#   ghostty-settings <client>        open it on that tmux client
+#   ghostty-settings --panel         what runs inside the popup
+
+source "$(dirname "$(readlink -f "$0")")/ghostty-lib.sh"
+
+if [[ $1 == --panel ]]; then
+  node=$(command -v node || cat "${XDG_CACHE_HOME:-$HOME/.cache}/ghostty-layout/node" 2>/dev/null)
+  if [[ -z $node ]]; then
+    echo "Settings needs Node.js, and none was found."
+    read -rsn1 -p "Press any key to close."
+    exit 1
+  fi
+  exec "$node" "$GHOSTTY_CONF/viewer/settings-view.mjs"
+fi
+
+client=$1
+layout display-popup -c "$client" -E -w 80% -h 80% -b rounded -S "fg=#89b4fa" -s "bg=#1e1e2e" \
+  "$(printf '%q ' "$GHOSTTY_CONF/bin/ghostty-settings" --panel)"

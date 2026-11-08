@@ -131,6 +131,20 @@ export const SECTIONS = [
       ['esc', 'Cancel'],
     ],
   },
+  {
+    id: 'set',
+    name: 'Settings',
+    color: '#94e2d5',
+    where: '⚙ set on the rail',
+    keys: [
+      ['j / k', 'Move between settings'],
+      ['tab / shift+tab', 'Next / previous section'],
+      ['← / →', 'Change a setting'],
+      ['space', 'Turn on or off, or the next choice'],
+      ['r', 'Put a setting back to its default', true],
+      ['esc', 'Close'],
+    ],
+  },
 ].map(s => ({ ...s, keys: s.keys.map(([key, what, rare = false]) => ({ key, what, rare })) }))
 
 // The section Alt+H opens on: the one for the tmux window it was pressed in.

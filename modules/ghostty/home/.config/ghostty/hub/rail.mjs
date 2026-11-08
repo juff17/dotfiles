@@ -3,7 +3,7 @@
 // design draws it. work and hub switch the window between the workspace and
 // the agent hub; under them, counts of the agents that need you, are
 // working, are done and are idle; + new opens the hub's New agent dialog,
-// and ? help the keys overlay (Alt+H).
+// ? help the keys overlay (Alt+H), and ⚙ set the settings panel.
 // The hub button carries an orange dot while anything needs you.
 //   rail.mjs <work|hub>     which of the two windows this rail sits in
 // HUB_WIN is the Ghostty window number. The outer tmux passes clicks on the
@@ -35,15 +35,18 @@ async function newAgent() {
   })
 }
 
-// The keys overlay, on this window's client: a click doesn't say which
-// client made it, but each outer session has one, its Ghostty window.
-const HELP = join(dirname(fileURLToPath(import.meta.url)), '../bin/ghostty-help')
-function help() {
+// The keys overlay and the settings panel, on this window's client: a click
+// doesn't say which client made it, but each outer session has one, its
+// Ghostty window.
+const BIN = join(dirname(fileURLToPath(import.meta.url)), '../bin')
+function popup(cmd, ...args) {
   execFile('tmux', ['list-clients', '-t', session, '-F', '#{client_name}'], (err, out) => {
     const client = (out ?? '').split('\n')[0]
-    if (client) execFile(HELP, [client, VIEW], () => {})
+    if (client) execFile(join(BIN, cmd), [client, ...args], () => {})
   })
 }
+const help = () => popup('ghostty-help', VIEW)
+const settings = () => popup('ghostty-settings')
 
 const BG = bg(P.crust)
 const cols = () => process.stdout.columns || 6
@@ -80,6 +83,7 @@ function draw() {
   const bottom = [
     [newAgent, tail('+', 'new')],
     [help, tail('?', 'help')],
+    [settings, tail('⚙', 'set')],
   ]
   const height = bottom.reduce((n, [, ls]) => n + ls.length + 1, 0)
   while (lines.length < rows() - height) lines.push(render([], w, BG))
