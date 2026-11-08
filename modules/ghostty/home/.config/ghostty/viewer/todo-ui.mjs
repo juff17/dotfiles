@@ -69,7 +69,8 @@ export const wrap = (text, w) =>
 
 export const visible = text => cells(text.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, ''))
 
-export const shellQuote = text => text.replace(/[^\w./-]/g, '\\$&')
+// u, so a character outside the BMP is escaped whole, not as two halves.
+export const shellQuote = text => text.replace(/[^\w./-]/gu, '\\$&')
 
 // What each key does with no prompt open, by name; todo-view.mjs maps the
 // names to what it runs.

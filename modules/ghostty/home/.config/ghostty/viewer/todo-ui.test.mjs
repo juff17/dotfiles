@@ -526,6 +526,8 @@ test('visible counts what shows, not the color codes', () => {
 test('shellQuote escapes everything but word characters, dots, slashes and dashes', () => {
   assert.equal(ui.shellQuote('/usr/bin/claude-2.1'), '/usr/bin/claude-2.1')
   assert.equal(ui.shellQuote('a b$c'), 'a\\ b\\$c')
+  assert.equal(ui.shellQuote('/x/😀'), '/x/\\😀', 'an emoji keeps both its halves together')
+  assert.ok(ui.shellQuote('😀').isWellFormed())
 })
 
 test('todo-view refuses to run without a terminal, and touches no store', () => {
