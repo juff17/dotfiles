@@ -59,13 +59,27 @@ open_viewer() {
   layout select-pane -t "$tabs"
 }
 
+# The rail's width: GHOSTTY_RAIL_COLS, else Settings' layout.railCols (6).
+rail_cols() {
+  if [[ -n ${GHOSTTY_RAIL_COLS:-} ]]; then
+    echo "$GHOSTTY_RAIL_COLS"
+    return
+  fi
+  local node
+  node=$(command -v node || cat "${XDG_CACHE_HOME:-$HOME/.cache}/ghostty-layout/node" 2>/dev/null)
+  [[ -n $node ]] && "$node" --input-type=module -e \
+    "console.log((await import(process.argv[1])).get('layout.railCols'))" "$GHOSTTY_CONF/hub/settings.mjs" 2>/dev/null ||
+    echo 6
+}
+
 # Adds the agent hub to window <win>'s outer session: the rail down the left
 # of the workspace, and a second tmux window, hub, with its own rail and the
 # hub itself. The rail's work and hub buttons, and Ctrl+Shift+A, switch
 # between the two (layout.conf). GHOSTTY_RAIL=0 leaves it all out.
 add_hub() {
-  local win=$1 session="layout-$1" cols=${GHOSTTY_RAIL_COLS:-6} tabs top rail hub hub_rail
+  local win=$1 session="layout-$1" cols tabs top rail hub hub_rail
   [[ ${GHOSTTY_RAIL:-1} == 0 ]] && return 0
+  cols=$(rail_cols)
   [[ -n $(layout show -t "$session" -v @hub 2>/dev/null) ]] && return 0
   tabs=$(layout show -t "$session" -v @tabs 2>/dev/null) || return
   local bin="$GHOSTTY_CONF/bin/ghostty-hub"

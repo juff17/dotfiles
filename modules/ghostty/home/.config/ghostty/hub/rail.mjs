@@ -15,6 +15,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { follow } from './client.mjs'
 import { counts } from './model.mjs'
+import { load as settings } from './settings.mjs'
 import { BOLD, P, bg, enter, fg, leave, paint, render, tokens } from './term.mjs'
 
 const VIEW = process.argv[2] === 'hub' ? 'hub' : 'work'
@@ -46,7 +47,7 @@ function popup(cmd, ...args) {
   })
 }
 const help = () => popup('ghostty-help', VIEW)
-const settings = () => popup('ghostty-settings')
+const openSettings = () => popup('ghostty-settings')
 
 const BG = bg(P.crust)
 const cols = () => process.stdout.columns || 6
@@ -83,7 +84,7 @@ function draw() {
   const bottom = [
     [newAgent, tail('+', 'new')],
     [help, tail('?', 'help')],
-    [settings, tail('⚙', 'set')],
+    [openSettings, tail('⚙', 'set')],
   ]
   const height = bottom.reduce((n, [, ls]) => n + ls.length + 1, 0)
   while (lines.length < rows() - height) lines.push(render([], w, BG))
@@ -108,11 +109,16 @@ process.stdin.on('data', data => {
 })
 // tmux shares a resize out between the panes, the rail included, and the
 // layout's window-resized hook only reaches the window being resized. So the
-// rail puts its own width back. On 'resize' rather than SIGWINCH, since a
-// SIGWINCH handler can run before the new size is read.
-const WANT = Number(process.env.GHOSTTY_RAIL_COLS) || 6
+// rail puts its own width back: GHOSTTY_RAIL_COLS, else Settings'
+// layout.railCols. It checks on every update too, so a change in Settings
+// shows within a second. On 'resize' rather than SIGWINCH, since a SIGWINCH
+// handler can run before the new size is read.
+const want = () => Number(process.env.GHOSTTY_RAIL_COLS) || settings()['layout.railCols']
+function fit() {
+  if (cols() !== want() && process.env.TMUX_PANE) void tmux('resize-pane', '-t', process.env.TMUX_PANE, '-x', String(want()))
+}
 process.stdout.on('resize', () => {
-  if (cols() !== WANT && process.env.TMUX_PANE) void tmux('resize-pane', '-t', process.env.TMUX_PANE, '-x', String(WANT))
+  fit()
   draw()
 })
 const bye = () => {
@@ -124,6 +130,7 @@ process.on('SIGHUP', bye)
 enter()
 follow(s => {
   c = counts(s.agents ?? [])
+  fit()
   draw()
 })
 draw()

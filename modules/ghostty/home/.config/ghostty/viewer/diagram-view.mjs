@@ -20,6 +20,7 @@ import { BOLD, CAP_L, CAP_R, ITALIC, P, bg, clean, fg, pill, render, split, widt
 import { compose, frameBox, slice } from './backdrop.mjs'
 import { deleteImage, gridRow, placeGrid, transmitFile } from './kitty.mjs'
 import { clampView, fitChips, home, panBy, placement, zoomAt } from './view.mjs'
+import { load as settings } from '../hub/settings.mjs'
 
 const DIR = `${process.env.XDG_CACHE_HOME || `${homedir()}/.cache`}/claude-diagram-pane`
 const PANES = `${DIR}/panes`
@@ -55,9 +56,10 @@ const MODES = [
 const HEADER = !FRAME && MODES.length > 1
 // The frame's width on each side.
 const EDGE = FRAME ? 1 : 0
-// The frame's share of the screen each way. Round it, the window Alt+D was
-// pressed in (DV_UNDER, a layout window id), dimmed (backdrop.mjs).
-const SHARE = FRAME ? 85 : 100
+// The frame's share of the screen each way (Settings' layout.diagramsPercent).
+// Round it, the window Alt+D was pressed in (DV_UNDER, a layout window id),
+// dimmed (backdrop.mjs).
+const SHARE = FRAME ? settings()['layout.diagramsPercent'] : 100
 const UNDER = process.env.DV_UNDER
 const DIM = fg(P.surface1) + bg(P.crust)
 let backdrop = []
