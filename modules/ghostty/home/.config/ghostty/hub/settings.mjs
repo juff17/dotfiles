@@ -1,0 +1,202 @@
+// The settings the rail's ⚙ panel (viewer/settings-view.mjs) changes: values
+// the hub, the tray, the Todo list and pr-babysit's watcher used to have
+// built in. They live in one flat JSON file of key → value, holding only the
+// ones changed from their default, so the watcher (Python) and the tray
+// widget (QML, through tray.mjs) can read it too. A value that's missing,
+// of the wrong type or out of range reads as its default, so a hand-edited
+// file can't break anything that reads it.
+
+import { mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { dirname, join } from 'node:path'
+
+const STATE = process.env.XDG_STATE_HOME || join(homedir(), '.local', 'state')
+// AGENT_HUB_SETTINGS points everything at another file, for tests.
+export const FILE = process.env.AGENT_HUB_SETTINGS || join(STATE, 'agent-hub', 'settings.json')
+
+const opts = list => list.map(c => (Array.isArray(c) ? { value: c[0], label: c[1] } : { value: c, label: c }))
+const head = name => ({ head: name })
+const choice = (key, label, choices, def, sub = '') => ({ key, label, sub, type: 'choice', choices: opts(choices), default: def })
+const number = (key, label, def, { min, max, step = 1, unit = '' }, sub = '') => ({ key, label, sub, type: 'number', min, max, step, unit, default: def })
+const bool = (key, label, def, sub = '') => ({ key, label, sub, type: 'bool', default: def })
+const flags = (key, label, choices, def, sub = '') => ({ key, label, sub, type: 'flags', choices: opts(choices), default: def })
+
+const MODEL = ['default', 'opus', 'sonnet', 'haiku']
+const MODE = ['default', 'auto', 'acceptEdits', 'plan']
+const EFFORT = ['default', 'low', 'medium', 'high', 'xhigh']
+const agent = (prefix, model, sub = '') => [
+  choice(`${prefix}.model`, 'Model', MODEL, model, sub),
+  choice(`${prefix}.mode`, 'Permission mode', MODE, 'auto'),
+  choice(`${prefix}.effort`, 'Effort', EFFORT, 'medium'),
+]
+
+export const SECTIONS = [
+  {
+    id: 'newAgent',
+    name: 'New agent',
+    where: 'what New agent (alt+n) starts with; the form can still change it',
+    rows: [
+      head('Task'),
+      ...agent('newAgent.task', 'opus'),
+      choice('newAgent.task.runAs', 'Run as', [['tab', 'new tab'], ['bg', 'background']], 'tab'),
+      choice('newAgent.task.branch', 'Branch', [['worktree', 'worktree'], ['current', 'current branch']], 'worktree'),
+      head('Log watcher'),
+      ...agent('newAgent.logs', 'sonnet'),
+    ],
+  },
+  {
+    id: 'prBabysit',
+    name: 'PR babysit',
+    where: 'babysitters started from New agent, and the watcher every babysit runs',
+    rows: [
+      head('Agent'),
+      ...agent('newAgent.pr', 'sonnet', 'when started from New agent'),
+      head('Watcher'),
+      number('prBabysit.interval', 'Check the PR every', 60, { min: 15, max: 600, step: 15, unit: 's' }, 'watch_pr.py --interval'),
+      number('prBabysit.stuckAfter', 'A job is stuck after', 30, { min: 5, max: 240, step: 5, unit: 'm' }, 'waiting for a runner; watch_pr.py --stuck-after'),
+    ],
+  },
+  {
+    id: 'todo',
+    name: 'Todo hand-off',
+    where: 'the Todo list: w hands todos to agents, a files one with Claude',
+    rows: [
+      head('Hand-off'),
+      choice('todo.handoff.model', 'Model', ['opus', 'sonnet', 'haiku'], 'opus', 'm in the hand-off picker'),
+      choice('todo.handoff.mode', 'Permission mode', MODE, 'auto'),
+      choice('todo.handoff.effort', 'Effort', EFFORT, 'medium'),
+      choice('todo.handoff.runAs', 'Run in', [['tab', 'new tab'], ['bg', 'background']], 'tab', 't in the picker; the alt+t popup outside a window always runs in the background'),
+      choice('todo.handoff.branch', 'Branch', [['worktree', 'own worktree'], ['branch', 'branch it was added on']], 'worktree', 'b in the picker; only for todos added in git'),
+      head('Filing'),
+      choice('todo.filing.model', 'Model', [['haiku', 'haiku 5.5'], ['sonnet', 'sonnet 5.5']], 'haiku', 'writes the title, category and note'),
+      choice('todo.filing.effort', 'Effort', ['low', 'medium', 'high'], 'medium'),
+      number('todo.filing.limit', 'Give up after', 3, { min: 1, max: 10, unit: 'm' }, 'then the item shows the error'),
+      head('List'),
+      number('todo.keepDone', 'Keep done items', 7, { min: 1, max: 60, unit: 'd' }, 'under “done today”, then dropped'),
+    ],
+  },
+  {
+    id: 'hub',
+    name: 'Hub & monitors',
+    where: 'the agent hub’s board and its Monitors tray',
+    rows: [
+      head('Lanes'),
+      number('hub.doneCards', 'Done cards before folding', 2, { min: 0, max: 6 }, 'the rest fold to a line each'),
+      number('hub.listCols', 'List width beside a session', 46, { min: 36, max: 80, step: 2, unit: ' cols' }),
+      head('Monitors'),
+      number('hub.monitorRows', 'Rows kept for monitors', 5, { min: 1, max: 5 }, 'more than 5 needs a UI test at that size first'),
+      number('hub.endedFor', 'Ended monitors leave after', 5, { min: 1, max: 60, unit: 'm' }),
+      number('hub.maxEvents', 'Events kept per monitor', 20, { min: 5, max: 100, step: 5 }),
+      bool('hub.askStopMonitor', 'Ask before stopping a monitor', true, 'x in the hub asks “Stop monitor …?”; its session keeps running'),
+      flags('hub.broke', 'Count as broke', ['failed', 'stuck', 'conflict', 'error', 'crash'], ['failed', 'stuck', 'conflict', 'error', 'crash'], 'events that turn a monitor ✗ red in the tray'),
+    ],
+  },
+  {
+    id: 'tray',
+    name: 'Tray',
+    where: 'the Agents widget in the panel and its Meta+A inbox',
+    rows: [
+      number('tray.flash', 'Flash on a new ▲ or ✗', 2, { min: 0, max: 10, unit: 's' }, '0 turns the flash off'),
+      number('tray.noteHours', 'Notes expire after', 24, { min: 1, max: 168, unit: 'h' }, 'notify.sh items you haven’t opened'),
+      bool('tray.foldDone', 'Fold done items', true, 'into one line until you press Show'),
+    ],
+  },
+  {
+    id: 'layout',
+    name: 'Layout',
+    where: 'the parts of every Ghostty window',
+    rows: [
+      number('layout.railCols', 'Rail width', 6, { min: 5, max: 12, unit: ' cols' }),
+      number('layout.diagramsPercent', 'Alt+D window size', 85, { min: 50, max: 100, step: 5, unit: '%' }, 'of the Ghostty window'),
+    ],
+  },
+]
+
+export const ROWS = SECTIONS.flatMap(s => s.rows.filter(r => r.key))
+const BY_KEY = new Map(ROWS.map(r => [r.key, r]))
+export const row = key => BY_KEY.get(key)
+
+export function valid(r, v) {
+  if (r.type === 'choice') return r.choices.some(c => c.value === v)
+  if (r.type === 'bool') return typeof v === 'boolean'
+  if (r.type === 'number') return Number.isFinite(v) && v >= r.min && v <= r.max
+  if (r.type === 'flags') return Array.isArray(v) && v.every(x => r.choices.some(c => c.value === x))
+  return false
+}
+
+function readJson(file) {
+  try {
+    const v = JSON.parse(readFileSync(file, 'utf8'))
+    return v && typeof v === 'object' && !Array.isArray(v) ? v : {}
+  } catch {
+    return {}
+  }
+}
+
+// Values carried over from prefs.json, beside the file, which is where the
+// hub kept "don't ask again" before there were settings.
+function legacy(file) {
+  return readJson(join(dirname(file), 'prefs.json')).skip?.['stop-monitor'] ? { 'hub.askStopMonitor': false } : {}
+}
+
+// What the file holds, with the carried-over values it doesn't set itself.
+const raw = file => ({ ...legacy(file), ...readJson(file) })
+
+// Every setting's value. The hub and agentd read it often, so it's read
+// again only when the file changes.
+let cache = { file: '', mtime: -1, values: null }
+export function load(file = FILE) {
+  let mtime = 0
+  try {
+    mtime = statSync(file).mtimeMs
+  } catch {}
+  if (cache.file === file && cache.mtime === mtime && cache.values) return cache.values
+  const saved = raw(file)
+  const values = {}
+  for (const r of ROWS) values[r.key] = valid(r, saved[r.key]) ? saved[r.key] : r.default
+  cache = { file, mtime, values: Object.freeze(values) }
+  return cache.values
+}
+
+export const get = (key, file = FILE) => load(file)[key]
+
+const same = (a, b) => JSON.stringify(a) === JSON.stringify(b)
+
+// Sets one value and writes the file whole, through a rename so a reader
+// never sees half of it. A value back at its default is left out, so a
+// default changed here later reaches everyone who never changed it. Keys the
+// file has that this version doesn't know are kept.
+export function set(key, value, file = FILE) {
+  const r = row(key)
+  if (!r || !valid(r, value)) throw new Error(`Not a value for ${key}: ${JSON.stringify(value)}`)
+  const saved = raw(file)
+  // Unless a carried-over value would come back in its place.
+  if (same(value, r.default) && !(key in legacy(file))) delete saved[key]
+  else saved[key] = value
+  mkdirSync(dirname(file), { recursive: true })
+  const tmp = `${file}.${process.pid}.tmp`
+  writeFileSync(tmp, `${JSON.stringify(saved, null, 2)}\n`)
+  renameSync(tmp, file)
+  cache = { file: '', mtime: -1, values: null }
+  return load(file)
+}
+
+export const reset = (key, file = FILE) => set(key, row(key).default, file)
+
+// The next value ←/→ (dir -1 or 1) gives: the next choice round the list,
+// or a number a step further, kept in range. Flags and switches don't step.
+export function step(r, value, dir) {
+  if (r.type === 'choice') {
+    const i = r.choices.findIndex(c => c.value === value)
+    return r.choices[(i + dir + r.choices.length) % r.choices.length].value
+  }
+  if (r.type === 'number') return Math.min(r.max, Math.max(r.min, value + dir * r.step))
+  if (r.type === 'bool') return !value
+  return value
+}
+
+// A flag turned on or off, kept in the order the choices list them.
+export const toggleFlag = (r, value, flag) => r.choices.map(c => c.value).filter(v => (v === flag ? !value.includes(v) : value.includes(v)))
+
+export const show = (r, v) =>
+  r.type === 'number' ? `${v}${r.unit}` : r.type === 'bool' ? (v ? 'on' : 'off') : r.type === 'choice' ? (r.choices.find(c => c.value === v)?.label ?? String(v)) : v.join(', ')
