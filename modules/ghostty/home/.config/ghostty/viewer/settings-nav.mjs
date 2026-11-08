@@ -14,7 +14,7 @@
 // your instructions. Its skill, where it has one to pick, is the setting
 // above it.
 
-import { BOLD, P, bg, fg, width } from '../hub/term.mjs'
+import { BOLD, P, fg, width } from '../hub/term.mjs'
 import { SECTIONS, load, reset, set, show, step, toggleFlag } from '../hub/settings.mjs'
 import { agent, clear, compose, instructions, save as savePrompt, stepSkill } from '../hub/prompts.mjs'
 import { fromText, insert, textKey } from './textarea.mjs'
@@ -51,7 +51,7 @@ export function valueSpans(r, v, on, flag) {
       const has = v.includes(c.value)
       const here = on && i === flag
       return [
-        [`${has ? '■' : '□'} ${c.label}`, here ? BOLD + fg(P.crust) + bg(P.blue) : fg(has ? P.text : P.sub)],
+        [`${has ? '■' : '□'} ${c.label}`, here ? BOLD + fg(P.blue) : fg(has ? P.text : P.sub)],
         [' ', ''],
       ]
     })
