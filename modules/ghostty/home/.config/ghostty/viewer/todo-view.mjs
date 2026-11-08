@@ -829,7 +829,7 @@ function onMouse(report) {
 }
 
 function onKey(key) {
-  if (prompt) return onPromptKey(key)
+  if (prompt && ui.promptTakes(key, POPUP)) return onPromptKey(key)
   const page = Math.max(1, Math.floor(bodyHeight() / 2))
   const actions = {
     quit: () => quit(POPUP ? 0 : FILES_EXIT),

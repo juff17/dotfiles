@@ -111,6 +111,13 @@ test('every key with no prompt open does what the docs say', () => {
   assert.equal(ui.KEYS.J, undefined, 'keys are case-sensitive')
 })
 
+test('in the popup Alt+T closes it even with a prompt open; other keys go to the prompt', () => {
+  assert.equal(ui.promptTakes('\x1bt', true), false)
+  assert.equal(ui.KEYS['\x1bt'], 'close')
+  assert.equal(ui.promptTakes('\x1bt', false), true, 'in the pane it is the prompt’s to ignore')
+  for (const key of ['\x1b', 'q', 't', '\r']) assert.equal(ui.promptTakes(key, true), true, `${key} stays with the prompt`)
+})
+
 test('input splits into mouse reports, escape sequences, Alt+letter and single keys', () => {
   assert.deepEqual(ui.parseInput('jk'), [{ key: 'j' }, { key: 'k' }])
   assert.deepEqual(ui.parseInput('\x1b[A\x1b[6~\x1bt\x1b'), [{ key: '\x1b[A' }, { key: '\x1b[6~' }, { key: '\x1bt' }, { key: '\x1b' }])

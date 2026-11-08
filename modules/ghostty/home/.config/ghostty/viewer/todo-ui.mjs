@@ -71,6 +71,11 @@ export const KEYS = {
   d: 'show-done',
 }
 
+// Whether an open prompt gets the key. In the popup Alt+T closes it even
+// then: tmux's own binding doesn't reach inside a popup, so this is the
+// only way it closes.
+export const promptTakes = (key, popup) => !(popup && key === '\x1bt')
+
 // Mouse reports, other escape sequences, Alt+letter, then single keys.
 export const INPUT = /\x1b\[<(\d+);(\d+);(\d+)([Mm])|\x1b\[[^a-zA-Z~]*[a-zA-Z~]|\x1b[a-zA-Z]|[\s\S]/gu
 
