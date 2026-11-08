@@ -9,6 +9,7 @@ import { readdirSync, statSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { load as settings } from './settings.mjs'
 import { BOLD, ITALIC, P, bg, clean, enter, fg, leave, paint, render, tokens, width } from './term.mjs'
 
 const HOME = homedir()
@@ -31,13 +32,8 @@ const CHOICES = {
   mode: ['default', 'auto', 'acceptEdits', 'plan'],
   effort: ['default', 'low', 'medium', 'high', 'xhigh'],
 }
-// What each kind starts with; 'default' is still a choice, for Claude's own.
-// Monitors mostly wait and read output, so they don't need Opus.
-const START = {
-  task: { model: 'opus', mode: 'auto', effort: 'medium' },
-  pr: { model: 'sonnet', mode: 'auto', effort: 'medium' },
-  logs: { model: 'sonnet', mode: 'auto', effort: 'medium' },
-}
+// What each kind starts with comes from Settings (newAgent.<kind>.*); 'default'
+// is still a choice, for Claude's own.
 const BOX = bg(P.base)
 // Space between the popup's border and the form.
 const MARGIN_X = 3
@@ -353,7 +349,8 @@ function submit() {
 
 // Model, mode and effort go back to what the kind starts with.
 function startWith(kind) {
-  for (const f of ['model', 'mode', 'effort']) d[f] = CHOICES[f].indexOf(START[kind][f])
+  const s = settings()
+  for (const f of ['model', 'mode', 'effort']) d[f] = Math.max(0, CHOICES[f].indexOf(s[`newAgent.${kind}.${f}`]))
 }
 
 function finish(spec) {
@@ -372,11 +369,11 @@ function main() {
   const { folder = '', recents: given = [] } = JSON.parse(opts || '{}')
   recents = given
   const root = (folder || recents[0] || join(HOME, 'projects')).replace(/\/\.claude\/worktrees\/.*$/, '')
+  const s = settings()
   d = {
     kind: 0,
-    runAs: 0,
-    // A task gets its own worktree unless you say otherwise.
-    branch: BRANCH.findIndex(b => b.id === 'worktree'),
+    runAs: Math.max(0, RUN_AS.findIndex(r => r.id === s['newAgent.task.runAs'])),
+    branch: Math.max(0, BRANCH.findIndex(b => b.id === s['newAgent.task.branch'])),
     model: 0,
     mode: 0,
     effort: 0,
