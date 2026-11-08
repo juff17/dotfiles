@@ -66,11 +66,11 @@ function content(w, values) {
 function promptLines(id, w, on, fill) {
   const yours = instructions(id)
   const count = yours ? yours.split('\n').filter(l => l.trim()).length : 0
-  const value = count ? `${count} line${count === 1 ? '' : 's'} of yours` : 'none of yours'
+  const value = count ? `your ${count} line${count === 1 ? '' : 's'}` : 'e to add instructions'
   const sent = fullPrompt(id)[0].text.replace(/\s*\n\s*/g, ' ')
   const lines = [
     render([[count ? '• ' : '  ', fg(P.peach)], ['Prompt', (on ? BOLD : '') + fg(P.text)]], w - VALUE, fill) +
-      render([[value, on ? BOLD + fg(P.text) : fg(P.text)]], VALUE, fill),
+      render([[value, count ? (on ? BOLD : '') + fg(P.text) : fg(P.overlay1)]], VALUE, fill),
     render([[`  ${sent}`, fg(P.overlay1)]], w, fill),
   ]
   if (yours) lines.push(render([[`  ${wrap(yours, w)[0]}`, fg(P.text)]], w, fill))
