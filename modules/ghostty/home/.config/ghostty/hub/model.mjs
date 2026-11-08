@@ -287,7 +287,25 @@ function nameOf(session, t) {
   )
 }
 
-export function classify({ session, t, pane, reviewedAt = 0, alive = () => null, stopped = new Set(), now = Date.now() }) {
+// The tool call a waiting session is asking about. The prompt can come from
+// a subagent: one in the background while the session's own turn has ended,
+// or one inside an Agent call the session is still running. So the newest
+// call still pending across the session and its subagents wins. A pending
+// Agent call is only the session waiting on its subagent, which is used only
+// when no subagent call is pending.
+export function askingAbout(t, subs = []) {
+  const open = tr => (tr.tool && !tr.tool.done ? tr.tool : null)
+  const own = open(t)
+  const calls = [
+    ...(own && own.name !== 'Agent' && own.name !== 'Task' ? [{ tool: own, via: '' }] : []),
+    ...subs.flatMap(s => (open(s.t) ? [{ tool: open(s.t), via: s.description }] : [])),
+  ]
+  return calls.sort((a, b) => b.tool.at - a.tool.at)[0] ?? (own ? { tool: own, via: '' } : null)
+}
+
+// `subs` are the session's unfinished subagents, { description, t }, read
+// only while it waits.
+export function classify({ session, t, subs = [], pane, reviewedAt = 0, alive = () => null, stopped = new Set(), now = Date.now() }) {
   const { repo, worktree } = repoOf(session.cwd)
   const bg = session.kind === 'bg' || session.kind === 'background'
   const status = session.status === 'waiting' ? 'waiting' : session.status === 'busy' ? 'busy' : 'idle'
@@ -297,14 +315,17 @@ export function classify({ session, t, pane, reviewedAt = 0, alive = () => null,
   let since = session.statusUpdatedAt ?? session.startedAt ?? 0
   let cmd = ''
   let need = null
+  let via = ''
   if (status === 'waiting') {
     state = 'needs'
-    if (pending?.name === 'AskUserQuestion') {
+    const asked = askingAbout(t, subs)
+    via = asked?.via ?? ''
+    if (asked?.tool.name === 'AskUserQuestion') {
       need = 'question'
-      cmd = describeTool(pending)
-    } else if (pending) {
+      cmd = describeTool(asked.tool)
+    } else if (asked) {
       need = 'permission'
-      cmd = `Allow ${describeTool(pending, session.cwd)}?`
+      cmd = `Allow ${describeTool(asked.tool, session.cwd)}?`
     } else {
       need = 'input'
       cmd = `Waiting: ${session.waitingFor ?? 'input needed'}`
@@ -376,6 +397,8 @@ export function classify({ session, t, pane, reviewedAt = 0, alive = () => null,
     branch: t.branch,
     state,
     need,
+    // The subagent asking, by its description, when it isn't the session.
+    via,
     cmd,
     // since: when the current tool started, or the state did; stateSince:
     // when the session's status last changed.

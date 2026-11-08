@@ -95,15 +95,55 @@ export function findTranscript(projects, s) {
 // Reads each session's transcript, only what was appended since last time.
 // `chunk` is the read size, a parameter so tests can make lines straddle reads.
 export function transcriptReader(projects, chunk = 1 << 20) {
-  const transcripts = new Map() // session id -> { path, offset, rest (bytes), t }
+  const transcripts = new Map() // session id -> { path, offset, rest (bytes), t, subs }
   const read = s => {
     let tr = transcripts.get(s.sessionId)
     if (!tr) {
       const path = findTranscript(projects, s)
       if (!path) return emptyTranscript()
-      tr = { path, offset: 0, rest: Buffer.alloc(0), t: emptyTranscript() }
+      tr = { path, offset: 0, rest: Buffer.alloc(0), t: emptyTranscript(), subs: new Map() }
       transcripts.set(s.sessionId, tr)
     }
+    return tail(tr)
+  }
+  // A background subagent (Agent with run_in_background) asks for permission
+  // in its own transcript, subagents/agent-<id>.jsonl beside the session's,
+  // while the session's own turn may have ended long ago. So a waiting
+  // session also reads the subagents that haven't finished; their .meta.json
+  // says which those are. agentd reads them only while the session waits,
+  // but they're kept, so the next wait reads just what was added. Call after
+  // read(s).
+  const subagents = s => {
+    const tr = transcripts.get(s.sessionId)
+    if (!tr) return []
+    const dir = join(tr.path.replace(/\.jsonl$/, ''), 'subagents')
+    let files = []
+    try {
+      files = readdirSync(dir).filter(f => f.endsWith('.jsonl'))
+    } catch {
+      return []
+    }
+    const out = []
+    for (const f of files) {
+      const path = join(dir, f)
+      let meta = {}
+      try {
+        meta = JSON.parse(readFileSync(path.replace(/\.jsonl$/, '.meta.json'), 'utf8'))
+      } catch {}
+      if (meta.finished) {
+        tr.subs.delete(f)
+        continue
+      }
+      let sub = tr.subs.get(f)
+      if (!sub) {
+        sub = { path, offset: 0, rest: Buffer.alloc(0), t: emptyTranscript() }
+        tr.subs.set(f, sub)
+      }
+      out.push({ description: meta.description ?? '', t: tail(sub) })
+    }
+    return out
+  }
+  const tail = tr => {
     let size
     try {
       size = statSync(tr.path).size
@@ -135,7 +175,7 @@ export function transcriptReader(projects, chunk = 1 << 20) {
   const keep = live => {
     for (const id of transcripts.keys()) if (!live.has(id)) transcripts.delete(id)
   }
-  return { read, keep, cached: () => [...transcripts.keys()] }
+  return { read, subagents, keep, cached: () => [...transcripts.keys()] }
 }
 
 // Lines that can't matter (the request snapshots, which are most of the file)

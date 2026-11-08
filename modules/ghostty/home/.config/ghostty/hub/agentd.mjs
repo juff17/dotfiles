@@ -92,12 +92,13 @@ async function tick() {
   for (const { session: s, viewer } of pairParked(list)) {
     live.add(s.sessionId)
     const t = transcripts.read(s)
+    const subs = s.status === 'waiting' ? transcripts.subagents(s) : []
     const p = paneOf(viewer ?? s, pane)
     if (p?.looked) {
       review(REVIEWED, s.sessionId)
       seen.set(s.sessionId, now)
     }
-    agents.push(classify({ session: s, t, pane: p, reviewedAt: seen.get(s.sessionId) ?? 0, alive, stopped: stopped.get(s.sessionId), now }))
+    agents.push(classify({ session: s, t, subs, pane: p, reviewedAt: seen.get(s.sessionId) ?? 0, alive, stopped: stopped.get(s.sessionId), now }))
   }
   transcripts.keep(live)
   const wantsProcs = agents.some(a => a.monitors.some(m => !m.ended))

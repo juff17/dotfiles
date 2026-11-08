@@ -176,6 +176,26 @@ test('a session with no transcript yet reads as empty and is found once the file
   assert.equal(r.read(s).prompt.text, 'hi')
 })
 
+test("subagents reads the session's unfinished subagents, each with its description", () => {
+  const projects = tmp()
+  const dir = join(projects, '-r', 's', 'subagents')
+  mkdirSync(dir, { recursive: true })
+  writeFileSync(join(projects, '-r', 's.jsonl'), userLine('go'))
+  const call = JSON.stringify({ type: 'assistant', timestamp: '2026-11-07T12:00:05Z', message: { content: [{ type: 'tool_use', id: 't1', name: 'Bash', input: { command: 'ls' } }] } })
+  writeFileSync(join(dir, 'agent-a.jsonl'), `${userLine('test it')}${call}\n`)
+  writeFileSync(join(dir, 'agent-a.meta.json'), JSON.stringify({ description: 'Test it' }))
+  writeFileSync(join(dir, 'agent-b.jsonl'), userLine('done already'))
+  writeFileSync(join(dir, 'agent-b.meta.json'), JSON.stringify({ description: 'Finished', finished: true }))
+  const s = { cwd: '/r', sessionId: 's' }
+  const r = transcriptReader(projects)
+  assert.deepEqual(r.subagents(s), [], 'nothing before the session is read')
+  r.read(s)
+  const subs = r.subagents(s)
+  assert.deepEqual(subs.map(x => x.description), ['Test it'])
+  assert.equal(subs[0].t.tool.name, 'Bash')
+  assert.equal(subs[0].t.tool.done, false)
+})
+
 test('keep forgets the sessions that are gone', () => {
   const projects = tmp()
   mkdirSync(join(projects, '-r'))

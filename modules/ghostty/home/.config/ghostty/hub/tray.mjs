@@ -47,6 +47,8 @@ const BROKE = new Set(['failed', 'stuck', 'conflict', 'conflicts', 'error', 'cra
 
 const where = a => (a.pane ? `${a.pane.hub ? 'hub tab' : 'tab'} ${a.pane.tab}` : a.kind === 'bg' ? 'background' : 'terminal')
 const place = a => (a.worktree ? `${a.repo} ⑂ ${a.worktree}` : a.repo)
+// Where a prompt is, and the subagent asking when it isn't the session.
+const asker = a => [place(a), where(a), a.via && `agent: ${a.via}`].filter(Boolean).join(' · ')
 
 // One inbox row. `actions` are what its buttons do; the first is the usual
 // answer. `id` stays the same while the row is about the same thing, so the
@@ -64,8 +66,8 @@ export function trayItems(agents, seen = new Set(), dismissed = new Set(), notes
         row(broke ? 'broke' : 'you', broke ? '✗' : '▲', `m:${raised.key}:${raised.event?.at ?? 0}`, a, a.cmd, `${place(a)} · ${raised.description}`, a.since, ['go']),
       )
     } else if (a.need === 'permission')
-      items.push(row('you', '▲', `p:${a.id}:${a.since}`, a, a.cmd, `${place(a)} · ${where(a)}`, a.since, ['allow', 'deny', 'go']))
-    else if (a.need === 'question') items.push(row('you', '?', `q:${a.id}:${a.since}`, a, a.cmd, `${place(a)} · ${where(a)}`, a.since, ['go']))
+      items.push(row('you', '▲', `p:${a.id}:${a.since}`, a, a.cmd, asker(a), a.since, ['allow', 'deny', 'go']))
+    else if (a.need === 'question') items.push(row('you', '?', `q:${a.id}:${a.since}`, a, a.cmd, asker(a), a.since, ['go']))
     else items.push(row('you', '▲', `i:${a.id}:${a.since}`, a, a.cmd, `${place(a)} · ${where(a)}`, a.since, ['go']))
   }
   for (const n of notes) {
