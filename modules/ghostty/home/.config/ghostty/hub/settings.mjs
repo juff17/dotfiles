@@ -139,6 +139,23 @@ export const SECTIONS = [
     ],
   },
   {
+    id: 'editor',
+    name: 'Editor',
+    where: 'what alt+e opens the current tab in',
+    rows: [
+      head('Opening'),
+      choice(
+        'editor.app',
+        'Editor',
+        [['code', 'VS Code'], ['cursor', 'Cursor'], ['codium', 'VSCodium'], ['zed', 'Zed'], ['subl', 'Sublime Text']],
+        'code',
+        'its command (code, cursor, codium, zed, subl) has to be on PATH',
+      ),
+      choice('editor.window', 'Window', [['default', 'editor decides'], ['new', 'new window'], ['reuse', 'reuse a window']], 'default'),
+      choice('editor.open', 'Open', [['root', 'repo or worktree'], ['folder', 'tab’s folder']], 'root', 'outside git it opens the folder either way'),
+    ],
+  },
+  {
     id: 'layout',
     name: 'Layout',
     where: 'the parts of every Ghostty window',

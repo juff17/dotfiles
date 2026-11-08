@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# Alt+E (layout.conf) runs this: opens the current tab in the editor Settings
+# › Editor picks (VS Code unless changed). By default that's the tab's repo:
+# a tab in a git worktree opens that worktree, not the main checkout, since
+# --show-toplevel names the worktree. Outside git it opens the tab's folder.
+# $1 is the tab session to read: the window's, or the one the hub opened.
+
+source "$(dirname "$(readlink -f "$0")")/ghostty-lib.sh"
+
+editor=$(setting editor.app '' code)
+window=$(setting editor.window '' default)
+open=$(setting editor.open '' root)
+case $editor in
+  code) name='VS Code' ;; cursor) name=Cursor ;; codium) name=VSCodium ;;
+  zed) name=Zed ;; subl) name='Sublime Text' ;; *) name=$editor ;;
+esac
+
+dir=$(tmux -L "$TABS_SOCKET" display -p -t "=$1:" '#{pane_current_path}' 2>/dev/null)
+if [[ -z $dir ]]; then
+  layout display-message "No tab to open in $name."
+  exit 1
+fi
+target=$dir
+[[ $open == root ]] && target=$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null || echo "$dir")
+if ! command -v "$editor" >/dev/null; then
+  layout display-message "$name ($editor) isn't installed."
+  exit 1
+fi
+# Each editor's flag for a new window or reusing one; Sublime's -a adds the
+# folder to its last window, which is its nearest to reusing one.
+args=()
+case $window in
+  new) args=(-n) ;;
+  reuse) [[ $editor == subl ]] && args=(-a) || args=(-r) ;;
+esac
+# Its own session, so the editor outlives the tmux job that started it.
+setsid -f "$editor" "${args[@]}" "$target" >/dev/null 2>&1
