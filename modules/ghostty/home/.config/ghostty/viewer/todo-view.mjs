@@ -28,7 +28,7 @@ import { readState } from '../hub/client.mjs'
 import { load as settings } from '../hub/settings.mjs'
 import { launch } from '../hub/model.mjs'
 import { go as openInHub } from '../hub/tray.mjs'
-import { CATEGORIES, STORE, TYPES, add, age, arrange, change, colorOf, fill, filingState, handoffPlace, handoffSpec, load, remove, repoOf, stamp, typeColorOf } from './todo.mjs'
+import { CATEGORIES, STORE, TYPES, add, age, arrange, change, colorOf, fill, filingState, handoffPlace, handoffSpec, knownRepos, load, remove, repoOf, stamp, typeColorOf } from './todo.mjs'
 import * as ui from './todo-ui.mjs'
 import { EDIT_FIELDS, FIELD_NAMES, FIELDS, KEYS, fit, tidy, visible, wrap } from './todo-ui.mjs'
 
@@ -296,7 +296,8 @@ function editRows(w) {
             ? `${fg(typeColorOf(prompt.type))}${prompt.type}${C.reset}`
             : `${C.hint}none${C.reset}`,
       ]
-    } else if (!prompt[field]) lines = [on ? `${CARET}${C.hint}${fit(field === 'note' ? 'Details for later' : PLACEHOLDER.title, room - 1).trimEnd()}${C.reset}` : `${C.hint}none${C.reset}`]
+    } else if (field === 'repo') lines = [on ? repoPicks(room) : prompt.repo === ui.NO_REPO ? `${C.hint}none${C.reset}` : `${C.text}${prompt.repo.repo}${C.reset}`]
+    else if (!prompt[field]) lines = [on ? `${CARET}${C.hint}${fit(field === 'note' ? 'Details for later' : PLACEHOLDER.title, room - 1).trimEnd()}${C.reset}` : `${C.hint}none${C.reset}`]
     else {
       // Room for the caret after the last character.
       lines = wrap(prompt[field], on ? room - 1 : room).map(line => `${C.text}${line}${C.reset}`)
@@ -305,6 +306,26 @@ function editRows(w) {
     lines.forEach((line, i) => rows.push(cardLine(`${i ? ' '.repeat(LABEL_W) : label}${line}`)))
   }
   return rows
+}
+
+// The repo field while you're on it: the filter typed so far, then the
+// pick and the matches after it, as many as fit, and where the pick is in them.
+function repoPicks(room) {
+  const matches = ui.repoMatches(prompt)
+  const typed = prompt.find ? `${C.text}${prompt.find}${C.reset}${CARET} ` : ''
+  const lead = prompt.find ? ui.cells(prompt.find) + 2 : 0
+  if (!matches.length) return `${typed}${C.peach}no repo matches${C.reset}`
+  const at = Math.max(0, matches.indexOf(prompt.repo))
+  const count = `${at + 1}/${matches.length}`
+  let used = lead + count.length + 2
+  const names = []
+  for (const [i, r] of matches.slice(at).entries()) {
+    const name = r === ui.NO_REPO ? 'none' : r.repo
+    if (i && used + ui.cells(name) + 2 > room) break
+    names.push(i ? `${C.sub}${name}${C.reset}` : `${C.bold}${C.mauve}\x1b[4m${fit(name, Math.max(1, room - used)).trimEnd()}${C.reset}`)
+    used += ui.cells(name) + 2
+  }
+  return `${typed}${names.join('  ')}  ${C.hint}${count}${C.reset}`
 }
 
 // A message Claude is turning into a todo: a spinner while it works, a cross
@@ -417,7 +438,7 @@ function statusRow(list, current) {
     return inputRow('CLAUDE', C.claudeBg, prompt.text, PLACEHOLDER.claude, { text: `${C.hint}${model}${C.reset}`, width: model.length })
   }
   if (prompt?.kind === 'edit') {
-    const picks = { cat: [['1–6', 'pick']], type: [['0–5', 'pick']] }[prompt.field] ?? []
+    const picks = { cat: [['1–6', 'pick']], type: [['0–5', 'pick']], repo: [['←/→', 'pick'], ['type', 'filter']] }[prompt.field] ?? []
     const pairs = [['tab', 'next field'], ...picks, ['↵', 'save'], ['esc', 'cancel']]
     return `${C.pillBg}${C.crust}${C.bold} EDIT ${C.reset}  ${hint(8 + hintWidth(pairs) < width() ? pairs : pairs.slice(-2))}`
   }
@@ -579,7 +600,7 @@ function stopFiler(item) {
 function startEdit() {
   const item = realItem()
   if (!item) return
-  prompt = ui.editPrompt(item)
+  prompt = ui.editPrompt(item, knownRepos(items))
   draw()
 }
 

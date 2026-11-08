@@ -6,6 +6,7 @@
 // the tests can drive it.
 
 import { existsSync } from 'node:fs'
+import { homedir } from 'node:os'
 
 import { charWidth, width as cells } from '../hub/term.mjs'
 import { load as settings } from '../hub/settings.mjs'
@@ -199,8 +200,8 @@ export const position = (list, current, marks) =>
 
 export const FIELDS = ['title', 'cat', 'note']
 // Adding by hand skips the type, since t sets it after; the edit form has it.
-export const EDIT_FIELDS = ['title', 'cat', 'type', 'note']
-export const FIELD_NAMES = { title: 'title', cat: 'category', type: 'type', note: 'note' }
+export const EDIT_FIELDS = ['title', 'cat', 'type', 'repo', 'note']
+export const FIELD_NAMES = { title: 'title', cat: 'category', type: 'type', repo: 'repo', note: 'note' }
 
 // A line being typed, after one key: backspace, Ctrl+U clears, Ctrl+W
 // drops the last word, and any other printable key goes on the end.
@@ -216,11 +217,30 @@ export function editText(text, key) {
 export const manualPrompt = item =>
   filingState(item ?? {}) === 'failed' ? { kind: 'title', text: item.title, replaces: item.id } : { kind: 'title', text: '' }
 
-export const editPrompt = item => ({ kind: 'edit', id: item.id, field: 'title', title: item.title, cat: item.cat, type: item.type ?? null, note: item.note ?? '' })
+export const NO_REPO = { repo: 'none', root: '' }
+
+// The repos the edit form offers, as knownRepos lists them (`repos`), then
+// none. The item's own goes first when the list doesn't have it: a repo
+// whose folder is gone, or one outside the projects folder.
+export function repoChoices(item, repos) {
+  if (item.repo === 'none' || !item.root) return [...repos, NO_REPO]
+  const own = repos.find(r => r.root === item.root) ?? { repo: item.repo, root: item.root }
+  return [...(repos.includes(own) ? [] : [own]), ...repos, NO_REPO]
+}
+
+// The choices whose name has the typed filter in it, any case.
+export const repoMatches = ({ repos, find }) => repos.filter(r => r.repo.toLowerCase().includes(find.toLowerCase()))
+
+export function editPrompt(item, repos = []) {
+  const choices = repoChoices(item, repos)
+  const own = item.repo === 'none' || !item.root ? NO_REPO : choices.find(r => r.root === item.root)
+  return { kind: 'edit', id: item.id, field: 'title', title: item.title, cat: item.cat, type: item.type ?? null, repos: choices, repo: own, from: own, find: '', note: item.note ?? '' }
+}
 
 // Every key in the edit form but ↵, which saves (editChanges): tab and the
-// arrows move between fields, the category and type take their pick, and the
-// title and note take text. Changes the prompt in place.
+// arrows move between fields, the category and type take their pick, the
+// repo steps through its choices or takes a filter that picks the first
+// match, and the title and note take text. Changes the prompt in place.
 export function editKey(prompt, key) {
   const at = EDIT_FIELDS.indexOf(prompt.field)
   if (key === '\t' || key === '\x1b[B') prompt.field = EDIT_FIELDS[(at + 1) % EDIT_FIELDS.length]
@@ -238,14 +258,33 @@ export function editKey(prompt, key) {
     if (step) prompt.type = ring[(i + step) % ring.length]
     else if (key === '0') prompt.type = null
     else if (TYPES[Number(key) - 1]) prompt.type = TYPES[Number(key) - 1].name
+  } else if (prompt.field === 'repo') {
+    const step = { '\x1b[C': 1, ' ': 1, '\x1b[D': -1 }[key]
+    if (step) {
+      const ring = repoMatches(prompt)
+      if (ring.length) prompt.repo = ring[(ring.indexOf(prompt.repo) + step + ring.length) % ring.length]
+    } else {
+      prompt.find = editText(prompt.find, key)
+      // No match, or an emptied filter, keeps the pick.
+      const first = prompt.find && repoMatches(prompt)[0]
+      if (first) prompt.repo = first
+    }
   } else prompt[prompt.field] = editText(prompt[prompt.field], key)
   return prompt
 }
 
-// What ↵ in the edit form writes, or null when the title is empty.
-export function editChanges({ id, title, cat, type, note }) {
+// What ↵ in the edit form writes, or null when the title is empty. A new
+// repo starts the item at its main checkout, with no branch or worktree,
+// and drops the Claude session, which can only resume where it ran. No repo
+// puts it under home, as ghostty-todo add --dir none does.
+export function editChanges({ id, title, cat, type, note, repo, from }, home = homedir()) {
   if (!title.trim()) return null
-  return { id, fields: { title: title.trim(), cat, type, note: note.trim() } }
+  const fields = { title: title.trim(), cat, type, note: note.trim() }
+  if (repo && repo !== from) {
+    const root = repo === NO_REPO ? home : repo.root
+    Object.assign(fields, { repo: repo.repo, root, cwd: root, worktree: '', branch: '', session: '' })
+  }
+  return { id, fields }
 }
 
 // What the status row says after an edit is saved: null when the store

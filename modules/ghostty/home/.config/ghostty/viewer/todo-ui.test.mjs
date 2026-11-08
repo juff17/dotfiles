@@ -251,18 +251,34 @@ test('what a filing item says when you try to change it', () => {
   assert.match(ui.filingHint({ filing: { started: Date.now(), error: 'x' } }), /^r retries/)
 })
 
-const edit = (fields = {}) => ({ ...ui.editPrompt({ id: 'a1', title: 'Fix it', cat: 'bug', ...fields }) })
+const REPOS = [
+  { repo: 'dot', root: '/r/dot' },
+  { repo: 'other', root: '/r/other' },
+  { repo: 'website', root: '/r/website' },
+]
+const edit = (fields = {}, repos = REPOS) => ({ ...ui.editPrompt({ id: 'a1', title: 'Fix it', cat: 'bug', repo: 'dot', root: '/r/dot', ...fields }, repos) })
 
 test('the edit form starts on the title, with no type or note as null and empty', () => {
-  assert.deepEqual(edit(), { kind: 'edit', id: 'a1', field: 'title', title: 'Fix it', cat: 'bug', type: null, note: '' })
+  const { repos, repo, from, ...rest } = edit()
+  assert.deepEqual(rest, { kind: 'edit', id: 'a1', field: 'title', title: 'Fix it', cat: 'bug', type: null, find: '', note: '' })
+  assert.equal(repo, REPOS[0])
+  assert.equal(from, repo)
   assert.equal(edit({ type: 'review', note: 'n' }).type, 'review')
+})
+
+test('the edit form offers the known repos, then none, with the item’s own first when they lack it', () => {
+  assert.deepEqual(edit().repos, [...REPOS, ui.NO_REPO])
+  const gone = edit({ repo: 'old', root: '/x/old' })
+  assert.deepEqual(gone.repos.map(r => r.repo), ['old', 'dot', 'other', 'website', 'none'])
+  assert.equal(gone.repo, gone.repos[0])
+  assert.equal(edit({ repo: 'none', root: '/home/me' }).repo, ui.NO_REPO)
 })
 
 test('tab and the arrows move round the edit form’s fields', () => {
   const p = edit()
   const walk = keys => keys.map(k => ui.editKey(p, k).field)
-  assert.deepEqual(walk(['\t', '\t', '\t', '\t']), ['cat', 'type', 'note', 'title'])
-  assert.deepEqual(walk(['\x1b[Z', '\x1b[A', '\x1b[B']), ['note', 'type', 'note'], 'shift+tab and ↑ go back, ↓ on')
+  assert.deepEqual(walk(['\t', '\t', '\t', '\t', '\t']), ['cat', 'type', 'repo', 'note', 'title'])
+  assert.deepEqual(walk(['\x1b[Z', '\x1b[A', '\x1b[B']), ['note', 'repo', 'note'], 'shift+tab and ↑ go back, ↓ on')
 })
 
 test('the edit form’s category takes 1–6 or ←/→ and wraps', () => {
@@ -295,13 +311,50 @@ test('the edit form’s title and note take text, including wide characters', ()
   assert.equal(p.title, 'Fix it 漢')
   ui.editKey(p, '\x17')
   assert.equal(p.title, 'Fix it ')
-  ui.editKey(p, '\t')
-  ui.editKey(p, '\t')
-  ui.editKey(p, '\t')
+  for (const key of ['\t', '\t', '\t', '\t']) ui.editKey(p, key)
   ui.editKey(p, 'n')
   assert.deepEqual([p.field, p.note, p.title], ['note', 'n', 'Fix it '])
   ui.editKey(p, '\x15')
   assert.equal(p.note, '')
+})
+
+test('the edit form’s repo steps with ←/→ or space round the choices', () => {
+  const p = { ...edit(), field: 'repo' }
+  const names = keys => keys.map(k => ui.editKey(p, k).repo.repo)
+  assert.deepEqual(names(['\x1b[C', ' ', '\x1b[C', '\x1b[C']), ['other', 'website', 'none', 'dot'])
+  assert.deepEqual(names(['\x1b[D']), ['none'], '← from the first wraps to none')
+})
+
+test('typing in the repo field filters the choices and picks the first match', () => {
+  const p = { ...edit(), field: 'repo' }
+  assert.equal(ui.editKey(p, 'E').repo.repo, 'other', 'any case; matches inside the name too')
+  assert.equal(p.find, 'E')
+  assert.deepEqual(ui.repoMatches(p).map(r => r.repo), ['other', 'website', 'none'])
+  ui.editKey(p, 'b')
+  assert.equal(p.repo.repo, 'website')
+  ui.editKey(p, '\x1b[C')
+  assert.equal(p.repo.repo, 'website', 'the only match steps to itself')
+  ui.editKey(p, 'q')
+  assert.equal(p.repo.repo, 'website', 'no match keeps the pick')
+  assert.deepEqual(ui.repoMatches(p), [])
+  ui.editKey(p, '\x15')
+  assert.equal(p.find, '')
+  assert.equal(p.repo.repo, 'website', 'clearing the filter keeps the pick')
+})
+
+test('saving an edit to another repo moves the item there, without its branch, worktree or session', () => {
+  const p = { ...edit(), field: 'repo' }
+  assert.equal('repo' in ui.editChanges(p).fields, false, 'an unchanged repo writes none of it')
+  ui.editKey(p, '\x1b[C')
+  assert.deepEqual(ui.editChanges(p).fields, {
+    title: 'Fix it', cat: 'bug', type: null, note: '',
+    repo: 'other', root: '/r/other', cwd: '/r/other', worktree: '', branch: '', session: '',
+  })
+  ui.editKey(p, '\x1b[D')
+  ui.editKey(p, '\x1b[D')
+  assert.equal(p.repo, ui.NO_REPO)
+  const none = ui.editChanges(p, '/home/me').fields
+  assert.deepEqual([none.repo, none.root, none.cwd], ['none', '/home/me', '/home/me'], 'no repo goes under home')
 })
 
 test('saving an edit trims the title and note, and refuses an empty title', () => {
