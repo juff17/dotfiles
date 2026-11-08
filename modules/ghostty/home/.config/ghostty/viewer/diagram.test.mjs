@@ -81,6 +81,11 @@ test('rereading the same list keeps the diagram the user picked', () => {
   assert.equal(reread(list(3, 2), list(3, 2), 0), undefined)
 })
 
+test("another tab's file selects its current diagram, even when the lists look alike", () => {
+  assert.equal(reread(list(3, 2), list(3, 2), 0, true), 2)
+  assert.equal(reread(list(3, 2), list(3, 2), 0, false), undefined)
+})
+
 test('the mod moving its current diagram jumps to it', () => {
   assert.equal(reread(list(3, 0), list(3, 1), 0), 1)
 })

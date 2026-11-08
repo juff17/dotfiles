@@ -29,10 +29,11 @@ export function newestPane(panes) {
 export const clampIndex = (i, count) => Math.max(0, Math.min(i, count - 1))
 
 // After the pane file is read again: the diagram to select, or undefined to
-// keep the one showing. The mod moving its current one, or the list growing
-// or shrinking, jumps to the mod's current one.
-export function reread(prev, next, index) {
-  const jumped = next.current !== prev.current || next.diagrams.length !== prev.diagrams.length
+// keep the one showing. The mod moving its current one, the list growing or
+// shrinking, or another tab's file (switched) jumps to the mod's current one,
+// which select() shows from its home view.
+export function reread(prev, next, index, switched = false) {
+  const jumped = switched || next.current !== prev.current || next.diagrams.length !== prev.diagrams.length
   if (jumped || !next.diagrams[index]) return Math.min(next.current, next.diagrams.length - 1)
 }
 

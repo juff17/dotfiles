@@ -98,6 +98,9 @@ let state = { diagrams: [], current: 0 }
 // The pane file dv is showing, and the tab it belongs to for the frame's title.
 let paneFile = ''
 let tabTitle = ''
+// The pane file state was read from, set only once a read succeeds, so a
+// half-written file read during a tab switch still counts as the switch.
+let stateFile = ''
 // The followed tab's pane is gone (its tab closed).
 let gone = false
 let index = 0
@@ -159,6 +162,7 @@ function readState() {
   if (!paneFile || !existsSync(paneFile)) {
     const had = state.diagrams.length > 0
     state = { diagrams: [], current: 0 }
+    stateFile = ''
     if (had) select(0)
     else schedule()
     return
@@ -166,8 +170,9 @@ function readState() {
   try {
     const next = JSON.parse(readFileSync(paneFile, 'utf8'))
     if (!Array.isArray(next.diagrams)) return
-    const to = reread(state, next, index)
+    const to = reread(state, next, index, paneFile !== stateFile)
     state = next
+    stateFile = paneFile
     if (to !== undefined) select(to)
     else schedule()
   } catch {
