@@ -125,6 +125,9 @@ function runFiler(item) {
   const args = [
     '-p', '--model', FILER.model, '--effort', FILER.effort, '--permission-mode', 'dontAsk',
     '--allowedTools', `Bash(${CLI} add *)`, 'Bash(ls *)', 'Grep', 'Glob', 'Read',
+    // Its message reads like a request for the todo skill, which would file
+    // the item a second way; no skill runs unless Settings picks one.
+    ...(todo.filerSkill() ? [] : ['--disallowedTools', 'Skill']),
     ...roots.flatMap(r => ['--add-dir', r]),
     '--append-system-prompt', todo.filerSystem(item, repos, roots, CLI),
     todo.filerMessage(item.title),
