@@ -148,7 +148,14 @@ function keepAlive() {
 // The widget has no settings of its own; it takes the tray's from here.
 export function widgetSettings() {
   const s = settings()
-  return { flashMs: s['tray.flash'] * 1000, foldDone: s['tray.foldDone'] }
+  return {
+    flashMs: s['tray.flash'] * 1000,
+    foldDone: s['tray.foldDone'],
+    messageMs: s['tray.messageSecs'] * 1000,
+    pollMs: s['tray.pollSecs'] * 1000,
+    inboxWidth: s['tray.inboxWidth'],
+    inboxHeight: s['tray.inboxHeight'],
+  }
 }
 
 const snapshot = state => ({

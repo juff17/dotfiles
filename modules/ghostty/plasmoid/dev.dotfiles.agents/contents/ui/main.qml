@@ -22,6 +22,10 @@ PlasmoidItem {
     property string message: ""
     property bool messageOk: true
     property var pending: ({})
+    // Settings › Tray, from the last snapshot; these stand in until the first.
+    function setting(name, fallback) {
+        return (snap.settings && snap.settings[name] !== undefined) ? snap.settings[name] : fallback
+    }
     property int calls: 0
 
     readonly property string hub: "\"${AGENT_TRAY_HUB:-$HOME/.config/ghostty/bin/ghostty-hub}\""
@@ -124,7 +128,7 @@ PlasmoidItem {
     }
 
     Timer {
-        interval: 2000
+        interval: root.setting("pollMs", 2000)
         running: true
         repeat: true
         triggeredOnStart: true
@@ -132,12 +136,12 @@ PlasmoidItem {
     }
     Timer {
         id: flashOff
-        interval: (root.snap.settings && root.snap.settings.flashMs !== undefined) ? root.snap.settings.flashMs : 2000
+        interval: root.setting("flashMs", 2000)
         onTriggered: root.flashing = false
     }
     Timer {
         id: clearMessage
-        interval: 6000
+        interval: root.setting("messageMs", 6000)
         onTriggered: root.message = ""
     }
 
@@ -168,8 +172,10 @@ PlasmoidItem {
 
     fullRepresentation: Inbox {
         id: inbox
-        Layout.preferredWidth: 600
-        Layout.minimumWidth: 600
+        Layout.preferredWidth: root.setting("inboxWidth", 600)
+        Layout.minimumWidth: root.setting("inboxWidth", 600)
+        maxHeight: root.setting("inboxHeight", 720)
+        boxWidth: root.setting("inboxWidth", 600)
         Layout.preferredHeight: implicitHeight
         Layout.minimumHeight: Math.min(implicitHeight, 200)
         snap: root.snap
@@ -183,7 +189,7 @@ PlasmoidItem {
             function onExpandedChanged() {
                 if (root.expanded) {
                     inbox.sel = 0
-                    inbox.showDone = !!(root.snap.settings && root.snap.settings.foldDone === false)
+                    inbox.showDone = root.setting("foldDone", true) === false
                     inbox.forceActiveFocus()
                 }
             }

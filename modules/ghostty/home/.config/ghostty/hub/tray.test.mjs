@@ -145,5 +145,5 @@ test('a note from a session is a ▲ row that goes to that session', () => {
 })
 
 test('the widget gets its flash length and done folding from Settings', () => {
-  assert.deepEqual(widgetSettings(), { flashMs: 2000, foldDone: true })
+  assert.deepEqual(widgetSettings(), { flashMs: 2000, foldDone: true, messageMs: 6000, pollMs: 2000, inboxWidth: 600, inboxHeight: 720 })
 })

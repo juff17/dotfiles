@@ -15,6 +15,7 @@ Rectangle {
     property bool showDone: false
     property int sel: 0
     property int maxHeight: 720
+    property int boxWidth: 600
 
     signal act(string action, string id)
     signal openHub()
@@ -44,7 +45,7 @@ Rectangle {
     radius: 8
     border.width: 1
     border.color: M.surface1
-    implicitWidth: 600
+    implicitWidth: boxWidth
     implicitHeight: Math.min(col.implicitHeight + 24, maxHeight)
     focus: true
 

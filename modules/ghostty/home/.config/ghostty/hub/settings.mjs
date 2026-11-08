@@ -114,6 +114,11 @@ export const SECTIONS = [
       number('tray.flash', 'Flash on a new ▲ or ✗', 2, { min: 0, max: 10, unit: 's' }, '0 turns the flash off'),
       number('tray.noteHours', 'Notes expire after', 24, { min: 1, max: 168, unit: 'h' }, 'notify.sh items you haven’t opened'),
       bool('tray.foldDone', 'Fold done items', true, 'into one line until you press Show'),
+      number('tray.messageSecs', 'Results show for', 6, { min: 2, max: 30, unit: 's' }, 'what the inbox says after Allow, Deny or Go'),
+      number('tray.pollSecs', 'Check agents every', 2, { min: 1, max: 10, unit: 's' }),
+      head('Inbox'),
+      number('tray.inboxWidth', 'Width', 600, { min: 400, max: 1200, step: 50, unit: ' px' }),
+      number('tray.inboxHeight', 'Most height', 720, { min: 300, max: 1400, step: 60, unit: ' px' }, 'it grows with its items up to this'),
     ],
   },
   {
