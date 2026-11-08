@@ -19,7 +19,7 @@
 // instead: no modes, Alt+T, Esc or q close it, and so does going to a tab.
 
 import { execFile, spawn } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, watch } from 'node:fs'
+import { mkdirSync, readFileSync, watch } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -27,7 +27,9 @@ import { fileURLToPath } from 'node:url'
 import { readState } from '../hub/client.mjs'
 import { launch } from '../hub/model.mjs'
 import { go as openInHub } from '../hub/tray.mjs'
-import { CATEGORIES, DEFAULT_CATEGORY, HANDOFF_MODELS, STORE, TYPES, add, age, arrange, change, colorOf, fill, filingState, handoffPlace, handoffSpec, inGit, load, remove, repoOf, stamp, typeColorOf } from './todo.mjs'
+import { CATEGORIES, STORE, TYPES, add, age, arrange, change, colorOf, fill, filingState, handoffPlace, handoffSpec, load, remove, repoOf, stamp, typeColorOf } from './todo.mjs'
+import * as ui from './todo-ui.mjs'
+import { EDIT_FIELDS, FIELD_NAMES, FIELDS, KEYS, fit, tidy, visible, wrap } from './todo-ui.mjs'
 
 const TODO_CLI = join(dirname(fileURLToPath(import.meta.url)), '../bin/ghostty-todo')
 
@@ -185,57 +187,21 @@ function shown() {
   return arrange(items, { here: here.root, only })
 }
 
-function selectable(view = shown()) {
-  const list = [...view.filing, ...view.groups.flatMap(g => g.items)]
-  return showDone ? [...list, ...view.doneToday] : list
-}
-
-function cursorItem(list = selectable()) {
-  return list.find(i => i.id === cursorId) ?? list[0]
-}
+const selectable = (view = shown()) => ui.selectable(view, showDone)
+const cursorItem = (list = selectable()) => ui.cursorItem(list, cursorId)
 
 // By `by` items; ±Infinity goes to the first or last.
 function moveCursor(by, list = selectable()) {
   if (!list.length) return
-  const at = Math.max(0, list.indexOf(cursorItem(list)))
-  cursorId = list[Math.max(0, Math.min(list.length - 1, at + by))]?.id ?? list[by < 0 ? 0 : list.length - 1].id
+  cursorId = ui.moveTo(list, cursorId, by)
   draw()
 }
 
-const tidy = text => String(text).replace(/\t/g, '  ').replace(/[\x00-\x1f\x7f]/g, '')
-const fit = (text, w) => {
-  const chars = [...tidy(text)]
-  return chars.length > w ? `${chars.slice(0, Math.max(0, w - 1)).join('')}…` : chars.join('') + ' '.repeat(w - chars.length)
-}
-const wrap = (text, w) =>
-  String(text)
-    .split('\n')
-    .flatMap(para => {
-      const lines = []
-      let line = ''
-      for (const word of tidy(para).split(' ')) {
-        if (line && [...line].length + 1 + [...word].length > w) {
-          lines.push(line)
-          line = word
-        } else line = line ? `${line} ${word}` : word
-        while ([...line].length > w) {
-          lines.push([...line].slice(0, w).join(''))
-          line = [...line].slice(w).join('')
-        }
-      }
-      return [...lines, line]
-    })
 const hint = pairs => pairs.map(([key, what]) => `${C.blue}${key}${C.sub} ${what}${C.reset}`).join('  ')
 const hintWidth = pairs => pairs.map(([key, what]) => `${key} ${what}`).join('  ').length
 
 // Where an item's tab is now, in words.
-function tabOf(pane) {
-  if (!pane) return ''
-  const at = panes.get(pane)
-  if (!at) return 'a tab now closed'
-  const tab = at.hub ? 'a hub tab' : `tab ${at.index}`
-  return at.win === WIN || !WIN ? tab : `w${at.win} · ${tab}`
-}
+const tabOf = pane => ui.tabOf(pane, panes, WIN)
 
 const clock = ms => new Date(ms).toTimeString().slice(0, 5)
 
@@ -262,7 +228,7 @@ function itemRow(item, selected) {
   const right = `${item.repo} · ${age(Date.now() - (item.done || item.created))}`
   // The type leads the right side, in its own color.
   const type = item.type ? `${item.type} · ` : ''
-  const room = Math.max(4, width() - 4 - type.length - right.length - (agent ? 2 : 0) - 3)
+  const room = Math.max(4, width() - 4 - type.length - ui.cells(right) - (agent ? 2 : 0) - 3)
   const fitted = fit(item.title, room)
   const words = fitted.trimEnd()
   const title = item.done
@@ -271,8 +237,6 @@ function itemRow(item, selected) {
   const typed = item.type ? `${fg(typeColorOf(item.type))}${item.type}${C.sub} · ` : ''
   return `${back}${mark} ${box} ${title}${C.reset}${back} ${agent}${C.sub}${typed}${right} ${C.reset}`
 }
-
-const visible = text => [...text.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '')].length
 
 const cardWidth = () => Math.max(10, width() - 7)
 const cardLine = text => {
@@ -297,7 +261,7 @@ function cardRows(item) {
     rows.push(pad(`${C.blue}✻ ${C.sub}${fit(`handed to ${name} ${place} at ${clock(at)}`, w - 2).trimEnd()}${C.reset}`))
   }
   if (item.note) for (const line of wrap(item.note, w)) rows.push(pad(`${C.text}${line}${C.reset}`))
-  const go = hubAgent(item) || agentPane(item) ? 'go to agent' : !item.pane ? '' : panes.has(item.pane) ? 'go to tab' : 'reopen'
+  const go = ui.goLabel(item, panes, agents)
   const keys = [...(go ? [['↵', go]] : []), ['e', 'edit'], ['c', 'category'], ['t', 'type'], ['space', item.done ? 'reopen' : 'done']]
   rows.push(pad(hint(keys)))
   return rows
@@ -348,7 +312,7 @@ function filingRow(item, selected) {
   const failed = filingState(item) === 'failed'
   const mark = failed ? `${C.red}✕` : `${C.peach}${SPINNER[Math.floor(Date.now() / SPIN_MS) % SPINNER.length]}`
   const right = `${item.repo} · ${age(Date.now() - item.created)}`
-  const room = Math.max(4, width() - 4 - right.length - 3)
+  const room = Math.max(4, width() - 4 - ui.cells(right) - 3)
   const text = fit(item.title, room)
   const title = failed ? `${selected ? C.bold : ''}${text}` : `${C.sub}${C.italic}${text}`
   return `${back}  ${mark}${C.reset}${back} ${title}${C.reset}${back} ${C.sub}${right} ${C.reset}`
@@ -400,15 +364,11 @@ function bodyRows(view, current) {
 }
 
 function emptyRows(height) {
-  const lines = loadError
-    ? [loadError]
-    : only
-      ? [`No open todos in ${here.repo || 'this repo'}.`, 'f shows every repo.']
-      : ['No todos yet.', 'Press a to have Claude add one, or Shift+A to add one by hand.']
+  const lines = ui.emptyLines({ loadError, only, repo: here.repo })
   const rows = Array.from({ length: height }, () => ({ text: '' }))
   const top = Math.max(0, Math.floor(height / 2) - 1)
   lines.forEach((line, i) => {
-    const padding = Math.max(0, Math.floor((width() - line.length) / 2))
+    const padding = Math.max(0, Math.floor((width() - ui.cells(line)) / 2))
     if (rows[top + i]) rows[top + i] = { text: `${' '.repeat(padding)}${C.sub}${line}${C.reset}` }
   })
   return rows
@@ -420,11 +380,6 @@ const PLACEHOLDER = {
   title: 'What needs doing',
   note: 'Details for later, or ↵ to skip',
 }
-const FIELDS = ['title', 'cat', 'note']
-// Adding by hand skips the type, since t sets it after; the edit form has it.
-const EDIT_FIELDS = ['title', 'cat', 'type', 'note']
-const FIELD_NAMES = { title: 'title', cat: 'category', type: 'type', note: 'note' }
-
 // Where an add by hand is: the fields done ticked, this one bold, the rest dim.
 function trail(at) {
   const parts = FIELDS.map((f, i) => {
@@ -444,11 +399,11 @@ function trail(at) {
 function inputRow(label, pillBg, text, placeholder = '', right = null) {
   const pill = `${pillBg}${C.crust}${C.bold} ${label} ${C.reset} `
   const lead = label.length + 3
-  const need = text ? 30 : [...placeholder].length + 3
+  const need = text ? 30 : ui.cells(placeholder) + 3
   const side = right && width() - lead - right.width >= need ? right : null
   const room = width() - lead - 1 - (side ? side.width + 2 : 0)
   const body = text
-    ? `${C.text}${[...text].slice(-room).join('')}${C.reset}${CARET}`
+    ? `${C.text}${ui.tail(text, room)}${C.reset}${CARET}`
     : `${CARET}${C.hint}${fit(placeholder, room).trimEnd()}${C.reset}`
   return side ? `${pill}${body}\x1b[${width() - side.width + 1}G${side.text}` : `${pill}${body}`
 }
@@ -490,10 +445,10 @@ function statusRow(list, current) {
   }
   if (prompt?.kind === 'confirm') return `${fg(P.peach)}${prompt.text}${C.reset}`
   if (said && Date.now() < said.until) return `${fg(said.color)}${fit(said.text, width() - 1)}${C.reset}`
-  const pairs = marked.size
-    ? [['w', 'hand off'], ['m', 'mark'], ['shift+m', 'clear'], ['space', 'done']]
-    : [['space', 'done'], ['a', 'add'], ['shift+a', 'by hand'], ['m', 'mark'], ['w', 'hand off'], ['f', only ? 'all repos' : 'this repo']]
-  const position = list.length ? `${marked.size ? `${marked.size} marked · ` : ''}${list.indexOf(current) + 1}/${list.length} ` : ''
+  // Marks on items f hides don't count: w wouldn't hand them off.
+  const marks = ui.markedIds(list, marked).length
+  const pairs = ui.statusPairs(marks, only)
+  const position = ui.position(list, current, marks)
   const fits = 8 + hintWidth(pairs) + position.length < width()
   const left = `${C.pillBg}${C.crust}${C.bold} TODO ${C.reset}  ${fits ? hint(pairs) : hint(pairs.slice(0, 2))}`
   return position ? `${left}\x1b[${width() - position.length + 1}G${C.text}${position}${C.reset}` : left
@@ -506,7 +461,7 @@ function draw() {
   const list = selectable(view)
   const current = cursorItem(list)
   if (current) cursorId = current.id
-  for (const id of marked) if (!list.some(i => i.id === id && !i.done && !i.filing)) marked.delete(id)
+  ui.pruneMarks(marked, items)
   const height = bodyHeight()
   let rows
   if (!view.groups.length && !view.filing.length && !(showDone && view.doneToday.length)) {
@@ -515,15 +470,7 @@ function draw() {
     scroll = 0
   } else {
     rows = bodyRows(view, current)
-    // Keeps the selected item's whole card in view, its row first.
-    const first = rows.findIndex(r => r.item === current)
-    let last = first
-    while (rows[last + 1]?.item === current) last++
-    if (first >= 0) {
-      if (last >= scroll + height) scroll = last - height + 1
-      if (first < scroll) scroll = first
-    }
-    scroll = Math.max(0, Math.min(scroll, Math.max(0, rows.length - height)))
+    scroll = ui.scrollTo(rows, current, scroll, height)
   }
   drawn = rows
   const lines = [header(), summary(view)]
@@ -536,30 +483,34 @@ function draw() {
   out(`${frame}\x1b[?2026l`)
 }
 
-function write(action) {
+// The action's result as { value }, or { error } when the store threw,
+// which the status row then shows.
+function attempt(action) {
   try {
-    return action()
+    return { value: action() }
   } catch (error) {
     say(error.message, P.red)
+    return { error }
   } finally {
     readStore(true)
     draw()
   }
 }
 
+const write = action => attempt(action).value
+
 // The item under the cursor, unless Claude is still filing it: until then
 // it has nothing to mark done, edit or recategorize.
 function realItem() {
   const item = cursorItem()
   if (!item?.filing) return item
-  say(filingState(item) === 'failed' ? 'r retries it, Shift+A adds it by hand, x drops it' : 'Claude is still filing this; x drops it')
+  say(ui.filingHint(item))
 }
 
 function toggleDone() {
   const item = realItem()
   if (!item) return
-  const list = selectable()
-  const next = list[list.indexOf(item) + 1] ?? list[list.indexOf(item) - 1]
+  const next = ui.neighbour(selectable(), item)
   write(() => change(item.id, { done: item.done ? null : Date.now() }))
   // Done leaves the list, so the cursor moves on instead of following it.
   if (!item.done && !showDone && next) cursorId = next.id
@@ -569,18 +520,14 @@ function toggleDone() {
 function cycleCategory() {
   const item = realItem()
   if (!item) return
-  const at = CATEGORIES.findIndex(c => c.name === item.cat)
-  const cat = CATEGORIES[(at + 1) % CATEGORIES.length].name
-  write(() => change(item.id, { cat }))
+  write(() => change(item.id, { cat: ui.nextCategory(item.cat) }))
 }
 
 // Through each type, then none, then round again.
 function cycleType() {
   const item = realItem()
   if (!item) return
-  const at = TYPES.findIndex(t => t.name === item.type)
-  const type = at === TYPES.length - 1 ? null : TYPES[at + 1].name
-  write(() => change(item.id, { type }))
+  write(() => change(item.id, { type: ui.nextType(item.type) }))
 }
 
 function startClaude() {
@@ -590,8 +537,7 @@ function startClaude() {
 
 // On a filing that failed, starts from its message and replaces it.
 function startManual() {
-  const item = cursorItem()
-  prompt = filingState(item ?? {}) === 'failed' ? { kind: 'title', text: item.title, replaces: item.id } : { kind: 'title', text: '' }
+  prompt = ui.manualPrompt(cursorItem())
   draw()
 }
 
@@ -630,43 +576,23 @@ function stopFiler(item) {
 function startEdit() {
   const item = realItem()
   if (!item) return
-  prompt = { kind: 'edit', id: item.id, field: 'title', title: item.title, cat: item.cat, type: item.type ?? null, note: item.note ?? '' }
+  prompt = ui.editPrompt(item)
   draw()
 }
 
 function onEditKey(key) {
-  const at = EDIT_FIELDS.indexOf(prompt.field)
-  if (key === '\t' || key === '\x1b[B') prompt.field = EDIT_FIELDS[(at + 1) % EDIT_FIELDS.length]
-  else if (key === '\x1b[Z' || key === '\x1b[A') prompt.field = EDIT_FIELDS[(at + EDIT_FIELDS.length - 1) % EDIT_FIELDS.length]
-  else if (key === '\r') {
-    const { id, title, cat, type, note } = prompt
-    if (!title.trim()) {
+  if (key === '\r') {
+    const save = ui.editChanges(prompt)
+    if (!save) {
       prompt.field = 'title'
       return say('A todo needs a title', P.peach)
     }
     prompt = null
-    const saved = write(() => change(id, { title: title.trim(), cat, type, note: note.trim() }))
-    return say(saved ? `Saved: ${saved.title}` : 'That todo is gone', saved ? P.green : P.peach)
-  } else if (prompt.field === 'cat') {
-    const i = CATEGORIES.findIndex(c => c.name === prompt.cat)
-    const step = { '\x1b[C': 1, ' ': 1, '\x1b[D': CATEGORIES.length - 1 }[key]
-    if (step) prompt.cat = CATEGORIES[(i + step) % CATEGORIES.length].name
-    else if (CATEGORIES[Number(key) - 1]) prompt.cat = CATEGORIES[Number(key) - 1].name
-  } else if (prompt.field === 'type') {
-    // The types, then none, as one ring.
-    const ring = [...TYPES.map(t => t.name), null]
-    const i = ring.indexOf(prompt.type)
-    const step = { '\x1b[C': 1, ' ': 1, '\x1b[D': ring.length - 1 }[key]
-    if (step) prompt.type = ring[(i + step) % ring.length]
-    else if (key === '0') prompt.type = null
-    else if (TYPES[Number(key) - 1]) prompt.type = TYPES[Number(key) - 1].name
-  } else {
-    const text = prompt[prompt.field]
-    if (key === '\x7f' || key === '\b') prompt[prompt.field] = [...text].slice(0, -1).join('')
-    else if (key === '\x15') prompt[prompt.field] = ''
-    else if (key === '\x17') prompt[prompt.field] = text.replace(/\S*\s*$/, '')
-    else if (!key.startsWith('\x1b') && key >= ' ') prompt[prompt.field] += key
+    const { value, error } = attempt(() => change(save.id, save.fields))
+    const note = ui.savedNote(value, error)
+    return note && say(note.text, note.ok ? P.green : P.peach)
   }
+  ui.editKey(prompt, key)
   draw()
 }
 
@@ -680,43 +606,27 @@ function toggleMark() {
 
 // The marked items, in the list's order, or else the selected one.
 function startHandoff() {
-  let ids = selectable()
-    .filter(i => marked.has(i.id))
-    .map(i => i.id)
+  let ids = ui.markedIds(selectable(), marked)
   if (!ids.length) {
     const item = realItem()
     if (!item) return
     if (item.done) return say('It’s done; space reopens it')
     ids = [item.id]
   }
-  // Without a layout window there is no tab session to open tabs in.
-  // Fixed as the row opens, so what it says is where the agents start.
-  const at = { ...here }
-  const places = ids.map(id => {
-    const item = items.find(i => i.id === id) ?? {}
-    const place = handoffPlace(item, at)
-    return { cwd: place.cwd, git: inGit(place), moved: place !== item }
-  })
-  const git = places.filter(p => p.git).length
-  prompt = { kind: 'handoff', ids, here: at, places, inGit: git, runAs: WIN ? 'tab' : 'bg', worktree: git > 0, model: HANDOFF_MODELS[0] }
+  prompt = ui.handoffPrompt(ids, items, here, WIN)
   draw()
 }
 
 function onHandoffKey(key) {
-  if (key === 't') {
-    if (!WIN) return say('Not in a Ghostty layout window, so agents can only run in the background')
-    prompt.runAs = prompt.runAs === 'tab' ? 'bg' : 'tab'
-  } else if (key === 'b') {
+  const result = ui.handoffKey(prompt, key, WIN)
+  if (result === 'no-tab') return say('Not in a Ghostty layout window, so agents can only run in the background')
+  if (result === 'no-git') {
     // The row covers the status line, so the note itself lights up.
-    if (!prompt.inGit) {
-      prompt.flash = Date.now()
-      setTimeout(draw, SAY_MS + 50)
-      return draw()
-    }
-    prompt.worktree = !prompt.worktree
+    prompt.flash = Date.now()
+    setTimeout(draw, SAY_MS + 50)
+    return draw()
   }
-  else if (key === 'm') prompt.model = HANDOFF_MODELS[(HANDOFF_MODELS.indexOf(prompt.model) + 1) % HANDOFF_MODELS.length]
-  else if (key === '\r') {
+  if (result === 'start') {
     const { ids, here: at, runAs, worktree, model } = prompt
     prompt = null
     return void handOff(ids, at, { runAs, worktree, model })
@@ -749,9 +659,8 @@ async function handOff(ids, at, how) {
   }
   for (const item of started) marked.delete(item.id)
   void refresh()
-  if (failed.length) return say(`${started.length ? `Started ${started.length}; ` : ''}couldn't start ${failed.join('; ')}`, P.red)
-  const where = how.runAs === 'tab' ? 'in new tabs' : 'in the background'
-  say(started.length === 1 ? `Handed to an agent ${where === 'in new tabs' ? 'in a new tab' : where}: ${started[0].title}` : `Handed ${started.length} todos to agents ${where}`, P.green)
+  const result = ui.handoffResult(started, failed, how.runAs)
+  say(result.text, result.ok ? P.green : P.red)
 }
 
 // '' once the agent is running, or what went wrong.
@@ -765,7 +674,7 @@ async function startAgent(item, spec) {
     if (!made.ok) return `couldn't open a tab: ${made.err}`
     pane = made.out.trim()
     // Typed into the tab's shell, so the shell stays when Claude exits.
-    await tabs('send-keys', '-t', pane, '-l', `${shellQuote(claude)}${plan.line.slice('claude'.length)}`)
+    await tabs('send-keys', '-t', pane, '-l', ui.tabLine(claude, plan))
     await tabs('send-keys', '-t', pane, 'Enter')
   } else {
     // claude --bg prints its id and returns once the agent is running.
@@ -783,18 +692,6 @@ async function startAgent(item, spec) {
   write(() => change(item.id, { handoff: { name: plan.name, where: plan.where, pane, at: Date.now() } }))
   return ''
 }
-
-// The agent the item was handed to, while the hub knows it: a tab agent by
-// its pane, a background one by the name it was started with (launch in
-// hub/model.mjs), which its card shows.
-function hubAgent(item) {
-  const { pane, name } = item.handoff ?? {}
-  if (!pane && !name) return null
-  return agents.find(a => (pane ? a.pane?.pane === pane : a.kind === 'bg' && a.title === name)) ?? null
-}
-
-// The tab of the agent the item was handed to, while it's open.
-const agentPane = item => (item.handoff?.pane && panes.has(item.handoff.pane) ? item.handoff.pane : '')
 
 function confirm(text, yes, key) {
   prompt = { kind: 'confirm', text, yes, key }
@@ -831,55 +728,21 @@ async function finishAdd({ title, cat, note, replaces }) {
 }
 
 function onPromptKey(key) {
-  if (prompt.kind === 'confirm') {
-    const { yes, key: wanted } = prompt
-    prompt = null
-    if (key === wanted) return yes()
-    return draw()
+  const was = prompt
+  const step = ui.promptKey(prompt, key, cursorItem())
+  if (step.run === 'ignore') return
+  prompt = step.prompt
+  if (step.run === 'yes') return was.yes()
+  if (step.run === 'edit') return onEditKey(key)
+  if (step.run === 'handoff') return onHandoffKey(key)
+  if (step.run === 'manual') return startManual()
+  if (step.run === 'add') return void finishAdd(step.add)
+  if (step.run === 'file') {
+    fileWithClaude(['--dir', here.folder || DIR, '--', step.text])
+    return say('Sent to Claude. It shows here once it’s filed.', P.peach)
   }
-  if (key === '\x1b' || key === '\x03') {
-    prompt = null
-    return draw()
-  }
-  if (prompt.kind === 'edit') return onEditKey(key)
-  if (prompt.kind === 'handoff') return onHandoffKey(key)
-  if (prompt.kind === 'cat') {
-    const picked = key === '\r' ? prompt.cat : CATEGORIES[Number(key) - 1]?.name
-    if (!picked) return
-    prompt = { ...prompt, kind: 'note', cat: picked, text: '' }
-    return draw()
-  }
-  // What the placeholder offers. Only on an empty line, so a message can
-  // still have a capital A in it.
-  if (prompt.kind === 'claude' && key === 'A' && !prompt.text) return startManual()
-  if (key === '\r') {
-    const text = prompt.text.trim()
-    if (prompt.kind === 'note') {
-      const { title, cat, replaces } = prompt
-      prompt = null
-      return void finishAdd({ title, cat, note: text, replaces })
-    }
-    if (!text) {
-      prompt = null
-      return draw()
-    }
-    if (prompt.kind === 'claude') {
-      prompt = null
-      fileWithClaude(['--dir', here.folder || DIR, '--', text])
-      return say('Sent to Claude. It shows here once it’s filed.', P.peach)
-    }
-    const current = cursorItem()
-    prompt = { kind: 'cat', title: text, replaces: prompt.replaces, cat: (!current?.filing && current?.cat) || DEFAULT_CATEGORY }
-    return draw()
-  }
-  if (key === '\x7f' || key === '\b') prompt.text = [...prompt.text].slice(0, -1).join('')
-  else if (key === '\x15') prompt.text = ''
-  else if (key === '\x17') prompt.text = prompt.text.replace(/\S*\s*$/, '')
-  else if (!key.startsWith('\x1b') && key >= ' ') prompt.text += key
   draw()
 }
-
-const shellQuote = text => text.replace(/[^\w./-]/g, '\\$&')
 
 // The agent it was handed to, opened in the hub beside its list as the
 // tray's Go does: a tab agent through a session of its own, so the
@@ -891,17 +754,14 @@ async function goTo() {
   if (!item) return
   panes = await readPanes()
   agents = readState()?.agents ?? []
-  const agent = hubAgent(item)
+  const agent = ui.hubAgent(item, agents)
   if (agent) {
     const went = await openInHub(agent, WIN ? `layout-${WIN}` : '')
     if (!went.ok) return say(went.message, P.red)
     return POPUP ? quit() : draw()
   }
-  const pane = agentPane(item) || item.pane
-  if (!pane) {
-    if (item.handoff?.where === 'bg') return say(`${item.handoff.name} ran in the background and the hub no longer lists it`)
-    return say(item.by === 'you' ? 'You added this one here, so it has no tab to go to' : 'This one was added outside the layout’s tabs')
-  }
+  const pane = ui.agentPane(item, panes) || item.pane
+  if (!pane) return say(ui.noTabText(item))
   const at = panes.get(pane)
   if (at?.hub) {
     // The hub opens its tabs itself, beside its board.
@@ -921,7 +781,7 @@ async function goTo() {
     return POPUP ? quit() : draw()
   }
   if (!WIN) return say('Not in a Ghostty layout window, so there is no tab session to open a tab in', P.red)
-  const dir = [item.worktree, item.cwd, item.root].find(d => d && existsSync(d))
+  const dir = ui.reopenDir(item)
   if (!dir) return say(`Its tab is closed and ${item.repo} is gone from disk`, P.peach)
   const resume = item.session ? ', resuming its session' : ''
   confirm(`Its tab is closed. ↵ again opens Claude in ${basename(dir)}${resume}`, () => void reopen(item, dir), '\r')
@@ -933,8 +793,7 @@ async function reopen(item, dir) {
   if (!made.ok) return say(`Couldn't open a tab: ${made.err}`, P.red)
   const pane = made.out.trim()
   // Typed into the tab's shell, so the shell stays when Claude exits.
-  const command = item.session ? `${shellQuote(claude)} --resume ${shellQuote(item.session)}` : shellQuote(claude)
-  await tabs('send-keys', '-t', pane, '-l', command)
+  await tabs('send-keys', '-t', pane, '-l', ui.reopenLine(claude, item.session))
   await tabs('send-keys', '-t', pane, 'Enter')
   write(() => change(item.id, { pane }))
   const tabsPane = (await outer('show', '-t', `layout-${WIN}`, '-v', '@tabs')).out.trim()
@@ -949,25 +808,16 @@ function quit(code = 0) {
   process.exit(code)
 }
 
-// The mode header's tabs, as column ranges from 1.
-function modeAt(col) {
-  let from = 1
-  for (const m of MODES) {
-    if (col >= from && col < from + m.label.length) return m
-    from += m.label.length + 1
-  }
-}
-
-function onMouse(button, x, y, released) {
-  if (button & 64) return moveCursor((button & 1) === 0 ? -1 : 1)
-  if (released || (button & 3) !== 0 || button & 32 || prompt) return
-  if (y === 1) {
-    const mode = !POPUP && modeAt(x)
+function onMouse(report) {
+  const action = ui.mouseAction(report, { prompt, top: TOP, height: bodyHeight() })
+  if (!action) return
+  if (action.move) return moveCursor(action.move)
+  if (action.header !== undefined) {
+    const mode = !POPUP && ui.modeAt(action.header, MODES)
     if (mode?.exit) quit(mode.exit)
     return
   }
-  if (y < TOP || y >= TOP + bodyHeight()) return
-  const row = drawn[scroll + y - TOP]
+  const row = drawn[scroll + action.row]
   if (row?.done) {
     showDone = !showDone
     return draw()
@@ -979,58 +829,49 @@ function onMouse(button, x, y, released) {
 }
 
 function onKey(key) {
-  if (prompt) return onPromptKey(key)
+  if (prompt && ui.promptTakes(key, POPUP)) return onPromptKey(key)
   const page = Math.max(1, Math.floor(bodyHeight() / 2))
   const actions = {
-    q: () => quit(POPUP ? 0 : FILES_EXIT),
-    '\x03': () => quit(POPUP ? 0 : FILES_EXIT),
-    '\x1b': () => POPUP && quit(),
-    '\x1bt': () => POPUP && quit(),
-    '\t': () => DIAGRAMS_EXIT && quit(DIAGRAMS_EXIT),
-    j: () => moveCursor(1),
-    k: () => moveCursor(-1),
-    '\x1b[B': () => moveCursor(1),
-    '\x1b[A': () => moveCursor(-1),
-    '\x04': () => moveCursor(page),
-    '\x15': () => moveCursor(-page),
-    '\x1b[6~': () => moveCursor(page),
-    '\x1b[5~': () => moveCursor(-page),
-    g: () => moveCursor(-Infinity),
-    G: () => moveCursor(Infinity),
-    '\r': () => void goTo(),
-    ' ': toggleDone,
-    a: startClaude,
-    A: startManual,
-    r: retryFiling,
-    e: startEdit,
-    c: cycleCategory,
-    t: cycleType,
-    x: startDelete,
-    m: toggleMark,
-    M: () => {
+    quit: () => quit(POPUP ? 0 : FILES_EXIT),
+    close: () => POPUP && quit(),
+    'next-mode': () => DIAGRAMS_EXIT && quit(DIAGRAMS_EXIT),
+    down: () => moveCursor(1),
+    up: () => moveCursor(-1),
+    'page-down': () => moveCursor(page),
+    'page-up': () => moveCursor(-page),
+    first: () => moveCursor(-Infinity),
+    last: () => moveCursor(Infinity),
+    go: () => void goTo(),
+    done: toggleDone,
+    claude: startClaude,
+    manual: startManual,
+    retry: retryFiling,
+    edit: startEdit,
+    category: cycleCategory,
+    type: cycleType,
+    delete: startDelete,
+    mark: toggleMark,
+    'clear-marks': () => {
       marked.clear()
       draw()
     },
-    w: startHandoff,
-    f: () => {
+    handoff: startHandoff,
+    only: () => {
       only = !only
       draw()
     },
-    d: () => {
+    'show-done': () => {
       showDone = !showDone
       draw()
     },
   }
-  actions[key]?.()
+  actions[KEYS[key]]?.()
 }
 
-// Mouse reports, other escape sequences, Alt+letter, then single keys.
-const INPUT = /\x1b\[<(\d+);(\d+);(\d+)([Mm])|\x1b\[[^a-zA-Z~]*[a-zA-Z~]|\x1b[a-zA-Z]|[\s\S]/gu
-
 function onInput(data) {
-  for (const m of data.toString('utf8').matchAll(INPUT)) {
-    if (m[1] !== undefined) onMouse(Number(m[1]), Number(m[2]), Number(m[3]), m[4] === 'm')
-    else onKey(m[0])
+  for (const event of ui.parseInput(data.toString('utf8'))) {
+    if (event.mouse) onMouse(event.mouse)
+    else onKey(event.key)
   }
 }
 

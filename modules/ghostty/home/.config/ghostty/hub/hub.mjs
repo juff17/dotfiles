@@ -14,14 +14,20 @@
 // folder. State comes from agentd through client.mjs.
 
 import { execFile, spawn } from 'node:child_process'
-import { mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from 'node:fs'
+import { readFileSync, readdirSync, unlinkSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import {
+  LANES, LIST_COLS, LANE_GAP, activeWindow, boardRows, closeQuestion, keptFocus, laneColumns, listItems as itemsOf, listMode as isListMode,
+  listScroll, listSelection, markedPane, nextLane, selection, showsPermission, shq, step, stepList, tabFocus, trayWindow, visible as matching, where as whereOf,
+} from './board.mjs'
 import { RUN, follow, markReviewed, markStopped } from './client.mjs'
+import { DIAGRAMS_KEY, NEW_AGENT_KEY, OPEN_AGENT_KEY, PEEK_CLOSING_KEY, answerConfirm, filterKey, hitAt, keyAction, mouseAction } from './keys.mjs'
 import { HUB_OPEN } from './tray.mjs'
 import { cardHeights, counts, lanes, launch, monitorProcess, monitorsOf, scrollTo } from './model.mjs'
 import { POPUP } from './newagent.mjs'
+import { dontAsk as skipQuestion, readPrefs, recents as recentsOf, remember as rememberIn, skips, storePaths } from './prefs.mjs'
 import { BOLD, CAP_L, CAP_R, ITALIC, MONITOR, P, STATE, ago, bar, bg, clean, enter, fg, leave, mix, paint, pill, render, split, tokens, width } from './term.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
@@ -33,34 +39,7 @@ const CLAUDE = process.env.AGENT_HUB_CLAUDE || 'claude'
 const TABS = ['-L', process.env.AGENT_HUB_TABS_SOCKET || 'ghostty']
 const HOME = homedir()
 const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR || join(HOME, '.claude')
-const RECENTS = join(process.env.XDG_CACHE_HOME || join(HOME, '.cache'), 'agent-hub', 'recents.json')
-// Choices that outlive the hub and a reboot, such as questions you said not
-// to ask again: state, not cache or the runtime folder, which a reboot clears.
-const PREFS = join(process.env.XDG_STATE_HOME || join(HOME, '.local', 'state'), 'agent-hub', 'prefs.json')
-const LANES = ['needs', 'working', 'done', 'idle']
-// Below this width the lanes get too narrow to read, so the hub draws the
-// list it shows beside an open session.
-const MIN_BOARD_COLS = 96
-// Rows the monitors tray keeps for monitors even when few or none run, so
-// the board doesn't jump as monitors come and go. It grows past this, up to
-// about a third of the screen, when more are running.
-const MONITOR_ROWS = 5
-// The fewest rows the lanes keep on a short screen, before the tray gives up
-// its minimum.
-const MIN_LANE_ROWS = 10
-const LIST_COLS = 46
-// What Alt+N (layout.conf) and the rail's + new send the hub to open New
-// agent, whatever it's in the middle of.
-const NEW_AGENT_KEY = '\x1b[9100~'
-// What Ctrl+Shift+B and Ctrl+] send just before they close the open session,
-// so the hub draws the board, not the list, once its pane widens.
-const PEEK_CLOSING_KEY = '\x1b[9101~'
-// What the tray sends to have the hub open an agent's session, after writing
-// the agent's id to HUB_OPEN (tray.mjs): a background agent has no tab to go to.
-const OPEN_AGENT_KEY = '\x1b[9102~'
-// What Alt+D (layout.conf) sends the hub to show the diagrams of the tab
-// you're looking at here: the open session's, or the selected card's.
-const DIAGRAMS_KEY = '\x1b[9103~'
+const { recents: RECENTS, prefs: PREFS } = storePaths(process.env, HOME)
 
 const run = (args, opts = {}) =>
   new Promise(resolve =>
@@ -93,35 +72,19 @@ function say(text, color = P.sub, ms = 5000) {
   draw()
 }
 
-function visible() {
-  if (!filter) return agents
-  const f = filter.toLowerCase()
-  return agents.filter(a => `${a.title} ${a.repo} ${a.cmd} ${a.monitors.map(m => m.description).join(' ')}`.toLowerCase().includes(f))
-}
-
+const visible = () => matching(agents, filter)
 const board = () => lanes(visible())
 const strip = () => monitorsOf(visible())
-
-function where(a) {
-  if (a.pane) {
-    const tab = `${a.pane.hub ? 'hub tab' : 'tab'} ${a.pane.tab}`
-    return a.pane.win === WIN || !a.pane.win ? tab : `w${a.pane.win} · ${tab}`
-  }
-  return a.kind === 'bg' ? 'bg' : 'terminal'
-}
+const where = a => whereOf(a, WIN)
 
 const kilo = n => (n >= 1000 ? `${Math.round(n / 1000)}k` : String(n))
 
 // The selected item of a lane, kept by id so it stays put as cards move.
 function current(lane) {
   const list = lane === 'monitors' ? strip() : board()[lane]
-  const key = x => (lane === 'monitors' ? x.key : x.id)
-  let i = list.findIndex(x => key(x) === selected[lane])
-  if (i < 0 && list.length) {
-    i = 0
-    selected[lane] = key(list[0])
-  }
-  return { list, i, item: list[i] ?? null }
+  const sel = selection(list, x => (lane === 'monitors' ? x.key : x.id), selected[lane])
+  selected[lane] = sel.id
+  return sel
 }
 
 // The monitor selected in the strip, or in the list beside an open session.
@@ -136,7 +99,7 @@ function focused() {
   return current(LANES[focus]).item
 }
 
-const listMode = () => Boolean(peek) || cols() < MIN_BOARD_COLS
+const listMode = () => isListMode(peek, cols())
 
 // ------------------------------------------------------------ board
 
@@ -324,9 +287,7 @@ function monitorRows(w, h, y0) {
   const out = [header(look, list.length, w, [['   stay put, raise a card in Needs you when needed', fg(P.sub)]]), render([], w, LANE_BG)]
   if (!list.length) out.push(empty(`${EMPTY.monitors} · n → Babysit a PR or Watch logs`, w))
   // Like the lanes, a full tray says how many it hides.
-  const space = h - out.length
-  const room = list.length > space ? space - 1 : space
-  const top = Math.max(0, Math.min(sel - room + 1, list.length - room))
+  const { top, room } = trayWindow(list.length, h - out.length, sel)
   list.slice(top, top + room).forEach((m, k) => {
     const i = top + k
     const on = focus === 4 && i === sel
@@ -382,18 +343,10 @@ function drawBoard() {
   const H = rows()
   const c = counts(visible())
   const lines = [summary(c, W), render([], W)]
-  const mons = strip().length
-  // The tray's header and the row under it, then its rows: at least
-  // MONITOR_ROWS, more with more monitors, up to about a third of the screen;
-  // on a short screen the lanes keep MIN_LANE_ROWS first.
-  const most = Math.max(MONITOR_ROWS, Math.floor(H / 3) - 2)
-  const fit = Math.max(1, H - 4 - MIN_LANE_ROWS - 2)
-  const stripH = 2 + Math.min(Math.min(Math.max(mons, MONITOR_ROWS), most), fit)
-  const laneH = Math.max(6, H - 2 - stripH - 2)
-  const gap = 2
-  const w = Math.floor((W - 3 * gap) / 4)
-  const cols_ = LANES.map((name, i) => lane(name, i === 3 ? W - 3 * (w + gap) : w, laneH, i, 1 + i * (w + gap)))
-  for (let r = 0; r < laneH; r++) lines.push(cols_.map(c => c[r]).join(' '.repeat(gap)))
+  const { stripH, laneH } = boardRows(H, strip().length)
+  const at = laneColumns(W)
+  const cols_ = LANES.map((name, i) => lane(name, at[i].w, laneH, i, at[i].x))
+  for (let r = 0; r < laneH; r++) lines.push(cols_.map(c => c[r]).join(' '.repeat(LANE_GAP)))
   lines.push(render([], W))
   lines.push(...monitorRows(W, stripH, lines.length + 1))
   lines.push(footer(W))
@@ -402,22 +355,8 @@ function drawBoard() {
 
 // ------------------------------------------------------------ list
 
-// The board as one column, beside an open session: a group per lane, then
-// the monitors, each with a tinted header, a line saying so when it's empty,
-// and a row of space before the next.
-function listItems() {
-  const l = board()
-  const items = []
-  const group = (name, list, toItem) => {
-    if (items.length) items.push({ spacer: true })
-    items.push({ group: name, count: list.length })
-    if (!list.length) items.push({ empty: name })
-    for (const x of list) items.push(toItem(x))
-  }
-  for (const name of LANES) group(name, l[name], a => ({ id: a.id, agent: a, lane: name }))
-  group('monitors', strip(), m => ({ id: `m:${m.key}`, agent: m.agent, monitor: m }))
-  return items
-}
+// The board as one column, beside an open session (board.mjs listItems).
+const listItems = () => itemsOf(board(), strip())
 
 function drawList() {
   const button = newButton(' + New  ')
@@ -436,8 +375,7 @@ function drawList() {
   hits.push({ x1: W - button.cells + 1, x2: W, y1: 1, y2: 1, act: () => openDialog() })
   hits.push({ x1: 1, x2: 26, y1: 1, y2: 1, act: () => closePeek() })
   const items = listItems()
-  const pickable = items.filter(x => x.id)
-  if (!pickable.some(x => x.id === listSel)) listSel = (pickable.find(x => x.agent.id === peek?.id) ?? pickable[0])?.id ?? null
+  listSel = listSelection(items, listSel, peek?.id)
   // Each item's rows: an agent takes two, its name and age, then its repo,
   // branch and what it's doing; scrolling counts rows, not items.
   const drawn = items.map(it => {
@@ -460,12 +398,7 @@ function drawList() {
   })
   const room = H - 3
   const sel = items.findIndex(x => x.id === listSel)
-  if (sel >= 0) {
-    const top = drawn.slice(0, sel).reduce((n, r) => n + r.length, 0)
-    const bottom = top + drawn[sel].length
-    if (top < scroll.list) scroll.list = top
-    if (bottom > scroll.list + room) scroll.list = bottom - room
-  }
+  scroll.list = listScroll(drawn.map(r => r.length), sel, scroll.list, room)
   let row = 0
   items.forEach((it, i) => {
     for (const line of drawn[i]) {
@@ -490,27 +423,8 @@ function drawList() {
 // from that.
 let asking = false
 
-function recents() {
-  let saved = []
-  try {
-    saved = JSON.parse(readFileSync(RECENTS, 'utf8'))
-  } catch {}
-  const roots = agents.map(a => {
-    const m = a.cwd.match(/^(.*)\/\.claude\/worktrees\//)
-    return m ? m[1] : a.cwd
-  })
-  return [...new Set([...saved, ...roots])].filter(p => p && p !== HOME).slice(0, 8)
-}
-
-function remember(dir) {
-  const list = [dir, ...recents().filter(d => d !== dir)].slice(0, 12)
-  try {
-    mkdirSync(dirname(RECENTS), { recursive: true })
-    writeFileSync(RECENTS, JSON.stringify(list))
-  } catch {}
-}
-
-const shq = s => `'${String(s).replace(/'/g, `'\\''`)}'`
+const recents = () => recentsOf(RECENTS, agents, HOME)
+const remember = dir => rememberIn(RECENTS, dir, agents, HOME)
 
 async function openDialog() {
   if (asking) return
@@ -590,36 +504,17 @@ function pickMonitor(key) {
 
 // Whether lane i (4: the monitors strip) has anything to select.
 const filled = i => (i === 4 ? strip() : board()[LANES[i]]).length > 0
-
-// h/l and the arrows step to the next lane with cards in it, skipping empty
-// ones, where nothing would show as selected.
-function moveLane(n) {
-  for (let step = 1; step < 5; step++) {
-    const next = (((focus + n * step) % 5) + 5) % 5
-    if (filled(next)) return (focus = next)
-  }
-}
-
-// When the focused lane is empty (at start, or its last card moved on),
-// focus goes to the next lane that has cards.
-function keepFocus() {
-  if (filled(focus)) return
-  for (let step = 1; step < 5; step++) {
-    const next = (focus + step) % 5
-    if (filled(next)) return (focus = next)
-  }
-}
+const moveLane = n => (focus = nextLane(focus, n, filled))
+const keepFocus = () => (focus = keptFocus(focus, filled))
 
 function moveIn(n) {
   if (listMode()) {
-    const items = listItems().filter(x => x.id)
-    const i = items.findIndex(x => x.id === listSel)
-    listSel = items[Math.min(items.length - 1, Math.max(0, i + n))]?.id ?? null
+    listSel = stepList(listItems(), listSel, n)
     return
   }
   const name = focus === 4 ? 'monitors' : LANES[focus]
   const { list, i } = current(name)
-  const next = list[Math.min(list.length - 1, Math.max(0, i + n))]
+  const next = step(list, i, n)
   if (next) selected[name] = name === 'monitors' ? next.key : next.id
 }
 
@@ -713,12 +608,11 @@ const forgetPeek = () => outer('set', '-wu', '-t', process.env.TMUX_PANE, '@peek
 // off a second one.
 async function findPeek() {
   if (peek || !process.env.TMUX) return
-  const list = (await outer('list-panes', '-t', process.env.TMUX_PANE, '-F', '#{pane_id} #{@peek}')).out
-  const pane = list.split('\n').map(l => l.split(' ')).find(([, mark]) => mark === '1')?.[0]
+  const pane = markedPane((await outer('list-panes', '-t', process.env.TMUX_PANE, '-F', '#{pane_id} #{@peek}')).out)
   if (!pane) return
   // The window the pane shows, when it shows a tab; empty for `claude attach`.
   const shown = await tabs('list-windows', '-t', `=peek-${pane.slice(1)}`, '-F', '#{window_active} #{window_id}')
-  const window = shown.ok ? (shown.out.split('\n').find(l => l.startsWith('1 '))?.slice(2) ?? null) : null
+  const window = shown.ok ? activeWindow(shown.out) : null
   peek = { pane, id: agents.find(a => window && a.pane?.window === window)?.id ?? null, window }
   await outer('set', '-w', '-t', pane, '@peek_pane', pane)
 }
@@ -737,8 +631,7 @@ async function answer(allow) {
     waiting = JSON.parse(readFileSync(join(CLAUDE_DIR, 'sessions', `${a.pid}.json`), 'utf8')).status === 'waiting'
   } catch {}
   const screen = await tabs('capture-pane', '-p', '-t', a.pane.pane)
-  const bottom = screen.out.split('\n').filter(l => l.trim()).slice(-15).join('\n')
-  if (!waiting || !/❯\s*1\.\s*Yes/.test(bottom)) return say(`${a.title} isn't showing a permission prompt right now`, P.peach)
+  if (!waiting || !showsPermission(screen.out)) return say(`${a.title} isn't showing a permission prompt right now`, P.peach)
   await tabs('send-keys', '-t', a.pane.pane, allow ? '1' : 'Escape')
   say(`${allow ? 'Allowed' : 'Denied'} ${a.cmd.replace(/^Allow |\?$/g, '')}`, allow ? P.green : P.peach)
 }
@@ -769,40 +662,27 @@ async function toTab(a) {
   await outer('select-window', '-t', `layout-${WIN}:work`)
 }
 
-// x closes a done or idle agent: a tab agent's tab, or a background agent,
+// x closes a done or idle agent (board.mjs closeQuestion says which way),
 // stopped with its conversation kept (`claude attach <id>` resumes it). A
-// tab parked on a background job is one agent with it, so both go: the job
-// first, so the tab isn't left showing a job that's still running. The
-// footer says whether it worked; the card leaves once agentd sees it gone.
-// Closing a session ends every monitor it armed, so the question says how
-// many.
+// tab parked on a background job loses the job first, so the tab isn't left
+// showing a job that's still running. The footer says whether it worked; the
+// card leaves once agentd sees it gone.
 function closeAgent() {
   const a = focused()
   if (!a) return
-  if (a.state === 'working' || a.state === 'needs') return say('Only Done and Idle agents close from here', P.sub)
+  const q = closeQuestion(a, where(a))
+  if (q.refuse) return say(q.refuse, P.sub)
   const done = (r, what) => say(r.ok ? what : `Couldn't close ${a.title}: ${clean(r.err).slice(0, 120)}`, r.ok ? P.green : P.red, 8000)
-  const live = a.monitors.filter(m => m.state !== 'ended').length
-  const also = live ? ` and its ${live === 1 ? 'monitor' : `${live} monitors`}` : ''
-  if (a.pane && a.jobId)
-    confirm = {
-      text: `Close ${where(a)} and stop background agent ${a.title}${also}? Its conversation is kept.`,
-      yes: async () => {
-        const stop = await run([CLAUDE, 'stop', a.jobId])
-        if (!stop.ok) return done(stop)
-        done(await tabs('kill-window', '-t', a.pane.window), `Closed ${where(a)} and stopped ${a.title}; claude attach ${a.jobId} resumes it`)
-      },
-    }
-  else if (a.pane)
-    confirm = {
-      text: `Close ${where(a)} (${a.title})${also}?`,
-      yes: async () => done(await tabs('kill-window', '-t', a.pane.window), `Closed ${where(a)} (${a.title})`),
-    }
-  else if (a.jobId)
-    confirm = {
-      text: `Stop background agent ${a.title}${also}? Its conversation is kept.`,
-      yes: async () => done(await run([CLAUDE, 'stop', a.jobId]), `Stopped ${a.title}; claude attach ${a.jobId} resumes it`),
-    }
-  else say(`${a.title} runs outside the layout; close it where it runs`, P.sub)
+  const yes = {
+    'tab+job': async () => {
+      const stop = await run([CLAUDE, 'stop', a.jobId])
+      if (!stop.ok) return done(stop)
+      done(await tabs('kill-window', '-t', a.pane.window), `Closed ${where(a)} and stopped ${a.title}; claude attach ${a.jobId} resumes it`)
+    },
+    tab: async () => done(await tabs('kill-window', '-t', a.pane.window), `Closed ${where(a)} (${a.title})`),
+    job: async () => done(await run([CLAUDE, 'stop', a.jobId]), `Stopped ${a.title}; claude attach ${a.jobId} resumes it`),
+  }[q.how]
+  confirm = { text: q.text, yes }
 }
 
 // The processes on the machine, for finding a monitor's: pid, parent,
@@ -843,86 +723,69 @@ function stopMonitor(m) {
       say(`Couldn't stop ${clean(m.description)}: ${err.code ?? err.message}`, P.red, 8000)
     }
   }
-  if (prefs().skip?.['stop-monitor']) return kill()
+  if (skips(readPrefs(PREFS), 'stop-monitor')) return kill()
   confirm = { text: `Stop monitor ${clean(m.description)}? ${m.agent.title} and its other monitors keep running.`, yes: kill, skip: 'stop-monitor' }
 }
 
-function prefs() {
-  try {
-    return JSON.parse(readFileSync(PREFS, 'utf8'))
-  } catch {
-    return {}
-  }
-}
-
 function dontAsk(name) {
-  const p = prefs()
-  p.skip = { ...p.skip, [name]: true }
   try {
-    mkdirSync(dirname(PREFS), { recursive: true })
-    writeFileSync(PREFS, `${JSON.stringify(p, null, 2)}\n`)
+    skipQuestion(PREFS, name)
   } catch (err) {
     say(`Couldn't save that choice: ${err.code ?? err.message}`, P.red, 8000)
   }
+}
+
+const actions = {
+  laneLeft: () => moveLane(-1),
+  laneRight: () => moveLane(1),
+  down: () => moveIn(1),
+  up: () => moveIn(-1),
+  tab: () => (focus = tabFocus(focus, filled)),
+  open: () => openSession(focused()),
+  allow: () => answer(true),
+  deny: () => answer(false),
+  reviewed: () => {
+    const a = focused()
+    if (a?.state === 'done') markReviewed(a.id)
+  },
+  reviewAll: () => board().done.forEach(a => markReviewed(a.id)),
+  goToTab: () => goToTab(),
+  close: () => {
+    const m = focusedMonitor()
+    return m ? stopMonitor(m) : closeAgent()
+  },
+  new: () => openDialog(),
+  filter: () => ((filtering = true), (filter = '')),
+  back: () => (peek ? closePeek() : outer('select-window', '-t', `layout-${WIN}:work`)),
+  workspace: () => outer('select-window', '-t', `layout-${WIN}:work`),
 }
 
 function onKey(key) {
   if (confirm) {
     const c = confirm
     confirm = null
-    if (key === 'y') void c.yes()
-    else if (key === 'a' && c.skip) {
-      dontAsk(c.skip)
-      void c.yes()
-    }
+    const r = answerConfirm(c, key)
+    if (r.remember) dontAsk(r.remember)
+    if (r.yes) void c.yes()
     return
   }
   if (filtering) {
-    if (key === '\r' || key === '\x1b') filtering = key === '\r' ? false : ((filter = ''), false)
-    else if (key === '\x7f') filter = filter.slice(0, -1)
-    else if (key >= ' ' && !key.startsWith('\x1b')) filter += key
+    const f = filterKey(filter, key)
+    filter = f.filter
+    filtering = f.filtering
     return
   }
-  const actions = {
-    h: () => moveLane(-1),
-    l: () => moveLane(1),
-    '\x1b[D': () => moveLane(-1),
-    '\x1b[C': () => moveLane(1),
-    j: () => moveIn(1),
-    k: () => moveIn(-1),
-    '\x1b[B': () => moveIn(1),
-    '\x1b[A': () => moveIn(-1),
-    '\t': () => (focus = focus === 4 ? 0 : 4),
-    '\r': () => openSession(focused()),
-    a: () => answer(true),
-    d: () => answer(false),
-    e: () => {
-      const a = focused()
-      if (a?.state === 'done') markReviewed(a.id)
-    },
-    E: () => board().done.forEach(a => markReviewed(a.id)),
-    o: () => goToTab(),
-    x: () => {
-      const m = focusedMonitor()
-      return m ? stopMonitor(m) : closeAgent()
-    },
-    n: () => openDialog(),
-    '/': () => ((filtering = true), (filter = '')),
-    '\x1b': () => (peek ? closePeek() : outer('select-window', '-t', `layout-${WIN}:work`)),
-    q: () => outer('select-window', '-t', `layout-${WIN}:work`),
-  }
-  void actions[key]?.()
+  void actions[keyAction(key)]?.()
 }
 
-function onMouse({ button, x, y, up }) {
-  if (button & 64) {
-    const h = hits.find(r => x >= r.x1 && x <= r.x2 && y >= r.y1 && y <= r.y2 && r.wheel !== undefined)
+function onMouse(m) {
+  const act = mouseAction(m)
+  if (act?.wheel) {
+    const h = hitAt(hits, m.x, m.y, true)
     if (h) focus = h.wheel
-    return moveIn(button & 1 ? 1 : -1)
+    return moveIn(act.wheel)
   }
-  if (up || (button & 3) !== 0 || button & 32) return
-  const h = hits.find(r => x >= r.x1 && x <= r.x2 && y >= r.y1 && y <= r.y2)
-  void h?.act()
+  if (act?.click) void hitAt(hits, m.x, m.y)?.act()
 }
 
 // ------------------------------------------------------------ main

@@ -163,13 +163,29 @@ If the chip shows **"Sorry! There was an error loading dev.dotfiles.agents … p
 
 ## Tests
 
-`dv`'s zoom and pan math, the todo store (categories, grouping, pruning, writes), the help filter, the agent hub's model (reading transcripts and monitor events, sorting agents into lanes, fitting a full lane, the commands a new agent runs) and the Agents widget's items (sections, what's new, dismissing) have tests. They use only Node's built-in test runner:
+Each UI keeps its decisions (keys, cursor and selection, prompts, layout, parsing) in a module that does nothing on import. The file that runs keeps only the drawing and the tmux and process calls. That way the decisions have tests beside them:
+
+- **Agent hub:**
+  - its model: transcripts, monitor events, lanes, fitting a full lane, and the commands a new agent runs.
+  - `agentd`'s scanning (`daemon.mjs`): sessions, transcripts read as they grow, tmux panes and which tab is being looked at, tab glyphs, whether monitors still run, the single-copy lock, and clients.
+  - the board's keys, selection and layout (`keys.mjs`, `board.mjs`), and prefs and recents (`prefs.mjs`).
+  - the New agent form, the rail, and the state client.
+- **Agents widget:** its items (sections, what's new, dismissing).
+- **Viewers:**
+  - `dv`'s zoom and pan math.
+  - Todo: the store, and the view's keys, cursor, prompts, edit form and hand-off (`todo-ui.mjs`).
+  - Diff: git parsing, the file list and keys (`diff.mjs`).
+  - Diagrams: pane files, tabs and keys (`diagram.mjs`).
+  - Help: the filter and the overlay (`help-nav.mjs`).
+  - The backdrop and the kitty graphics helpers.
+
+Drawing, and anything that needs a live tmux server, has no tests. The tests use only Node's built-in test runner:
 
 ```bash
-node --test modules/ghostty/home/.config/ghostty/{hub,viewer}/*.test.mjs
+./test.sh ghostty
 ```
 
-CI runs these and the `claude` module's tests on every push to main and every PR (`.github/workflows/tests.yml`).
+That runs every `*.test.mjs` under `viewer/` and `hub/`, so a new test file is picked up on its own. CI runs these and the `claude` module's tests on every push to main and every PR (`.github/workflows/tests.yml`).
 
 ## Limits
 
