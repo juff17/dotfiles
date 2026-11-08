@@ -82,7 +82,10 @@ item with that id and a spinner; you fill it in instead of adding a new one.
 
 1. Write the title, category, type and note from the message (Writing an
    item), and pick the repo (Picking the repo). Where it was typed is only
-   where the user was, not the answer.
+   where the user was, not the answer. The only commands you can run are
+   `ghostty-todo repos`, `ghostty-todo add` and `ls`; search with the Grep,
+   Glob and Read tools, not shell commands like git, grep or find. A command
+   that's denied changes nothing else: carry on and file the item.
 2. Run this once:
 
    ```bash
