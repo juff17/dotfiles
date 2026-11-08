@@ -1,6 +1,6 @@
 // Your own instructions for some kinds of agent, sent after the prompt the
-// code builds for them: a task from New agent (after what you typed), a todo
-// handed off with w, and the Claude that files a todo typed with a.
+// code builds for them: a task from New agent (after what you typed), and a
+// todo handed off with w. Filing a todo has none: the todo skill does it.
 //
 // They're a Markdown file per agent in prompts/ beside hub/, in the dotfiles
 // repo; edit the file to change them. Git ignores them: install copies each
@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url'
 // AGENT_HUB_PROMPTS points this elsewhere, for tests. It's read on every call.
 export const promptsDir = () => process.env.AGENT_HUB_PROMPTS || join(dirname(fileURLToPath(import.meta.url)), '..', 'prompts')
 
-export const AGENTS = ['task', 'todo-handoff', 'todo-filing']
+export const AGENTS = ['task', 'todo-handoff']
 
 export const fileOf = id => join(promptsDir(), `${id}.md`)
 

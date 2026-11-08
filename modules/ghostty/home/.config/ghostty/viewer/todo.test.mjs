@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 
 import { launch } from '../hub/model.mjs'
-import { FILING_TIMEOUT_MS, KEEP_DONE_MS, add, age, arrange, category, change, fill, filingState, find, handoffPlace, handoffSpec, inGit, knownRepos, load, newId, prune, remove, repoOf, taskType } from './todo.mjs'
+import { FILING_TIMEOUT_MS, INSTALLED_CLI, KEEP_DONE_MS, add, age, arrange, category, change, fill, filerMessage, filingState, find, handoffPlace, handoffSpec, inGit, knownRepos, load, newId, prune, remove, repoOf, taskType } from './todo.mjs'
 
 // No settings file, so every setting reads as its default.
 process.env.AGENT_HUB_SETTINGS = '/nonexistent/agent-hub/settings.json'
@@ -194,4 +194,15 @@ test('an item outside git is handed off in the folder the viewer has open', () =
   const own = { ...loose, repo: 'gad', root: '/r/gad', cwd: '/r/gad' }
   assert.equal(handoffPlace(own, dot, all), own, 'an item in git keeps its repo')
   assert.equal(handoffPlace(loose, { folder: '' }, all), loose, 'nothing open: its own folder')
+})
+
+test('the filer is sent the todo skill with the filing id, where it was typed and the message', () => {
+  const item = { id: 'f7q', title: 'the rail is too wide in the hub', repo: 'dotfiles', root: '/home/u/p/dotfiles' }
+  assert.equal(
+    filerMessage(item),
+    '/todo File this todo from the Todo pane as filing f7q. It was typed in the dotfiles repo (/home/u/p/dotfiles). The message: the rail is too wide in the hub',
+  )
+  assert.match(filerMessage({ ...item, repo: 'none', root: '/home/u' }), /typed in \/home\/u, outside any repo\./)
+  assert.doesNotMatch(filerMessage(item, INSTALLED_CLI), /Run ghostty-todo as/)
+  assert.match(filerMessage(item, '/wt/bin/ghostty-todo'), /\. Run ghostty-todo as \/wt\/bin\/ghostty-todo\. The message:/, 'a worktree’s copy is named')
 })

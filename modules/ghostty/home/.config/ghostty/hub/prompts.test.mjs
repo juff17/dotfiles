@@ -8,7 +8,7 @@ import { beforeEach, test } from 'node:test'
 
 import { launch } from './model.mjs'
 import { AGENTS, compose, fileOf, instructions, promptsDir } from './prompts.mjs'
-import { filerSystem, handoffSpec } from '../viewer/todo.mjs'
+import { handoffSpec } from '../viewer/todo.mjs'
 
 beforeEach(() => {
   const dir = mkdtempSync(join(tmpdir(), 'prompts-'))
@@ -46,13 +46,6 @@ test('launch adds a task’s or a hand-off’s instructions, and nothing to a mo
   assert.equal(launch({ kind: 'logs', cwd: '/p', target: 'docker logs api' }).argv.at(-1), '/logger watch docker logs api')
 })
 
-test('the filer gets its instructions after its system prompt, lines kept', () => {
-  const item = { id: 'k2x', repo: 'dot', root: '/r' }
-  const bare = filerSystem(item, [], [], 'ghostty-todo')
-  write('todo-filing', 'Prefer the dotfiles repo.\nNever file under none.')
-  assert.equal(filerSystem(item, [], [], 'ghostty-todo'), `${bare}\nPrefer the dotfiles repo.\nNever file under none.`)
-})
-
 const REPO_PROMPTS = fileURLToPath(new URL('../prompts', import.meta.url))
 
 test('the repo keeps an example for each agent’s instructions, with nothing to send', () => {
@@ -68,13 +61,13 @@ test('the repo keeps an example for each agent’s instructions, with nothing to
 test('install copies the examples once, leaving your own files alone', () => {
   const dir = mkdtempSync(join(tmpdir(), 'prompts-'))
   writeFileSync(join(dir, 'task.md.example'), 'example task')
-  writeFileSync(join(dir, 'todo-filing.md.example'), 'example filing')
-  writeFileSync(join(dir, 'todo-filing.md'), 'mine')
+  writeFileSync(join(dir, 'todo-handoff.md.example'), 'example hand-off')
+  writeFileSync(join(dir, 'todo-handoff.md'), 'mine')
   const lib = fileURLToPath(new URL('../bin/ghostty-lib.sh', import.meta.url))
   const copy = () => execFileSync('bash', ['-c', 'source "$1"; copy_prompt_examples "$2"', 'bash', lib, dir])
   copy()
   assert.equal(readFileSync(join(dir, 'task.md'), 'utf8'), 'example task')
-  assert.equal(readFileSync(join(dir, 'todo-filing.md'), 'utf8'), 'mine')
+  assert.equal(readFileSync(join(dir, 'todo-handoff.md'), 'utf8'), 'mine')
   writeFileSync(join(dir, 'task.md'), 'edited')
   copy()
   assert.equal(readFileSync(join(dir, 'task.md'), 'utf8'), 'edited', 'a second install keeps your edits')

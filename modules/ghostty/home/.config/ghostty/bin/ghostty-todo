@@ -123,12 +123,18 @@ function runFiler(item) {
   const repos = todo.knownRepos(todo.load())
   const roots = [...new Set(repos.map(r => dirname(r.root)))]
   const dir = [item.worktree, item.cwd, item.root].find(d => d && existsSync(d)) || homedir()
+  // The message goes first: --allowedTools and --disallowedTools take every
+  // word after them, up to the next flag.
+  const cli = [...new Set([CLI, todo.INSTALLED_CLI, '~/.config/ghostty/bin/ghostty-todo'])]
   const args = [
-    '-p', '--model', FILER.model, '--effort', FILER.effort, '--permission-mode', 'dontAsk',
-    '--allowedTools', `Bash(${CLI} add *)`, 'Bash(ls *)', 'Grep', 'Glob', 'Read',
+    '-p', todo.filerMessage(item, CLI),
+    '--model', FILER.model, '--effort', FILER.effort, '--permission-mode', 'dontAsk',
+    // dontAsk denies every tool but these: the read-only search and the CLI's
+    // add and repos.
+    '--allowedTools', ...cli.flatMap(c => [`Bash(${c} add *)`, `Bash(${c} repos*)`]), 'Bash(ls *)', 'Grep', 'Glob', 'Read',
+    // The todo skill comes in through the message; no other skill does.
+    '--disallowedTools', 'Skill',
     ...roots.flatMap(r => ['--add-dir', r]),
-    '--append-system-prompt', todo.filerSystem(item, repos, roots, CLI),
-    `add todo: ${item.title}`,
   ]
   return new Promise(done => {
     let output = ''
