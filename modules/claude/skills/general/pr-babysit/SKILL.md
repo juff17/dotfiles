@@ -95,8 +95,9 @@ Monitor(
   stuck jobs and conflicts. Handle them like any other event once the
   worktree exists (step 3). Send one notification for this first sweep, not
   one per comment.
-- Options: `--interval 60` (seconds), `--stuck-after 30` (minutes a job may
-  wait for a runner).
+- Options: `--interval` (seconds between polls) and `--stuck-after` (minutes
+  a job may wait for a runner). Leave them off: their defaults (60 and 30)
+  come from the hub's Settings panel, under PR babysit.
 - `watch_pr.py <url> -C <clone> --once` prints the current state, including
   all open comments, without the lock or saving state. Use it to answer "how is the PR doing?".
 

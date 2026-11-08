@@ -30,6 +30,23 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
+# The hub's Settings panel (ghostty module, hub/settings.mjs) keeps the
+# defaults for --interval and --stuck-after here. A missing file, or a value
+# that isn't a whole number in range, leaves the built-in default.
+SETTINGS = Path(os.environ.get("AGENT_HUB_SETTINGS")
+                or Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local" / "state") / "agent-hub" / "settings.json")
+
+
+def setting(key, default, low, high):
+    try:
+        value = json.loads(SETTINGS.read_text()).get(key)
+    except (OSError, ValueError, AttributeError):
+        return default
+    if isinstance(value, int) and not isinstance(value, bool) and low <= value <= high:
+        return value
+    return default
+
+
 def emit(tag, msg):
     print(f"[{tag}] {msg}", flush=True)
 
@@ -639,9 +656,12 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("url", help="PR or MR URL")
     ap.add_argument("-C", dest="cwd", default=".", help="local clone of the PR's repo (default: .)")
-    ap.add_argument("--interval", type=int, default=60, help="seconds between polls (default 60)")
-    ap.add_argument("--stuck-after", type=int, default=30,
-                    help="minutes a job may wait for a runner before [stuck] (default 30)")
+    interval = setting("prBabysit.interval", 60, 15, 600)
+    stuck = setting("prBabysit.stuckAfter", 30, 5, 240)
+    ap.add_argument("--interval", type=int, default=interval,
+                    help=f"seconds between polls (default {interval}, from Settings)")
+    ap.add_argument("--stuck-after", type=int, default=stuck,
+                    help=f"minutes a job may wait for a runner before [stuck] (default {stuck}, from Settings)")
     ap.add_argument("--session", help="babysit session id; reuse it on every re-arm (required unless --once)")
     ap.add_argument("--once", action="store_true",
                     help="poll once and print events; no lock, state not saved")

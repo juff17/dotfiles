@@ -166,5 +166,28 @@ class Events(Cache):
         self.assertIn("[push] head moved to bbbbbbbb", lines)
 
 
+class Settings(unittest.TestCase):
+    """--interval and --stuck-after default to the hub's Settings file."""
+
+    def read(self, text):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "settings.json"
+            if text is not None:
+                path.write_text(text)
+            with mock.patch.object(w, "SETTINGS", path):
+                return w.setting("prBabysit.interval", 60, 15, 600)
+
+    def test_a_saved_value_is_the_default(self):
+        self.assertEqual(self.read('{"prBabysit.interval": 120}'), 120)
+
+    def test_no_file_or_a_bad_value_keeps_the_built_in_default(self):
+        self.assertEqual(self.read(None), 60)
+        self.assertEqual(self.read("{ not json"), 60)
+        self.assertEqual(self.read("[1, 2]"), 60)
+        self.assertEqual(self.read('{"prBabysit.interval": 5}'), 60)
+        self.assertEqual(self.read('{"prBabysit.interval": "120"}'), 60)
+        self.assertEqual(self.read('{"prBabysit.interval": true}'), 60)
+
+
 if __name__ == "__main__":
     unittest.main()
