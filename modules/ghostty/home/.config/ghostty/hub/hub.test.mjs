@@ -6,6 +6,7 @@ import { clean, render, width } from './term.mjs'
 
 // No settings file, so every setting reads as its default.
 process.env.AGENT_HUB_SETTINGS = '/nonexistent/agent-hub/settings.json'
+process.env.AGENT_HUB_PROMPTS = '/nonexistent/agent-hub/prompts'
 
 const ts = s => new Date(Date.UTC(2026, 10, 7, 12, 0, s)).toISOString()
 const at = s => Date.parse(ts(s))

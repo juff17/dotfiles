@@ -1,12 +1,20 @@
 // The ⚙ settings panel's state and what keys do to it, apart from the
 // terminal so it can be tested; settings-view.mjs draws it. The state is
-// { sec, sel, flag, scroll, note }: the section, the setting in it, which
-// flag ←/→ is on in a row of flags, the body's scroll, and the footer's note
-// (set when a save fails). Changes are saved to hub/settings.mjs's file as
-// they're made. It's keys only: clicks do nothing.
+// { sec, sel, flag, scroll, note, view, viewScroll, confirm }: the section,
+// the setting in it, which flag ←/→ is on in a row of flags, the body's
+// scroll, the footer's note (set when a save fails), the agent whose whole
+// prompt is open over the panel and its scroll, and the agent whose
+// instructions a second r clears. Changes are saved to hub/settings.mjs's
+// file as they're made. It's keys only: clicks do nothing.
+//
+// The Prompts section lists agents (hub/prompts.mjs AGENTS) instead of
+// settings: ←/→ picks an agent's skill, e edits your instructions for it, v or
+// ↵ opens its whole prompt.
 
-import { BOLD, P, bg, fg } from '../hub/term.mjs'
+import { BOLD, P, bg, fg, width } from '../hub/term.mjs'
 import { SECTIONS, load, reset, set, show, step, toggleFlag } from '../hub/settings.mjs'
+import { AGENTS, clear, compose, instructions, stepSkill } from '../hub/prompts.mjs'
+import { filerMessage, filerPrompt, filerSystem, handoffSpec } from './todo.mjs'
 
 export const NAV = 22
 // Title, gap, the section's note, gap above the body; footer below it.
@@ -15,9 +23,20 @@ export const BOTTOM = 1
 // The value column's width, at the right of the body.
 export const VALUE = 30
 
-export const start = id => ({ sec: Math.max(0, SECTIONS.findIndex(s => s.id === id)), sel: 0, flag: 0, scroll: 0, note: null })
+export const start = id => ({
+  sec: Math.max(0, SECTIONS.findIndex(s => s.id === id)),
+  sel: 0,
+  flag: 0,
+  scroll: 0,
+  note: null,
+  view: null,
+  viewScroll: 0,
+  confirm: null,
+})
 
-export const items = s => SECTIONS[s.sec].rows.filter(r => r.key)
+export const isPrompts = s => SECTIONS[s.sec].id === 'prompts'
+// The settings of the section, or in Prompts its agents.
+export const items = s => (isPrompts(s) ? AGENTS : SECTIONS[s.sec].rows.filter(r => r.key))
 export const current = s => items(s)[s.sel]
 
 // A setting's value as spans, `on` when it's the selected one.
@@ -34,6 +53,63 @@ export function valueSpans(r, v, on, flag) {
     })
   const text = show(r, v)
   return on ? [['‹ ', fg(P.blue)], [text, BOLD + fg(P.text)], [' ›', fg(P.blue)]] : [[text, fg(P.text)]]
+}
+
+// Text cut into lines `cols` cells wide at spaces, a word too long for a
+// line cut where it reaches the end. Newlines start a new line.
+export function wrap(text, cols) {
+  const out = []
+  for (const para of text.split('\n')) {
+    let line = ''
+    for (const word of para.split(/\s+/).filter(Boolean)) {
+      const next = line ? `${line} ${word}` : word
+      if (width(next) <= cols) {
+        line = next
+        continue
+      }
+      if (line) out.push(line)
+      line = ''
+      let rest = word
+      while (width(rest) > cols) {
+        let cut = ''
+        for (const ch of rest) {
+          if (width(cut + ch) > cols) break
+          cut += ch
+        }
+        out.push(cut)
+        rest = rest.slice(cut.length)
+      }
+      line = rest
+    }
+    out.push(line)
+  }
+  return out
+}
+
+// The todo the hand-off and the filer are shown with: placeholders in braces.
+const EXAMPLE = { id: '{id}', title: '{title}', note: '{note}', cat: '{cat}', repo: '{repo}', branch: '{branch}', root: '{repo path}', worktree: '', cwd: '{repo path}' }
+const CLI = '~/.config/ghostty/bin/ghostty-todo'
+
+// The part of an agent's prompt the code builds, which Settings can't change.
+const FILER_ARGS = [EXAMPLE, [{ repo: '{repo}', root: '{repo path}' }], ['{folder}'], CLI]
+export function fixedPart(id) {
+  if (id === 'task') return '{the prompt you type in New agent}'
+  if (id === 'pr-babysit') return '/pr-babysit {target}'
+  if (id === 'logger') return '/logger watch {target}'
+  if (id === 'todo-handoff') return handoffSpec(EXAMPLE, {}, () => true).prompt
+  return filerPrompt(...FILER_ARGS)
+}
+
+// All an agent is sent, in parts with a heading each. The filer's fixed part
+// and your instructions go in as its system prompt, the skill with its
+// message; every other agent gets one prompt.
+export function fullPrompt(id) {
+  if (id === 'todo-filing')
+    return [
+      { tag: 'SYSTEM PROMPT, added to Claude Code’s', text: filerSystem(...FILER_ARGS) },
+      { tag: 'MESSAGE', text: filerMessage('{what you typed}') },
+    ]
+  return [{ tag: 'AS SENT', text: compose(id, fixedPart(id)) }]
 }
 
 function save(s, fn) {
@@ -57,10 +133,13 @@ export function pickRow(s, i) {
   s.flag = 0
 }
 
-// ←/→: the next value, or in a row of flags the next flag.
+// ←/→: the next value, in a row of flags the next flag, or in Prompts the
+// agent's next skill (none for one linked to its skill).
 export function change(s, dir) {
   const r = current(s)
-  if (r.type === 'flags') s.flag = (s.flag + dir + r.choices.length) % r.choices.length
+  if (isPrompts(s)) {
+    if (r.skillKey) save(s, () => set(r.skillKey, stepSkill(load()[r.skillKey], dir)))
+  } else if (r.type === 'flags') s.flag = (s.flag + dir + r.choices.length) % r.choices.length
   else save(s, () => set(r.key, step(r, load()[r.key], dir)))
 }
 
@@ -72,14 +151,55 @@ export function toggle(s) {
   else save(s, () => set(r.key, step(r, v, 1)))
 }
 
-// A key; true when it closes the panel.
-export function onKey(s, key) {
+export function openView(s) {
+  s.view = current(s).id
+  s.viewScroll = 0
+}
+
+// r: a setting back to its default. In Prompts it clears your instructions,
+// on the second r in a row, as there's no default to go back to.
+function resetKey(s, confirming) {
+  const r = current(s)
+  if (!isPrompts(s)) return save(s, () => reset(r.key))
+  if (!instructions(r.id)) return
+  if (confirming !== r.id) {
+    s.confirm = r.id
+    s.note = { text: `r again clears your ${r.name} instructions`, color: P.peach }
+    return
+  }
+  save(s, () => clear(r.id))
+}
+
+// A key while an agent's whole prompt is open; true when it closes it.
+function onViewKey(s, key) {
   const actions = {
-    q: () => true,
-    '\x1b': () => true,
-    '\x03': () => true,
-    // Alt+S opened it; in the popup it reaches here.
-    '\x1bs': () => true,
+    '\x1b': () => (s.view = null),
+    q: () => (s.view = null),
+    v: () => (s.view = null),
+    '\x7f': () => (s.view = null),
+    j: () => (s.viewScroll += 1),
+    k: () => (s.viewScroll = Math.max(0, s.viewScroll - 1)),
+    '\x1b[B': () => (s.viewScroll += 1),
+    '\x1b[A': () => (s.viewScroll = Math.max(0, s.viewScroll - 1)),
+    g: () => (s.viewScroll = 0),
+    e: () => 'edit',
+  }
+  return Object.hasOwn(actions, key) ? actions[key]() : undefined
+}
+
+// A key: 'quit' when it closes the panel, 'edit' when the selected agent's
+// instructions should open in an editor (the view does that), else nothing.
+export function onKey(s, key) {
+  // ctrl+c, and the Alt+S that opened it, close it from anywhere.
+  if (key === '\x03' || key === '\x1bs') return 'quit'
+  const confirming = s.confirm
+  s.confirm = null
+  if (confirming && s.note?.color === P.peach) s.note = null
+  if (s.view) return onViewKey(s, key) === 'edit' ? 'edit' : undefined
+  const prompts = isPrompts(s)
+  const actions = {
+    q: () => 'quit',
+    '\x1b': () => 'quit',
     j: () => pickRow(s, s.sel + 1),
     k: () => pickRow(s, s.sel - 1),
     '\x1b[B': () => pickRow(s, s.sel + 1),
@@ -94,9 +214,12 @@ export function onKey(s, key) {
     l: () => change(s, 1),
     '\x1b[D': () => change(s, -1),
     '\x1b[C': () => change(s, 1),
-    ' ': () => toggle(s),
-    '\r': () => toggle(s),
-    r: () => save(s, () => reset(current(s).key)),
+    ' ': () => (prompts ? undefined : toggle(s)),
+    '\r': () => (prompts ? openView(s) : toggle(s)),
+    r: () => resetKey(s, confirming),
+    ...(prompts && { e: () => 'edit', v: () => openView(s) }),
   }
-  return Object.hasOwn(actions, key) ? actions[key]() === true : false
+  if (!Object.hasOwn(actions, key)) return undefined
+  const result = actions[key]()
+  return result === 'quit' || result === 'edit' ? result : undefined
 }

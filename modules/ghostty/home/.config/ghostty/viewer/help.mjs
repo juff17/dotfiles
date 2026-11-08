@@ -143,6 +143,8 @@ export const SECTIONS = [
       ['← / →', 'Change a setting'],
       ['space', 'Turn on or off, or the next choice'],
       ['r', 'Put a setting back to its default', true],
+      ['e', 'In Prompts: edit your instructions for an agent'],
+      ['v or ↵', 'In Prompts: the whole prompt an agent is sent', true],
       ['esc or alt+s', 'Close'],
     ],
   },

@@ -9,6 +9,7 @@ import { launch } from './model.mjs'
 // The form reads home once, as it loads, for ~ and the default folder.
 const HOME = realpathSync(mkdtempSync(join(tmpdir(), 'hub-newagent-')))
 process.env.HOME = HOME
+process.env.AGENT_HUB_PROMPTS = join(HOME, 'prompts')
 after(() => rmSync(HOME, { recursive: true, force: true }))
 const P = join(HOME, 'projects')
 for (const d of ['alpha', 'alphabet', 'Beta', '.hidden', 'alpha/.claude/worktrees/fix-x']) mkdirSync(join(P, d), { recursive: true })

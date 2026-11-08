@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { beforeEach, test } from 'node:test'
@@ -7,16 +7,27 @@ import { beforeEach, test } from 'node:test'
 import { tokens } from '../hub/term.mjs'
 import { SECTIONS, get, row, set } from '../hub/settings.mjs'
 import * as nav from './settings-nav.mjs'
-import { current, items, onKey, start } from './settings-nav.mjs'
+import { P } from '../hub/term.mjs'
+import { AGENTS, fileOf, header, instructions } from '../hub/prompts.mjs'
+import { current, fixedPart, fullPrompt, items, onKey, start, wrap } from './settings-nav.mjs'
 
 const LEFT = '\x1b[D'
 const RIGHT = '\x1b[C'
 const UP = '\x1b[A'
 const DOWN = '\x1b[B'
 
-// Each test gets its own empty settings file.
+// Each test gets its own empty settings file and prompts folder, and two
+// skills on disk.
 beforeEach(() => {
-  process.env.AGENT_HUB_SETTINGS = join(mkdtempSync(join(tmpdir(), 'settings-nav-')), 'settings.json')
+  const dir = mkdtempSync(join(tmpdir(), 'settings-nav-'))
+  process.env.AGENT_HUB_SETTINGS = join(dir, 'settings.json')
+  process.env.AGENT_HUB_PROMPTS = join(dir, 'prompts')
+  process.env.AGENT_HUB_SKILLS = join(dir, 'skills')
+  for (const name of ['alpha', 'beta']) {
+    mkdirSync(join(dir, 'skills', name), { recursive: true })
+    writeFileSync(join(dir, 'skills', name, 'SKILL.md'), '')
+  }
+  mkdirSync(join(dir, 'skills', 'not-a-skill'))
 })
 
 // A state on the setting `key`, as ↑↓ and tab would leave it.
@@ -109,8 +120,8 @@ test('tab and shift+tab move between sections, round the list', () => {
 })
 
 test('esc, q, ctrl+c and alt+s close it; other keys don’t', () => {
-  for (const k of ['\x1b', 'q', '\x03', '\x1bs']) assert.equal(onKey(start(), k), true, JSON.stringify(k))
-  for (const k of [LEFT, RIGHT, UP, DOWN, ' ', 'x']) assert.equal(onKey(start(), k), false, JSON.stringify(k))
+  for (const k of ['\x1b', 'q', '\x03', '\x1bs']) assert.equal(onKey(start(), k), 'quit', JSON.stringify(k))
+  for (const k of [LEFT, RIGHT, UP, DOWN, ' ', 'x', 'e', 'v']) assert.equal(onKey(start(), k), undefined, JSON.stringify(k))
 })
 
 test('a failed save shows in the footer and leaves the value', () => {
@@ -131,4 +142,112 @@ test('takes no clicks: a click is a mouse report, never a key', () => {
   const click = [...tokens('\x1b[<0;60;8M\x1b[<0;60;8m')]
   assert.equal(click.length, 2)
   assert.ok(click.every(t => t.mouse && !t.key))
+})
+
+// The Prompts section, on agent `id`.
+function onAgent(id) {
+  const s = start('prompts')
+  s.sel = AGENTS.findIndex(a => a.id === id)
+  return s
+}
+const write = (id, text) => {
+  mkdirSync(process.env.AGENT_HUB_PROMPTS, { recursive: true })
+  writeFileSync(fileOf(id), `${header(id)}${text}`)
+}
+
+test('Prompts lists the agents, and ↑↓ moves between them', () => {
+  const s = start('prompts')
+  assert.deepEqual(items(s), AGENTS)
+  press(s, DOWN, DOWN)
+  assert.equal(current(s).id, AGENTS[2].id)
+})
+
+test('← and → walk an agent’s skill round none and the skills on disk', () => {
+  const s = onAgent('todo-handoff')
+  press(s, RIGHT)
+  assert.equal(get('prompts.handoff.skill'), 'alpha')
+  press(s, RIGHT, RIGHT)
+  assert.equal(get('prompts.handoff.skill'), 'none')
+  press(s, LEFT)
+  assert.equal(get('prompts.handoff.skill'), 'beta')
+})
+
+test('an agent linked to its skill has none to pick', () => {
+  const s = onAgent('pr-babysit')
+  press(s, RIGHT, LEFT)
+  for (const r of SECTIONS.find(x => x.id === 'prompts').rows) assert.equal(get(r.key), 'none')
+  assert.equal(s.note, null)
+})
+
+test('e asks for the editor, on an agent and in its open prompt', () => {
+  const s = onAgent('task')
+  assert.equal(onKey(s, 'e'), 'edit')
+  press(s, 'v')
+  assert.equal(s.view, 'task')
+  assert.equal(onKey(s, 'e'), 'edit')
+})
+
+test('v or ↵ opens an agent’s whole prompt; esc goes back, not out', () => {
+  const s = onAgent('logger')
+  press(s, '\r')
+  assert.equal(s.view, 'logger')
+  press(s, DOWN, DOWN, UP)
+  assert.equal(s.viewScroll, 1)
+  assert.equal(onKey(s, '\x1b'), undefined)
+  assert.equal(s.view, null)
+  press(s, 'v')
+  assert.equal(onKey(s, 'q'), undefined)
+  assert.equal(s.view, null)
+  assert.equal(onKey(s, '\x1bs'), 'quit', 'alt+s still closes the panel')
+})
+
+test('r clears your instructions only on a second r in a row', () => {
+  const s = onAgent('todo-handoff')
+  write('todo-handoff', 'Run the tests first.')
+  press(s, 'r')
+  assert.equal(instructions('todo-handoff'), 'Run the tests first.')
+  assert.equal(s.note.color, P.peach)
+  press(s, DOWN, 'r', UP)
+  assert.equal(instructions('todo-handoff'), 'Run the tests first.', 'another key in between cancels it')
+  assert.equal(s.note, null)
+  press(s, 'r', 'r')
+  assert.equal(instructions('todo-handoff'), '')
+  assert.equal(readFileSync(fileOf('todo-handoff'), 'utf8'), header('todo-handoff'))
+})
+
+test('r with no instructions does nothing', () => {
+  const s = onAgent('task')
+  press(s, 'r', 'r')
+  assert.equal(s.note, null)
+})
+
+test('the whole prompt puts the skill first and your instructions last', () => {
+  write('todo-handoff', 'Run ./test.sh before you commit.\nKeep commits small.')
+  const s = onAgent('todo-handoff')
+  press(s, RIGHT)
+  const [part] = fullPrompt('todo-handoff')
+  assert.match(part.text, /^\/alpha Work on this item from my todo list \(todo \{id\}/)
+  assert.match(part.text, /ghostty-todo done \{id\} Run \.\/test\.sh before you commit\. Keep commits small\.$/)
+  assert.doesNotMatch(part.text, /\n/)
+})
+
+test('a linked agent’s prompt is its skill and target, then yours', () => {
+  write('pr-babysit', "Don't rebase on your own.")
+  assert.deepEqual(fullPrompt('pr-babysit'), [{ tag: 'AS SENT', text: "/pr-babysit {target} Don't rebase on your own." }])
+})
+
+test('the filer gets your instructions in its system prompt and the skill in its message', () => {
+  write('todo-filing', 'Prefer the dotfiles repo.')
+  const s = onAgent('todo-filing')
+  press(s, RIGHT, RIGHT)
+  const [system, message] = fullPrompt('todo-filing')
+  assert.ok(system.text.startsWith(fixedPart('todo-filing')))
+  assert.ok(system.text.endsWith('\nPrefer the dotfiles repo.'))
+  assert.equal(message.text, '/beta add todo: {what you typed}')
+})
+
+test('wrap cuts text at spaces, and a long word where the line ends', () => {
+  assert.deepEqual(wrap('one two three four', 9), ['one two', 'three', 'four'])
+  assert.deepEqual(wrap('abcdefghij', 4), ['abcd', 'efgh', 'ij'])
+  assert.deepEqual(wrap('a\nb', 10), ['a', 'b'])
 })

@@ -21,6 +21,9 @@ const choice = (key, label, choices, def, sub = '') => ({ key, label, sub, type:
 const number = (key, label, def, { min, max, step = 1, unit = '' }, sub = '') => ({ key, label, sub, type: 'number', min, max, step, unit, default: def })
 const bool = (key, label, def, sub = '') => ({ key, label, sub, type: 'bool', default: def })
 const flags = (key, label, choices, def, sub = '') => ({ key, label, sub, type: 'flags', choices: opts(choices), default: def })
+// A skill the agent's prompt runs through, by name, or none. The names come
+// from the skills on disk (hub/prompts.mjs), so any name reads as valid.
+const skill = (key, label) => ({ key, label, sub: '', type: 'skill', default: 'none' })
 
 const MODEL = ['default', 'opus', 'sonnet', 'haiku']
 const MODE = ['default', 'auto', 'acceptEdits', 'plan']
@@ -111,6 +114,18 @@ export const SECTIONS = [
       number('layout.diagramsPercent', 'Alt+D window size', 85, { min: 50, max: 100, step: 5, unit: '%' }, 'of the Ghostty window'),
     ],
   },
+  {
+    // Drawn as one block per agent (hub/prompts.mjs AGENTS) rather than these
+    // rows, which hold just the skills that can be picked.
+    id: 'prompts',
+    name: 'Prompts',
+    where: 'what each agent is told: its skill, the fixed part, then your instructions',
+    rows: [
+      skill('prompts.task.skill', 'Task skill'),
+      skill('prompts.handoff.skill', 'Todo hand-off skill'),
+      skill('prompts.filing.skill', 'Todo filing skill'),
+    ],
+  },
 ]
 
 export const ROWS = SECTIONS.flatMap(s => s.rows.filter(r => r.key))
@@ -122,6 +137,7 @@ export function valid(r, v) {
   if (r.type === 'bool') return typeof v === 'boolean'
   if (r.type === 'number') return Number.isFinite(v) && v >= r.min && v <= r.max
   if (r.type === 'flags') return Array.isArray(v) && v.every(x => r.choices.some(c => c.value === x))
+  if (r.type === 'skill') return typeof v === 'string' && /^[\w][\w.:-]*$/.test(v)
   return false
 }
 
@@ -185,7 +201,8 @@ export function set(key, value, file = settingsFile()) {
 export const reset = (key, file = settingsFile()) => set(key, row(key).default, file)
 
 // The next value ←/→ (dir -1 or 1) gives: the next choice round the list,
-// or a number a step further, kept in range. Flags and switches don't step.
+// or a number a step further, kept in range. Flags and skills don't step
+// here: a skill's choices are the skills on disk (hub/prompts.mjs).
 export function step(r, value, dir) {
   if (r.type === 'choice') {
     const i = r.choices.findIndex(c => c.value === value)
@@ -200,4 +217,8 @@ export function step(r, value, dir) {
 export const toggleFlag = (r, value, flag) => r.choices.map(c => c.value).filter(v => (v === flag ? !value.includes(v) : value.includes(v)))
 
 export const show = (r, v) =>
-  r.type === 'number' ? `${v}${r.unit}` : r.type === 'bool' ? (v ? 'on' : 'off') : r.type === 'choice' ? (r.choices.find(c => c.value === v)?.label ?? String(v)) : v.join(', ')
+  r.type === 'skill'
+    ? v === 'none'
+      ? 'none'
+      : `/${v}`
+    : r.type === 'number' ? `${v}${r.unit}` : r.type === 'bool' ? (v ? 'on' : 'off') : r.type === 'choice' ? (r.choices.find(c => c.value === v)?.label ?? String(v)) : v.join(', ')

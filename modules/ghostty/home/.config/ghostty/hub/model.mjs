@@ -9,6 +9,7 @@
 
 import { basename, relative } from 'node:path'
 import { load as settings } from './settings.mjs'
+import { compose } from './prompts.mjs'
 
 // ---------------------------------------------------------------- transcript
 
@@ -490,6 +491,10 @@ export const slug = s =>
 // new tmux tab's shell, so the shell stays when Claude exits; a background
 // agent is `claude --bg`, which prints its id and returns. Either can start in
 // its own worktree (`-w`); monitors always run in the background, in place.
+// The prompt gets the skill and your instructions Settings › Prompts gives
+// its agent (hub/prompts.mjs): the kind's, or `spec.agent`'s, which the todo
+// list's hand-off sends.
+const AGENT_OF = { task: 'task', pr: 'pr-babysit', logs: 'logger' }
 export function launch(spec) {
   const opts = []
   if (spec.model && spec.model !== 'default') opts.push('--model', spec.model)
@@ -511,6 +516,7 @@ export function launch(spec) {
     // A name given is a slug already: the todo list's hand-off sends one.
     name = spec.name || slug(prompt)
   }
+  prompt = compose(spec.agent ?? AGENT_OF[spec.kind], prompt)
   // A prompt that starts with - would read as an option.
   if (prompt.startsWith('-')) prompt = ` ${prompt}`
   const wt = spec.kind === 'task' && spec.worktree ? ['-w', slug(name)] : []

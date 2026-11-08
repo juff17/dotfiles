@@ -12,6 +12,7 @@ import * as ui from './todo-ui.mjs'
 
 // No settings file, so every setting reads as its default.
 process.env.AGENT_HUB_SETTINGS = '/nonexistent/agent-hub/settings.json'
+process.env.AGENT_HUB_PROMPTS = '/nonexistent/agent-hub/prompts'
 
 const now = new Date(2026, 10, 7, 15, 0).getTime()
 const hour = 60 * 60 * 1000
