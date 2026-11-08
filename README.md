@@ -77,7 +77,7 @@ Run every suite before committing a change, agents included:
 
 | Suite | Covers | Runner |
 |---|---|---|
-| `ghostty` | the agent hub, the Agents widget's items, the viewers' logic (`dv`, todo, help) | `node --test`, nothing to install |
+| `ghostty` | the agent hub and `agentd`, the Agents widget, and the logic of every viewer (`dv`, todo, diff, diagrams, help) | `node --test`, nothing to install |
 | `claude` | the claude module's skill and hook scripts | Python's `unittest`, nothing to install |
 | `mods` | Claude Code mods with a `hooks/*.test.tsx` | `claude plugin test`, skipped when `claude` isn't installed |
 
