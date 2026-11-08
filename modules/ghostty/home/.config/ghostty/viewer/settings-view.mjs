@@ -9,9 +9,8 @@
 
 import { BOLD, P, bg, enter, fg, leave, paint, render, split, tokens, width } from '../hub/term.mjs'
 import { SECTIONS, settingsFile, load, show } from '../hub/settings.mjs'
-import { AGENTS, instructions } from '../hub/prompts.mjs'
-import { BOTTOM, NAV, TOP, VALUE, current, fullPrompt, onKey, onPaste, start, valueSpans, wrap } from './settings-nav.mjs'
-import { layout } from './textarea.mjs'
+import { fileOf, instructions } from '../hub/prompts.mjs'
+import { BOTTOM, NAV, TOP, VALUE, current, onKey, start, valueSpans } from './settings-nav.mjs'
 
 const s = start(process.argv[2])
 
@@ -23,13 +22,12 @@ const SEL = bg(P.surface0)
 const tilde = p => p.replace(process.env.HOME ?? '\0', '~')
 
 // The right side: each heading, then two lines a setting: its name and value,
-// and what it does. An agent's prompt shows the start of what it's sent, and
-// your instructions' first line under that. `at` and `end` are each row's
-// first and last line, for scrolling.
+// and what it does. An agent with instructions of yours has two lines too:
+// how many there are, and the file they're in. `at` maps a setting to its
+// first line, for scrolling.
 function content(w, values) {
   const lines = []
   const at = []
-  const end = []
   let i = 0
   for (const r of SECTIONS[s.sec].rows) {
     if (r.head) {
@@ -37,17 +35,17 @@ function content(w, values) {
       lines.push(render([[r.head.toUpperCase(), BOLD + fg(P.peach)]], w, BASE))
       continue
     }
-    const on = i === s.sel
-    const fill = on ? SEL : BASE
     if (r.prompt) {
-      at.push(lines.length)
-      const { lines: own, cursorLine } = promptLines(r.prompt, w, on, fill)
-      // While typing, the field's cursor is what has to stay in view.
-      end.push(cursorLine === undefined ? lines.length + own.length - 1 : lines.length + cursorLine)
-      lines.push(...own)
-      i++
+      const count = instructions(r.prompt).split('\n').filter(l => l.trim()).length
+      lines.push(
+        render([['  Your instructions', fg(P.text)]], w - VALUE, BASE) +
+          render([[count ? `${count} line${count === 1 ? '' : 's'}` : 'none', fg(count ? P.text : P.overlay1)]], VALUE, BASE),
+      )
+      lines.push(render([[`  ${tilde(fileOf(r.prompt))}`, fg(P.overlay1)]], w, BASE))
       continue
     }
+    const on = i === s.sel
+    const fill = on ? SEL : BASE
     const v = values[r.key]
     const changed = JSON.stringify(v) !== JSON.stringify(r.default)
     const vw = r.type === 'flags' ? Math.min(w - 20, r.choices.reduce((n, c) => n + width(c.label) + 3, 0)) : VALUE
@@ -58,41 +56,9 @@ function content(w, values) {
     )
     const sub = changed ? [r.sub, `default ${show(r, r.default)}`].filter(Boolean).join(' · ') : r.sub
     lines.push(render([[`  ${sub}`, fg(P.overlay1)]], w, fill))
-    end.push(lines.length - 1)
     i++
   }
-  return { lines, at, end }
-}
-
-// An agent's prompt: the start of what it's sent, then your instructions'
-// first line, or while you type them, the field with every line.
-function promptLines(id, w, on, fill) {
-  const yours = instructions(id)
-  const count = yours ? yours.split('\n').filter(l => l.trim()).length : 0
-  const typing = s.typing?.id === id
-  const value = typing ? 'typing' : count ? `your ${count} line${count === 1 ? '' : 's'}` : 'e to add instructions'
-  const sent = fullPrompt(id)[0].text.replace(/\s*\n\s*/g, ' ')
-  const lines = [
-    render([[count ? '• ' : '  ', fg(P.peach)], ['Prompt', (on ? BOLD : '') + fg(P.text)]], w - VALUE, fill) +
-      render([[value, count || typing ? (on ? BOLD : '') + fg(P.text) : fg(P.overlay1)]], VALUE, fill),
-    render([[`  ${sent}`, fg(P.overlay1)]], w, fill),
-  ]
-  if (!typing) {
-    if (yours) lines.push(render([[`  ${wrap(yours, w)[0]}`, fg(P.text)]], w, fill))
-    return { lines }
-  }
-  const BAR = '  ▌ '
-  const { rows: field, cursor } = layout(s.typing.field, w - BAR.length - 1)
-  field.forEach((row, y) => {
-    const spans = [[BAR, fg(P.blue)]]
-    if (y !== cursor.y) spans.push([row, fg(P.text)])
-    else {
-      const cs = [...row]
-      spans.push([cs.slice(0, cursor.i).join(''), fg(P.text)], [cs[cursor.i] ?? ' ', bg(P.text) + fg(P.base)], [cs.slice(cursor.i + 1).join(''), fg(P.text)])
-    }
-    lines.push(render(spans, w, fill))
-  })
-  return { lines, cursorLine: 2 + cursor.y }
+  return { lines, at }
 }
 
 function navRow(i) {
@@ -100,59 +66,16 @@ function navRow(i) {
   return render([[` ${on ? '▸' : ' '} `, fg(P.blue)], [SECTIONS[i].name, on ? BOLD + fg(P.text) : fg(P.sub)]], NAV - 1, on ? SEL : BASE)
 }
 
-const hintSpans = hints => [
-  [' '],
-  ...hints.flatMap(([k, what]) => [
-    [k, fg(P.text)],
-    [` ${what}  `, fg(P.sub)],
-  ]),
-]
-
-function footerRight() {
-  if (s.note) return [[`${s.note.text} `, fg(s.note.color)]]
-  // The prompts folder's full path is too long beside the keys; it's in the
-  // dotfiles repo, beside hub/.
-  const id = s.view ?? current(s).prompt
-  return [[`${id ? `prompts/${id}.md` : `saved to ${tilde(settingsFile())}`} `, fg(P.overlay1)]]
-}
-
-// An agent's whole prompt over the panel, as Claude gets it.
-function drawView(w) {
-  const a = AGENTS.find(x => x.id === s.view)
-  const tw = w - 4
-  const body = []
-  for (const part of fullPrompt(a.id)) {
-    if (body.length) body.push(render([], w, BASE))
-    body.push(render([[`  ${part.tag}`, BOLD + fg(P.peach)]], w, BASE))
-    for (const l of wrap(part.text, tw)) body.push(render([[`  ${l}`, fg(P.text)]], w, BASE))
-  }
-  const room = bodyRows()
-  s.viewScroll = Math.max(0, Math.min(s.viewScroll, body.length - room))
-  const lines = [
-    split([[` Settings · ${SECTIONS[s.sec].name} › ${a.name} prompt`, BOLD + fg(P.blue)]], [['esc', fg(P.text)], [' back ', fg(P.sub)]], w, BASE),
-    render([], w, BASE),
-    render([[` what ${a.about} is sent; {braces} are filled in when it starts`, fg(P.sub)]], w, BASE),
-    render([], w, BASE),
-  ]
-  for (let y = 0; y < room; y++) {
-    const more = y === room - 1 && s.viewScroll + room < body.length
-    lines.push(more ? render([['  ▾ more', fg(P.overlay1)]], w, BASE) : (body[s.viewScroll + y] ?? render([], w, BASE)))
-  }
-  lines.push(split(hintSpans([['↑↓', 'scroll'], ['e', 'edit yours'], ['esc', 'back']]), footerRight(), w, BASE))
-  paint(lines.slice(0, rows()))
-}
-
 function draw() {
   const w = cols()
-  if (s.view) return drawView(w)
   const right = w - NAV - 2
-  const { lines: body, at, end } = content(right, load())
-  // Keep the selected setting in view, with the line above it, which is its
-  // heading for the first under one; the first setting scrolls to the top.
+  const { lines: body, at } = content(right, load())
+  // Keep the selected setting's two lines in view, with the line above it,
+  // which is its heading for the first under one; the first setting scrolls
+  // to the top.
   const first = at[s.sel] ?? 0
-  const last = end[s.sel] ?? first
   if (s.sel === 0 || first - 1 < s.scroll) s.scroll = s.sel === 0 ? 0 : first - 1
-  if (last >= s.scroll + bodyRows()) s.scroll = last + 1 - bodyRows()
+  if (first + 1 >= s.scroll + bodyRows()) s.scroll = first + 2 - bodyRows()
   s.scroll = Math.max(0, Math.min(s.scroll, Math.max(0, body.length - bodyRows())))
 
   const lines = [
@@ -168,19 +91,27 @@ function draw() {
     lines.push(`${nav}${render([['│', fg(P.surface0)]], 1, BASE)}${BASE} ${line}`)
   }
   const r = current(s)
-  if (s.typing) {
-    const hints = [['ctrl+s', 'save'], ['esc', 'cancel'], ['↵', 'new line'], ['↑↓←→', 'move']]
-    lines.push(split(hintSpans(hints), footerRight(), w, BASE))
-    return paint(lines.slice(0, rows()))
-  }
-  const keys = r.prompt
-    ? [['e', 'edit yours'], ['v', 'full prompt'], ['r', 'clear yours']]
-    : r.type === 'flags'
-      ? [['←→', 'pick'], ['space', 'turn on/off'], ['r', 'default']]
+  const keys =
+    r.type === 'flags'
+      ? [['←→', 'pick'], ['space', 'turn on/off']]
       : r.type === 'bool'
-        ? [['space', 'turn on/off'], ['r', 'default']]
-        : [['←→', 'change'], ['r', 'default']]
-  lines.push(split(hintSpans([['↑↓', 'setting'], ['tab', 'section'], ...keys]), footerRight(), w, BASE))
+        ? [['space', 'turn on/off']]
+        : [['←→', 'change']]
+  const hints = [['↑↓', 'setting'], ['tab', 'section'], ...keys, ['r', 'default']]
+  lines.push(
+    split(
+      [
+        [' '],
+        ...hints.flatMap(([k, what]) => [
+          [k, fg(P.text)],
+          [` ${what}  `, fg(P.sub)],
+        ]),
+      ],
+      s.note ? [[`${s.note.text} `, fg(s.note.color)]] : [[`saved to ${tilde(settingsFile())} `, fg(P.overlay1)]],
+      w,
+      BASE,
+    ),
+  )
   paint(lines.slice(0, rows()))
 }
 
@@ -195,10 +126,7 @@ if (!process.stdin.isTTY) {
 }
 process.stdin.setRawMode(true)
 process.stdin.on('data', data => {
-  for (const t of tokens(data.toString('utf8'))) {
-    if (t.paste !== undefined) onPaste(s, t.paste)
-    else if (t.key && onKey(s, t.key) === 'quit') quit()
-  }
+  for (const t of tokens(data.toString('utf8'))) if (t.key && onKey(s, t.key) === 'quit') quit()
   draw()
 })
 process.stdout.on('resize', draw)

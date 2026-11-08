@@ -21,11 +21,8 @@ const choice = (key, label, choices, def, sub = '') => ({ key, label, sub, type:
 const number = (key, label, def, { min, max, step = 1, unit = '' }, sub = '') => ({ key, label, sub, type: 'number', min, max, step, unit, default: def })
 const bool = (key, label, def, sub = '') => ({ key, label, sub, type: 'bool', default: def })
 const flags = (key, label, choices, def, sub = '') => ({ key, label, sub, type: 'flags', choices: opts(choices), default: def })
-// A skill the agent's prompt runs through, by name, or none. The names come
-// from the skills on disk (hub/prompts.mjs), so any name reads as valid.
-const skill = key => ({ key, label: 'Skill', sub: 'its prompt runs through it; from ~/.claude/skills', type: 'skill', default: 'none' })
-// An agent's prompt (hub/prompts.mjs): not a setting, but a row the panel
-// shows beside the agent's settings, where its instructions are edited.
+// Where an agent's instructions are (hub/prompts.mjs): not a setting, but a
+// line the panel shows beside the agent's settings.
 const prompt = id => ({ prompt: id })
 
 const MODEL = ['default', 'opus', 'sonnet', 'haiku']
@@ -47,7 +44,6 @@ export const SECTIONS = [
       ...agent('newAgent.task', 'opus'),
       choice('newAgent.task.runAs', 'Run as', [['tab', 'new tab'], ['bg', 'background']], 'tab'),
       choice('newAgent.task.branch', 'Branch', [['worktree', 'worktree'], ['current', 'current branch']], 'worktree'),
-      skill('prompts.task.skill'),
       prompt('task'),
       head('Form'),
       number('newAgent.recent', 'Recent folders shown', 8, { min: 1, max: 8 }, 'under Folder; 8 is all the form has room for'),
@@ -60,7 +56,6 @@ export const SECTIONS = [
     rows: [
       head('Agent'),
       ...agent('newAgent.pr', 'sonnet', 'when started from New agent'),
-      prompt('pr-babysit'),
       head('Watcher'),
       number('prBabysit.interval', 'Check the PR every', 60, { min: 15, max: 600, step: 15, unit: 's' }, 'watch_pr.py --interval'),
       number('prBabysit.stuckAfter', 'A job is stuck after', 30, { min: 5, max: 240, step: 5, unit: 'm' }, 'waiting for a runner; watch_pr.py --stuck-after'),
@@ -74,7 +69,6 @@ export const SECTIONS = [
     rows: [
       head('Agent'),
       ...agent('newAgent.logs', 'sonnet', 'when started from New agent'),
-      prompt('logger'),
       head('Watcher'),
       number('logger.dedup', 'Hide repeats for', 120, { min: 0, max: 3600, step: 30, unit: 's' }, 'the same line again within this is dropped; 0 keeps every one; --dedup'),
       number('logger.floodLimit', 'Most lines per 10 s', 25, { min: 5, max: 200, step: 5 }, 'past this, lines are dropped and counted'),
@@ -93,13 +87,11 @@ export const SECTIONS = [
       choice('todo.handoff.effort', 'Effort', EFFORT, 'medium'),
       choice('todo.handoff.runAs', 'Run in', [['tab', 'new tab'], ['bg', 'background']], 'tab', 't in the picker; the alt+t popup outside a window always runs in the background'),
       choice('todo.handoff.branch', 'Branch', [['worktree', 'own worktree'], ['branch', 'branch it was added on']], 'worktree', 'b in the picker; only for todos added in git'),
-      skill('prompts.handoff.skill'),
       prompt('todo-handoff'),
       head('Filing'),
       choice('todo.filing.model', 'Model', [['haiku', 'haiku 5.5'], ['sonnet', 'sonnet 5.5']], 'haiku', 'writes the title, category and note'),
       choice('todo.filing.effort', 'Effort', ['low', 'medium', 'high'], 'medium'),
       number('todo.filing.limit', 'Give up after', 3, { min: 1, max: 10, unit: 'm' }, 'then the item shows the error'),
-      skill('prompts.filing.skill'),
       prompt('todo-filing'),
       head('List'),
       number('todo.keepDone', 'Keep done items', 7, { min: 1, max: 60, unit: 'd' }, 'under “done today”, then dropped'),
@@ -186,7 +178,6 @@ export function valid(r, v) {
   if (r.type === 'bool') return typeof v === 'boolean'
   if (r.type === 'number') return Number.isFinite(v) && v >= r.min && v <= r.max
   if (r.type === 'flags') return Array.isArray(v) && v.every(x => r.choices.some(c => c.value === x))
-  if (r.type === 'skill') return typeof v === 'string' && /^[\w][\w.:-]*$/.test(v)
   return false
 }
 
@@ -250,8 +241,7 @@ export function set(key, value, file = settingsFile()) {
 export const reset = (key, file = settingsFile()) => set(key, row(key).default, file)
 
 // The next value ←/→ (dir -1 or 1) gives: the next choice round the list,
-// or a number a step further, kept in range. Flags and skills don't step
-// here: a skill's choices are the skills on disk (hub/prompts.mjs).
+// or a number a step further, kept in range. Flags don't step.
 export function step(r, value, dir) {
   if (r.type === 'choice') {
     const i = r.choices.findIndex(c => c.value === value)
@@ -266,8 +256,4 @@ export function step(r, value, dir) {
 export const toggleFlag = (r, value, flag) => r.choices.map(c => c.value).filter(v => (v === flag ? !value.includes(v) : value.includes(v)))
 
 export const show = (r, v) =>
-  r.type === 'skill'
-    ? v === 'none'
-      ? 'none'
-      : `/${v}`
-    : r.type === 'number' ? `${v}${r.unit}` : r.type === 'bool' ? (v ? 'on' : 'off') : r.type === 'choice' ? (r.choices.find(c => c.value === v)?.label ?? String(v)) : v.join(', ')
+  r.type === 'number' ? `${v}${r.unit}` : r.type === 'bool' ? (v ? 'on' : 'off') : r.type === 'choice' ? (r.choices.find(c => c.value === v)?.label ?? String(v)) : v.join(', ')

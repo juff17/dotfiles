@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { beforeEach, test } from 'node:test'
@@ -7,27 +7,17 @@ import { beforeEach, test } from 'node:test'
 import { tokens } from '../hub/term.mjs'
 import { SECTIONS, get, row, set } from '../hub/settings.mjs'
 import * as nav from './settings-nav.mjs'
-import { P } from '../hub/term.mjs'
-import { AGENTS, fileOf, header, instructions } from '../hub/prompts.mjs'
-import { current, fixedPart, fullPrompt, items, onKey, onPaste, start, wrap } from './settings-nav.mjs'
+import { AGENTS } from '../hub/prompts.mjs'
+import { current, items, onKey, start } from './settings-nav.mjs'
 
 const LEFT = '\x1b[D'
 const RIGHT = '\x1b[C'
 const UP = '\x1b[A'
 const DOWN = '\x1b[B'
 
-// Each test gets its own empty settings file and prompts folder, and two
-// skills on disk.
+// Each test gets its own empty settings file.
 beforeEach(() => {
-  const dir = mkdtempSync(join(tmpdir(), 'settings-nav-'))
-  process.env.AGENT_HUB_SETTINGS = join(dir, 'settings.json')
-  process.env.AGENT_HUB_PROMPTS = join(dir, 'prompts')
-  process.env.AGENT_HUB_SKILLS = join(dir, 'skills')
-  for (const name of ['alpha', 'beta']) {
-    mkdirSync(join(dir, 'skills', name), { recursive: true })
-    writeFileSync(join(dir, 'skills', name, 'SKILL.md'), '')
-  }
-  mkdirSync(join(dir, 'skills', 'not-a-skill'))
+  process.env.AGENT_HUB_SETTINGS = join(mkdtempSync(join(tmpdir(), 'settings-nav-')), 'settings.json')
 })
 
 // A state on the setting `key`, as ↑↓ and tab would leave it.
@@ -144,167 +134,9 @@ test('takes no clicks: a click is a mouse report, never a key', () => {
   assert.ok(click.every(t => t.mouse && !t.key))
 })
 
-// The section a row is in, with that row selected: an agent's prompt by id,
-// or a setting by key.
-function onRow(match) {
-  const sec = SECTIONS.find(x => x.rows.some(match))
-  const s = start(sec.id)
-  s.sel = items(s).findIndex(match)
-  return s
-}
-const onAgent = id => onRow(r => r.prompt === id)
-const onSkill = key => onRow(r => r.key === key)
-const write = (id, text) => {
-  mkdirSync(process.env.AGENT_HUB_PROMPTS, { recursive: true })
-  writeFileSync(fileOf(id), `${header(id)}${text}`)
-}
-
-test('every agent’s prompt sits in a section with its settings, after its skill', () => {
-  for (const a of AGENTS) {
-    const sec = SECTIONS.filter(x => x.rows.some(r => r.prompt === a.id))
-    assert.equal(sec.length, 1, a.id)
-    const rows = sec[0].rows
-    const at = rows.findIndex(r => r.prompt === a.id)
-    if (a.skillKey) assert.equal(rows[at - 1].key, a.skillKey, `${a.id}'s skill is the row above it`)
-    else assert.ok(!rows.some(r => r.type === 'skill'), `${a.id} has its own skill`)
-  }
-  assert.ok(!SECTIONS.some(x => x.id === 'prompts'), 'no section of prompts on their own')
-})
-
-test('↑↓ moves through settings and prompts alike', () => {
-  const s = onSkill('prompts.handoff.skill')
-  press(s, DOWN)
-  assert.equal(current(s).prompt, 'todo-handoff')
-  press(s, DOWN)
-  assert.equal(current(s).key, 'todo.filing.model')
-})
-
-test('← and → walk an agent’s skill round none and the skills on disk', () => {
-  const s = onSkill('prompts.handoff.skill')
-  press(s, RIGHT)
-  assert.equal(get('prompts.handoff.skill'), 'alpha')
-  press(s, RIGHT, RIGHT)
-  assert.equal(get('prompts.handoff.skill'), 'none')
-  press(s, LEFT)
-  assert.equal(get('prompts.handoff.skill'), 'beta')
-})
-
-test('an agent linked to its skill has none to pick', () => {
-  const s = onAgent('pr-babysit')
-  press(s, RIGHT, LEFT, ' ')
-  for (const r of SECTIONS.flatMap(x => x.rows).filter(r => r.type === 'skill')) assert.equal(get(r.key), 'none')
-  assert.equal(s.note, null)
-  assert.equal(s.view, 'pr-babysit', 'space opens it, as ↵ does')
-})
-
-test('e opens your instructions in a field; ctrl+s saves them to the file', () => {
-  write('task', 'Be brief.')
-  assert.equal(onKey(onSkill('prompts.task.skill'), 'e'), undefined)
-  const s = onAgent('task')
-  press(s, 'e')
-  assert.equal(s.typing.id, 'task')
-  assert.deepEqual(s.typing.field.lines, ['Be brief.'])
-  press(s, '\r', 'q', 'u', 'i', 'e', 't')
-  assert.equal(s.typing.field.lines[1], 'quiet', 'q is typed, not quit, while typing')
-  onPaste(s, ' and\ncareful')
-  press(s, '\x13')
-  assert.equal(s.typing, null)
-  assert.equal(instructions('task'), 'Be brief.\nquiet and\ncareful')
-  assert.equal(readFileSync(fileOf('task'), 'utf8'), `${header('task')}Be brief.\nquiet and\ncareful\n`)
-})
-
-test('esc drops what was typed; alt+s still closes the panel', () => {
-  write('task', 'Be brief.')
-  const s = onAgent('task')
-  press(s, 'e', 'x', '\x1b')
-  assert.equal(s.typing, null)
-  assert.equal(instructions('task'), 'Be brief.')
-  press(s, 'e')
-  assert.equal(onKey(s, '\x1bs'), 'quit')
-})
-
-test('e in the whole prompt goes to the field', () => {
-  const s = onAgent('logger')
-  press(s, 'v', 'e')
-  assert.equal(s.view, null)
-  assert.equal(s.typing.id, 'logger')
-})
-
-test('a save that fails keeps the field and what was typed', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'settings-nav-'))
-  writeFileSync(join(dir, 'file'), '')
-  process.env.AGENT_HUB_PROMPTS = join(dir, 'file', 'prompts')
-  const s = onAgent('task')
-  press(s, 'e', 'h', 'i', '\x13')
-  assert.match(s.note.text, /^Couldn't save/)
-  assert.deepEqual(s.typing.field.lines, ['hi'])
-})
-
-test('pasting with no field open does nothing', () => {
-  const s = onAgent('task')
-  onPaste(s, 'stray')
-  assert.equal(s.typing, null)
-})
-
-test('v or ↵ opens an agent’s whole prompt; esc goes back, not out', () => {
-  const s = onAgent('logger')
-  press(s, '\r')
-  assert.equal(s.view, 'logger')
-  press(s, DOWN, DOWN, UP)
-  assert.equal(s.viewScroll, 1)
-  assert.equal(onKey(s, '\x1b'), undefined)
-  assert.equal(s.view, null)
-  press(s, 'v')
-  assert.equal(onKey(s, 'q'), undefined)
-  assert.equal(s.view, null)
-  assert.equal(onKey(s, '\x1bs'), 'quit', 'alt+s still closes the panel')
-})
-
-test('r clears your instructions only on a second r in a row', () => {
-  const s = onAgent('todo-handoff')
-  write('todo-handoff', 'Run the tests first.')
-  press(s, 'r')
-  assert.equal(instructions('todo-handoff'), 'Run the tests first.')
-  assert.equal(s.note.color, P.peach)
-  press(s, DOWN, 'r', UP)
-  assert.equal(instructions('todo-handoff'), 'Run the tests first.', 'another key in between cancels it')
-  assert.equal(s.note, null)
-  press(s, 'r', 'r')
-  assert.equal(instructions('todo-handoff'), '')
-  assert.equal(readFileSync(fileOf('todo-handoff'), 'utf8'), header('todo-handoff'))
-})
-
-test('r with no instructions does nothing', () => {
-  const s = onAgent('task')
-  press(s, 'r', 'r')
-  assert.equal(s.note, null)
-})
-
-test('the whole prompt puts the skill first and your instructions last', () => {
-  write('todo-handoff', 'Run ./test.sh before you commit.\nKeep commits small.')
-  press(onSkill('prompts.handoff.skill'), RIGHT)
-  const [part] = fullPrompt('todo-handoff')
-  assert.match(part.text, /^\/alpha Work on this item from my todo list \(todo \{id\}/)
-  assert.match(part.text, /ghostty-todo done \{id\} Run \.\/test\.sh before you commit\. Keep commits small\.$/)
-  assert.doesNotMatch(part.text, /\n/)
-})
-
-test('a linked agent’s prompt is its skill and target, then yours', () => {
-  write('pr-babysit', "Don't rebase on your own.")
-  assert.deepEqual(fullPrompt('pr-babysit'), [{ tag: 'AS SENT', text: "/pr-babysit {target} Don't rebase on your own." }])
-})
-
-test('the filer gets your instructions in its system prompt and the skill in its message', () => {
-  write('todo-filing', 'Prefer the dotfiles repo.')
-  press(onSkill('prompts.filing.skill'), RIGHT, RIGHT)
-  const [system, message] = fullPrompt('todo-filing')
-  assert.ok(system.text.startsWith(fixedPart('todo-filing')))
-  assert.ok(system.text.endsWith('\nPrefer the dotfiles repo.'))
-  assert.equal(message.text, '/beta add todo: {what you typed}')
-})
-
-test('wrap cuts text at spaces, and a long word where the line ends', () => {
-  assert.deepEqual(wrap('one two three four', 9), ['one two', 'three', 'four'])
-  assert.deepEqual(wrap('abcdefghij', 4), ['abcd', 'efgh', 'ij'])
-  assert.deepEqual(wrap('a\nb', 10), ['a', 'b'])
+test('Task, the hand-off and filing say where their instructions are, and ↑↓ passes over it', () => {
+  const where = SECTIONS.flatMap(x => x.rows.filter(r => r.prompt).map(r => r.prompt))
+  assert.deepEqual(where.sort(), [...AGENTS].sort())
+  for (const x of SECTIONS) assert.ok(!items(start(x.id)).some(r => r.prompt), x.id)
+  assert.ok(!SECTIONS.some(x => x.rows.some(r => r.type === 'skill')), 'no skills to pick')
 })

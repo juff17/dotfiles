@@ -1,1 +1,1 @@
-<!-- Your instructions for each todo handed to an agent with w: sent after the fixed prompt, joined into one line. Settings edits this file, on the agent's Prompt row. -->
+<!-- Your instructions for each todo handed to an agent with w: sent after the hand-off prompt (viewer/todo.mjs, handoffSpec), joined into one line. Write them below; this comment is left out. -->

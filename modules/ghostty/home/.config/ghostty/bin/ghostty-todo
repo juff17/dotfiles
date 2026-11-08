@@ -127,7 +127,7 @@ function runFiler(item) {
     '--allowedTools', `Bash(${CLI} add *)`, 'Bash(ls *)', 'Grep', 'Glob', 'Read',
     ...roots.flatMap(r => ['--add-dir', r]),
     '--append-system-prompt', todo.filerSystem(item, repos, roots, CLI),
-    todo.filerMessage(item.title),
+    `add todo: ${item.title}`,
   ]
   return new Promise(done => {
     let output = ''

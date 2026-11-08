@@ -1,1 +1,1 @@
-<!-- Your instructions for a task started from New agent: sent after the fixed prompt, joined into one line. Settings edits this file, on the agent's Prompt row. -->
+<!-- Your instructions for a task started from New agent: sent after the prompt you type, joined into one line. Write them below; this comment is left out. -->

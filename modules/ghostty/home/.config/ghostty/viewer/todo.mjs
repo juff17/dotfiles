@@ -10,7 +10,7 @@ import { basename, dirname, join, resolve } from 'node:path'
 
 import { slug } from '../hub/model.mjs'
 import { load as settings } from '../hub/settings.mjs'
-import { instructions, skillOf } from '../hub/prompts.mjs'
+import { instructions } from '../hub/prompts.mjs'
 
 export const STORE =
   process.env.TODO_FILE || join(process.env.XDG_STATE_HOME || join(homedir(), '.local/state'), 'ghostty-layout/todos.json')
@@ -319,7 +319,6 @@ Then run this one command, once:
 ${cli} add --filing ${item.id} --dir <repo path or none> --cat <category> [--type <type>] --note "<note>" <title>
 Search only to find the repo: don't work on the item.`
 
-// What the filer is sent (Settings › Prompts): the system prompt above with
-// your instructions after it, and the message with its skill first.
+// The filer's system prompt: the one above with your instructions after it
+// (hub/prompts.mjs).
 export const filerSystem = (item, repos, roots, cli) => [filerPrompt(item, repos, roots, cli), instructions('todo-filing')].filter(Boolean).join('\n')
-export const filerMessage = text => [skillOf('todo-filing') && `/${skillOf('todo-filing')}`, `add todo: ${text}`].filter(Boolean).join(' ')
