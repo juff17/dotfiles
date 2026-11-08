@@ -4,6 +4,10 @@
 
 import { readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
+import { load as settings } from '../hub/settings.mjs'
+
+// Rows a wheel notch or J / K scrolls: Settings' viewer.scrollLines.
+export const scrollLines = () => settings()['viewer.scrollLines']
 
 // Untracked files past this size aren't read to count their lines.
 export const MAX_COUNT_BYTES = 2 * 1024 * 1024
@@ -210,8 +214,8 @@ export function keyAction(key, page) {
     '\x1b[A': ['move', -1],
     '\r': ['toggle'],
     o: ['toggle'],
-    J: ['scroll', 3],
-    K: ['scroll', -3],
+    J: ['scroll', scrollLines()],
+    K: ['scroll', -scrollLines()],
     ' ': ['scroll', page],
     '\x04': ['scroll', page],
     '\x15': ['scroll', -page],

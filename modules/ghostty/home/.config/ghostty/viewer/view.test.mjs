@@ -1,7 +1,15 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
+import { mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
+import { set } from '../hub/settings.mjs'
 import { MAX_GRID, clampView, fitChips, home, panBy, placement, zoomAt } from './view.mjs'
+
+// Its own settings file, so the defaults hold until a test changes one.
+process.env.AGENT_HUB_SETTINGS = join(mkdtempSync(join(tmpdir(), 'view-')), 'settings.json')
 
 const image = { width: 1200, height: 2000 }
 const region = { cols: 60, rows: 40, cw: 10, ch: 20 }
@@ -58,4 +66,11 @@ test('the chips scroll just far enough to show the current one', () => {
 
 test('a current chip wider than the row still shows', () => {
   assert.deepEqual(fitChips([10, 40, 10], 1, 25), { start: 1, end: 2 })
+})
+
+test('zoom stops at Settings’ most zoom', () => {
+  const small = { width: 200, height: 200 }
+  set('viewer.maxZoom', 4)
+  assert.equal(clampView(small, region, { zoom: 10, cx: 100, cy: 100 }).zoom, 4)
+  set('viewer.maxZoom', 16)
 })

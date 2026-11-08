@@ -36,6 +36,7 @@ import {
   parseInput,
   parseNumstat,
   parseStatus,
+  scrollLines,
 } from './diff.mjs'
 
 const DIR = process.argv[2] || process.cwd()
@@ -337,7 +338,7 @@ function quit(code = 0) {
 const modeAt = col => modeIn(MODES, col)
 
 function onMouse(button, x, y, released) {
-  if (button & 64) return scrollBy((button & 1) === 0 ? -3 : 3)
+  if (button & 64) return scrollBy((button & 1) === 0 ? -scrollLines() : scrollLines())
   if (released || (button & 3) !== 0 || button & 32) return
   if (y === 1) {
     const mode = modeAt(x)

@@ -1,7 +1,10 @@
 // Zoom and pan in image pixels. The region is the cell box the picture may
 // fill, with each cell's size in pixels (cw, ch).
 
-export const MAX_ZOOM = 16
+import { load as settings } from '../hub/settings.mjs'
+
+// Settings' viewer.maxZoom: the most a diagram zooms in.
+export const maxZoomSetting = () => settings()['viewer.maxZoom']
 // The picture is a grid of placeholder cells (kitty.mjs), which can't have
 // more rows or columns than there are diacritics to number them.
 export const MAX_GRID = 297
@@ -16,7 +19,7 @@ export const home = image => ({ zoom: 1, cx: image.width / 2, cy: image.height /
 const maxZoom = (image, region) => {
   const fit = fitScale(image, region)
   const grid = Math.min((MAX_GRID * region.cw) / (image.width * fit), (MAX_GRID * region.ch) / (image.height * fit))
-  return Math.max(1, Math.min(MAX_ZOOM, grid))
+  return Math.max(1, Math.min(maxZoomSetting(), grid))
 }
 
 // Keeps the view's edges inside the image; an axis that fits whole is centered.

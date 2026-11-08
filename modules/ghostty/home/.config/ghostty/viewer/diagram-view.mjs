@@ -57,8 +57,9 @@ const TAB_CHANGED = `${process.env.XDG_RUNTIME_DIR || '/tmp'}/ghostty-layout/tab
 // The diagrams window draws a rounded frame round the whole screen, titled
 // with the tab it shows, like the hub's popups.
 const FRAME = Boolean(process.env.DV_FRAME)
-const ZOOM_STEP = 1.15
-const PAN_STEP = 0.2
+// Settings › Viewers, read on each step so a change applies at once.
+const zoomStep = () => 1 + settings()['viewer.zoomStep'] / 100
+const panStep = () => settings()['viewer.panPercent'] / 100
 const TAB_EXIT = Number(process.env.DV_TAB_EXIT) || 0
 const DIFF_EXIT = Number(process.env.DV_DIFF_EXIT) || 0
 const TODO_EXIT = Number(process.env.DV_TODO_EXIT) || 0
@@ -405,7 +406,7 @@ const pointer = (x, y) => pointerAt(x, y, { left: box().left + EDGE, top: pictur
 
 function onMouse(button, x, y, released) {
   const { px, py } = pointer(x, y)
-  if (button & 64) return zoom((button & 1) === 0 ? ZOOM_STEP : 1 / ZOOM_STEP, px, py)
+  if (button & 64) return zoom((button & 1) === 0 ? zoomStep() : 1 / zoomStep(), px, py)
   if (released) {
     drag = undefined
     return
@@ -431,8 +432,8 @@ function onMouse(button, x, y, released) {
 
 function onKey(key) {
   const r = region()
-  const stepX = r.cols * r.cw * PAN_STEP
-  const stepY = r.rows * r.ch * PAN_STEP
+  const stepX = r.cols * r.cw * panStep()
+  const stepY = r.rows * r.ch * panStep()
   const center = [(r.cols * r.cw) / 2, (r.rows * r.ch) / 2]
   const [action, a, b] = keyAction(key, { frame: FRAME, count: state.diagrams.length }) ?? []
   if (action === 'quit') quit()
@@ -440,7 +441,7 @@ function onKey(key) {
   // viewer) sets DV_TAB_EXIT to the exit code it switches on.
   else if (action === 'tab') TAB_EXIT && quit(TAB_EXIT)
   else if (action === 'pan') pan(a * stepX, b * stepY)
-  else if (action === 'zoom') zoom(a > 0 ? ZOOM_STEP : 1 / ZOOM_STEP, ...center)
+  else if (action === 'zoom') zoom(a > 0 ? zoomStep() : 1 / zoomStep(), ...center)
   else if (action === 'home') select(index)
   else if (action === 'step') select(index + a)
   else if (action === 'jump') select(a)

@@ -151,6 +151,19 @@ export const SECTIONS = [
     ],
   },
   {
+    id: 'viewers',
+    name: 'Viewers',
+    where: 'the left pane’s Diagrams and Diff, and Alt+D',
+    rows: [
+      head('Diagrams'),
+      number('viewer.zoomStep', 'Zoom per step', 15, { min: 5, max: 50, step: 5, unit: '%' }, 'a wheel notch or + / -'),
+      number('viewer.panPercent', 'Pan per key', 20, { min: 5, max: 50, step: 5, unit: '%' }, 'of the view, for h j k l'),
+      number('viewer.maxZoom', 'Most zoom', 16, { min: 2, max: 32, unit: '×' }, 'big diagrams can stop sooner: the picture has only so many cells'),
+      head('Diff'),
+      number('viewer.scrollLines', 'Lines per scroll', 3, { min: 1, max: 20 }, 'a wheel notch, or J / K'),
+    ],
+  },
+  {
     // Drawn as one block per agent (hub/prompts.mjs AGENTS) rather than these
     // rows, which hold just the skills that can be picked.
     id: 'prompts',

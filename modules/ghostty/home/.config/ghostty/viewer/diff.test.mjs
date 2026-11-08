@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
+import { set } from '../hub/settings.mjs'
 
 import {
   MAX_COUNT_BYTES,
@@ -25,6 +26,9 @@ import {
   parseNumstat,
   parseStatus,
 } from './diff.mjs'
+
+// Its own settings file, so the defaults hold until a test changes one.
+process.env.AGENT_HUB_SETTINGS = join(mkdtempSync(join(tmpdir(), 'diff-settings-')), 'settings.json')
 
 const tmp = t => {
   const dir = mkdtempSync(join(tmpdir(), 'diff-test-'))
@@ -391,4 +395,11 @@ test('input splits into mouse reports and keys', () => {
   ])
   assert.deepEqual([...parseInput('\x1b[<65;3;4M')], [{ mouse: { button: 65, x: 3, y: 4, released: false } }])
   assert.deepEqual([...parseInput('')], [])
+})
+
+test('J and K scroll Settings’ lines per scroll', () => {
+  set('viewer.scrollLines', 7)
+  assert.deepEqual(keyAction('J', 5), ['scroll', 7])
+  assert.deepEqual(keyAction('K', 5), ['scroll', -7])
+  set('viewer.scrollLines', 3)
 })
