@@ -63,7 +63,9 @@ export function countLines(root, path, cache) {
 }
 
 // A unified diff as rows to draw: hunk headers, and lines with the line
-// number they sit at (the new one, or the old one for a removed line).
+// number they sit at (the new one, or the old one for a removed line). A
+// rename git no longer matches comes back as two files, so each file's
+// headers end the hunk before them.
 export function parseDiff(text) {
   const rows = []
   let oldLine = 0
@@ -71,7 +73,9 @@ export function parseDiff(text) {
   let inHunk = false
   for (const line of text.split('\n')) {
     const hunk = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@(.*)/.exec(line)
-    if (hunk) {
+    if (line.startsWith('diff --git ')) {
+      inHunk = false
+    } else if (hunk) {
       oldLine = Number(hunk[1])
       newLine = Number(hunk[2])
       inHunk = true

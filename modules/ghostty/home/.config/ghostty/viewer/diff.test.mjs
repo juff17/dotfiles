@@ -216,6 +216,30 @@ test('diff: a pure rename has no rows', () => {
   assert.deepEqual(parseDiff(text), [])
 })
 
+test('diff: a second file in the diff starts again at its headers', () => {
+  const text = [
+    'diff --git a/new.txt b/new.txt',
+    'new file mode 100644',
+    '--- /dev/null',
+    '+++ b/new.txt',
+    '@@ -0,0 +1 @@',
+    '+x',
+    'diff --git a/old.txt b/old.txt',
+    'deleted file mode 100644',
+    '--- a/old.txt',
+    '+++ /dev/null',
+    '@@ -1 +0,0 @@',
+    '-a',
+    '',
+  ].join('\n')
+  assert.deepEqual(parseDiff(text), [
+    { kind: 'hunk', text: '@@ -0,0 +1 @@' },
+    { kind: 'add', num: 1, text: 'x' },
+    { kind: 'hunk', text: '@@ -1 +0,0 @@' },
+    { kind: 'del', num: 1, text: 'a' },
+  ])
+})
+
 test('diff: changed lines that look like headers stay lines inside a hunk', () => {
   const rows = parseDiff('@@ -1,2 +1,2 @@\n--- a\n+++ b\n')
   assert.deepEqual(rows.slice(1), [
