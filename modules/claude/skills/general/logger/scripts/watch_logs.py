@@ -26,12 +26,32 @@ Output lines:
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
 import threading
 import time
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+
+# The hub's Settings panel (ghostty module, hub/settings.mjs, its Log watcher
+# section) keeps the limits below and --dedup's default here. A missing file,
+# or a value that isn't a whole number in range, leaves the built-in default.
+SETTINGS = Path(os.environ.get("AGENT_HUB_SETTINGS")
+                or Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local" / "state") / "agent-hub" / "settings.json")
+
+
+def setting(key, default, low, high):
+    try:
+        value = json.loads(SETTINGS.read_text()).get(key)
+    except (OSError, ValueError, AttributeError):
+        return default
+    if isinstance(value, int) and not isinstance(value, bool) and low <= value <= high:
+        return value
+    return default
+
 
 ERROR_RE = re.compile(
     r"\b(error|exception|traceback|fatal|panic|critical|unhandled|uncaught"
@@ -54,10 +74,10 @@ CONTINUATION_RE = re.compile(r"^(\s+\S|at |Caused by|File \"|\.\.\. \d+ more)")
 # The unindented line naming the exception, which ends a Python trace and
 # starts a Java one: "KeyError: 'id'", "java.lang.IllegalStateException: closed".
 EXCEPTION_LINE_RE = re.compile(r"^(?:[a-z_]\w*\.)*[A-Z]\w*(?:Error|Exception)(?::|$)")
-MAX_CONTINUATION = 15
-MAX_LINE = 400
+MAX_CONTINUATION = setting("logger.traceLines", 15, 0, 100)
+MAX_LINE = setting("logger.lineChars", 400, 80, 2000)
 FLOOD_WINDOW = 10
-FLOOD_LIMIT = 25
+FLOOD_LIMIT = setting("logger.floodLimit", 25, 5, 200)
 POD_POLL = 20
 
 out_lock = threading.Lock()
@@ -353,7 +373,7 @@ def main():
     common.add_argument("--only-match", action="store_true")
     common.add_argument("--ignore", action="append", default=[])
     common.add_argument("--since")
-    common.add_argument("--dedup", type=int, default=120)
+    common.add_argument("--dedup", type=int, default=setting("logger.dedup", 120, 0, 3600))
     sub = parser.add_subparsers(dest="source", required=True)
 
     d = sub.add_parser("docker", parents=[common])

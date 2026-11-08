@@ -32,7 +32,9 @@ def load(name):
     return module
 
 
-wl = load("watch_logs")
+# The limits are read from Settings as the module loads; none are set here.
+with mock.patch.dict(os.environ, {"AGENT_HUB_SETTINGS": "/nonexistent/agent-hub/settings.json"}):
+    wl = load("watch_logs")
 dl = load("discover_link")
 cm = load("change_markers")
 
@@ -802,6 +804,33 @@ class AddedLines(Repo):
         base = self.git("rev-parse", "HEAD").strip()
         self.assertEqual(list(cm.added_lines(str(self.dir), base)), [])
 
+
+
+class Settings(unittest.TestCase):
+    """The limits come from the hub's Settings file, else the built-in ones."""
+
+    def load_with(self, text):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "settings.json"
+            path.write_text(text)
+            with mock.patch.dict(os.environ, {"AGENT_HUB_SETTINGS": str(path)}):
+                return load("watch_logs")
+
+    def test_saved_values_set_the_limits(self):
+        m = self.load_with(json.dumps({"logger.traceLines": 30, "logger.lineChars": 120, "logger.floodLimit": 50}))
+        self.assertEqual((m.MAX_CONTINUATION, m.MAX_LINE, m.FLOOD_LIMIT), (30, 120, 50))
+
+    def test_out_of_range_or_missing_values_keep_the_built_in_ones(self):
+        m = self.load_with(json.dumps({"logger.lineChars": 5, "logger.floodLimit": "50"}))
+        self.assertEqual((m.MAX_CONTINUATION, m.MAX_LINE, m.FLOOD_LIMIT), (15, 400, 25))
+        self.assertEqual((wl.MAX_CONTINUATION, wl.MAX_LINE, wl.FLOOD_LIMIT), (15, 400, 25))
+
+    def test_dedup_defaults_to_the_saved_value(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "settings.json"
+            path.write_text('{"logger.dedup": 300}')
+            with mock.patch.object(wl, "SETTINGS", path):
+                self.assertEqual(wl.setting("logger.dedup", 120, 0, 3600), 300)
 
 if __name__ == "__main__":
     unittest.main()

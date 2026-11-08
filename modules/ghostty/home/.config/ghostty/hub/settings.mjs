@@ -60,6 +60,18 @@ export const SECTIONS = [
       head('Watcher'),
       number('prBabysit.interval', 'Check the PR every', 60, { min: 15, max: 600, step: 15, unit: 's' }, 'watch_pr.py --interval'),
       number('prBabysit.stuckAfter', 'A job is stuck after', 30, { min: 5, max: 240, step: 5, unit: 'm' }, 'waiting for a runner; watch_pr.py --stuck-after'),
+      number('prBabysit.errorAfter', 'Warn after failed checks', 5, { min: 1, max: 20 }, 'API calls failing this many checks in a row raise an error; it keeps trying'),
+    ],
+  },
+  {
+    id: 'logger',
+    name: 'Log watcher',
+    where: 'what every log watcher (logger’s watch_logs.py) passes on',
+    rows: [
+      number('logger.dedup', 'Hide repeats for', 120, { min: 0, max: 3600, step: 30, unit: 's' }, 'the same line again within this is dropped; 0 keeps every one; --dedup'),
+      number('logger.floodLimit', 'Most lines per 10 s', 25, { min: 5, max: 200, step: 5 }, 'past this, lines are dropped and counted'),
+      number('logger.traceLines', 'Stack trace lines kept', 15, { min: 0, max: 100, step: 5 }, 'after the error line that starts one'),
+      number('logger.lineChars', 'Longest line', 400, { min: 80, max: 2000, step: 40, unit: ' chars' }, 'longer lines are cut'),
     ],
   },
   {

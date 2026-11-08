@@ -709,6 +709,7 @@ def main():
     notes = load_notes(notes_path(base, args.session)) if path else {}
 
     failures, attached = 0, False
+    error_after = setting("prBabysit.errorAfter", 5, 1, 20)
     while True:
         try:
             snap = forge.snapshot(number)
@@ -732,8 +733,8 @@ def main():
             return 2
         except (ApiError, subprocess.TimeoutExpired, ValueError, KeyError) as e:
             failures += 1
-            if failures == 5:
-                emit("error", f"API calls failed 5 polls in a row, still retrying: {e}")
+            if failures == error_after:
+                emit("error", f"API calls failed {error_after} polls in a row, still retrying: {e}")
         if args.once:
             return 0
         time.sleep(args.interval)

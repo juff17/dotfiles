@@ -57,6 +57,9 @@ class Cache(unittest.TestCase):
         env = mock.patch.dict(os.environ, {"XDG_CACHE_HOME": tmp.name})
         env.start()
         self.addCleanup(env.stop)
+        settings = mock.patch.object(w, "SETTINGS", Path(tmp.name) / "settings.json")
+        settings.start()
+        self.addCleanup(settings.stop)
         self.base = w.pr_base(Forge(), 91)
 
     def watch(self, forge, *argv):
@@ -164,6 +167,30 @@ class Events(Cache):
     def test_a_moved_head_is_a_push(self):
         _, lines = self.watch(Forge(snap(sha="a" * 40), snap(sha="b" * 40, state="merged")), "--session", "s1")
         self.assertIn("[push] head moved to bbbbbbbb", lines)
+
+
+class Flaky(Forge):
+    """A forge whose snapshots can be errors, raised in turn."""
+
+    def snapshot(self, number):
+        s = self.snaps.pop(0)
+        if isinstance(s, Exception):
+            raise s
+        return s
+
+
+class ErrorAfter(Cache):
+    def test_failed_polls_raise_an_error_once_settings_count_is_reached(self):
+        w.SETTINGS.write_text('{"prBabysit.errorAfter": 2}')
+        down = [w.ApiError("down"), w.ApiError("down"), w.ApiError("down")]
+        _, lines = self.watch(Flaky(*down, snap(state="merged")), "--session", "s1")
+        errors = [l for l in lines if l.startswith("[error]")]
+        self.assertEqual(len(errors), 1)
+        self.assertIn("failed 2 polls in a row", errors[0])
+
+    def test_fewer_failures_than_the_default_raise_nothing(self):
+        _, lines = self.watch(Flaky(w.ApiError("down"), snap(state="merged")), "--session", "s1")
+        self.assertFalse([l for l in lines if l.startswith("[error]")])
 
 
 class Settings(unittest.TestCase):
