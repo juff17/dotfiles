@@ -22,7 +22,7 @@ const write = (id, text) => {
 }
 
 test('every agent with a skill to pick has its setting', () => {
-  for (const a of AGENTS) assert.ok(a.linked || a.skillKey || a.partOf, a.id)
+  for (const a of AGENTS) assert.ok(a.linked || a.skillKey, a.id)
   for (const a of AGENTS.filter(x => x.skillKey)) assert.equal(skillOf(a.id), '')
 })
 
@@ -83,17 +83,4 @@ test('launch sends each agent its own skill and instructions', () => {
   const handoff = launch(handoffSpec(item, { runAs: 'bg' }, () => true))
   assert.match(handoff.argv.at(-1), /^Work on this item .* HANDOFF RULES$/)
   assert.doesNotMatch(handoff.argv.at(-1), /TASK RULES|\/tsk/, 'a hand-off isn’t a task from New agent')
-})
-
-test('the hand-off’s worktree rules come from their file, and only in a worktree', () => {
-  const item = { id: 'k2x', title: 'Fix it', note: '', cat: 'bug', repo: 'dot', branch: '', root: '/r', worktree: '', cwd: '/r' }
-  const sent = opts => handoffSpec(item, opts, () => true).prompt
-  assert.match(sent({}), /commit it in the worktree and ask me whether to merge it; never merge unasked\. After it's merged/, 'the default, with no file')
-  save('todo-worktree', 'Merge it yourself.\nThen remove the worktree.')
-  assert.match(sent({}), /Fix it\. Merge it yourself\. Then remove the worktree\. Once it's finished/)
-  assert.doesNotMatch(sent({ worktree: false }), /Merge it yourself/)
-  save('todo-worktree', '')
-  assert.match(sent({}), /Fix it\. Once it's finished/, 'emptied, it sends none')
-  clear('todo-worktree')
-  assert.match(sent({}), /ask me whether to merge it/, 'cleared, it’s back to the default')
 })

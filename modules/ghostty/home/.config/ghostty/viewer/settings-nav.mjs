@@ -16,7 +16,7 @@
 
 import { BOLD, P, fg, width } from '../hub/term.mjs'
 import { SECTIONS, load, reset, set, show, step, toggleFlag } from '../hub/settings.mjs'
-import { agent, clear, compose, defaultOf, instructions, save as savePrompt, stepSkill } from '../hub/prompts.mjs'
+import { agent, clear, compose, instructions, save as savePrompt, stepSkill } from '../hub/prompts.mjs'
 import { fromText, insert, textKey } from './textarea.mjs'
 import { filerMessage, filerPrompt, filerSystem, handoffSpec } from './todo.mjs'
 
@@ -97,7 +97,6 @@ const CLI = '~/.config/ghostty/bin/ghostty-todo'
 // The part of an agent's prompt the code builds, which Settings can't change.
 const FILER_ARGS = [EXAMPLE, [{ repo: '{repo}', root: '{repo path}' }], ['{folder}'], CLI]
 export function fixedPart(id) {
-  if (id === 'todo-worktree') return ''
   if (id === 'task') return '{the prompt you type in New agent}'
   if (id === 'pr-babysit') return '/pr-babysit {target}'
   if (id === 'logger') return '/logger watch {target}'
@@ -109,7 +108,6 @@ export function fixedPart(id) {
 // and your instructions go in as its system prompt, the skill with its
 // message; every other agent gets one prompt.
 export function fullPrompt(id) {
-  if (agent(id).partOf) return fullPrompt(agent(id).partOf)
   if (id === 'todo-filing')
     return [
       { tag: 'SYSTEM PROMPT, added to Claude Code’s', text: filerSystem(...FILER_ARGS) },
@@ -165,16 +163,15 @@ export function openView(s) {
   s.viewScroll = 0
 }
 
-// r: a setting back to its default. On a prompt, your instructions back to
-// its default (none for most), on the second r in a row, as it drops text.
+// r: a setting back to its default. On a prompt it clears your
+// instructions, on the second r in a row, as there's no default to go back to.
 function resetKey(s, confirming) {
   const r = current(s)
   if (!r.prompt) return save(s, () => reset(r.key))
-  if (instructions(r.prompt) === defaultOf(r.prompt)) return
+  if (!instructions(r.prompt)) return
   if (confirming !== r.prompt) {
     s.confirm = r.prompt
-    const what = defaultOf(r.prompt) ? 'puts back the default' : 'clears your'
-    s.note = { text: `r again ${what} ${agent(r.prompt).name} instructions`, color: P.peach }
+    s.note = { text: `r again clears your ${agent(r.prompt).name} instructions`, color: P.peach }
     return
   }
   save(s, () => clear(r.prompt))

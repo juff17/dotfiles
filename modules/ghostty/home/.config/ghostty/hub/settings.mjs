@@ -26,7 +26,7 @@ const flags = (key, label, choices, def, sub = '') => ({ key, label, sub, type: 
 const skill = key => ({ key, label: 'Skill', sub: 'its prompt runs through it; from ~/.claude/skills', type: 'skill', default: 'none' })
 // An agent's prompt (hub/prompts.mjs): not a setting, but a row the panel
 // shows beside the agent's settings, where its instructions are edited.
-const prompt = (id, label = 'Prompt') => ({ prompt: id, label })
+const prompt = id => ({ prompt: id })
 
 const MODEL = ['default', 'opus', 'sonnet', 'haiku']
 const MODE = ['default', 'auto', 'acceptEdits', 'plan']
@@ -95,7 +95,6 @@ export const SECTIONS = [
       choice('todo.handoff.branch', 'Branch', [['worktree', 'own worktree'], ['branch', 'branch it was added on']], 'worktree', 'b in the picker; only for todos added in git'),
       skill('prompts.handoff.skill'),
       prompt('todo-handoff'),
-      prompt('todo-worktree', 'Worktree rules'),
       head('Filing'),
       choice('todo.filing.model', 'Model', [['haiku', 'haiku 5.5'], ['sonnet', 'sonnet 5.5']], 'haiku', 'writes the title, category and note'),
       choice('todo.filing.effort', 'Effort', ['low', 'medium', 'high'], 'medium'),
