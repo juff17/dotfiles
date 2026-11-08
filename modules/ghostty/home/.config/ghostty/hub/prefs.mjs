@@ -5,6 +5,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
+import { load as settings } from './settings.mjs'
 
 // Recents are a cache; prefs are state, not cache or the runtime folder,
 // which a reboot clears, since they should outlive the hub and a reboot.
@@ -27,7 +28,7 @@ export function recents(file, agents, home) {
     const m = a.cwd.match(/^(.*)\/\.claude\/worktrees\//)
     return m ? m[1] : a.cwd
   })
-  return [...new Set([...saved, ...roots])].filter(p => p && p !== home).slice(0, 8)
+  return [...new Set([...saved, ...roots])].filter(p => p && p !== home).slice(0, settings()['newAgent.recent'])
 }
 
 // Puts dir first in the recents. A failed write only loses the ordering.

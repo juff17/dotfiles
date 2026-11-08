@@ -25,7 +25,7 @@ import {
 import { RUN, follow, markReviewed, markStopped } from './client.mjs'
 import { DIAGRAMS_KEY, NEW_AGENT_KEY, OPEN_AGENT_KEY, PEEK_CLOSING_KEY, answerConfirm, filterKey, hitAt, keyAction, mouseAction } from './keys.mjs'
 import { HUB_OPEN } from './tray.mjs'
-import { cardHeights, counts, lanes, launch, monitorProcess, monitorsOf, scrollTo } from './model.mjs'
+import { attentionTags, brokeTags, cardHeights, counts, lanes, launch, monitorProcess, monitorsOf, scrollTo } from './model.mjs'
 import { load as settings, set as setSetting } from './settings.mjs'
 import { POPUP } from './newagent.mjs'
 import { recents as recentsOf, remember as rememberIn, storePaths } from './prefs.mjs'
@@ -69,6 +69,8 @@ let hits = [] // clickable regions of the last frame
 const cols = () => process.stdout.columns || 120
 const rows = () => process.stdout.rows || 40
 
+// How long a result stays in the footer: Settings' hub.noteSecs.
+const noteMs = () => settings()['hub.noteSecs'] * 1000
 function say(text, color = P.sub, ms = 5000) {
   note = { text, color, until: Date.now() + ms }
   draw()
@@ -257,7 +259,7 @@ function card(name, a, hgt, w, on) {
   const title = [[` ${clean(a.repo)}`, BOLD + fg(on ? P.blue : P.text)], [`${clean(place)} `, fg(P.sub)]]
   const right = [[` ${where(a)} · ${age} `, fg(P.sub)]]
   const cmdColor = {
-    needs: a.need === 'monitor' ? (/^\[(failed|error|crash|conflict)/.test(a.cmd) ? P.red : P.peach) : P.peach,
+    needs: a.need === 'monitor' && brokeTags().has(a.cmd.match(/^\[([\w-]+)/)?.[1]) ? P.red : P.peach,
     working: P.blue,
     done: P.text,
     idle: P.sub,
@@ -296,7 +298,16 @@ function monitorRows(w, h, y0) {
     const fill = on ? SEL_BG : LANE_BG
     const mlook = MONITOR[m.state]
     const ev = m.event
-    const tagColor = !ev ? P.sub : /failed|error|crash|conflict|stuck|manual/.test(ev.tag) ? P.red : /comment|review/.test(ev.tag) ? P.mauve : P.teal
+    // Red for broke, peach for needing you, as the tray and the lanes have them.
+    const tagColor = !ev
+      ? P.sub
+      : brokeTags().has(ev.tag)
+        ? P.red
+        : attentionTags().has(ev.tag)
+          ? P.peach
+          : /comment|review/.test(ev.tag)
+            ? P.mauve
+            : P.teal
     const stateCol = render([[on ? ' ▌' : '  ', fg(P.blue)], [`${mlook.glyph} ${mlook.name}`, BOLD + fg(mlook.color)]], 18, fill)
     const target = render([[clean(m.description), BOLD + fg(P.text)]], 34, fill)
     const owner = render([[` ${m.agent.repo} · ${m.kind}`, fg(P.sub)]], 24, fill)
@@ -470,7 +481,7 @@ async function start(spec) {
     child.stderr.on('data', b => (outText += b))
     child.on('error', err => say(`Couldn't start claude: ${err.message}`, P.red))
     child.on('close', code => {
-      say(code === 0 ? `Started ${plan.name} in the background ${clean(outText).trim().slice(0, 60)}` : `claude --bg failed: ${clean(outText).trim().slice(0, 120)}`, code === 0 ? P.green : P.red, 8000)
+      say(code === 0 ? `Started ${plan.name} in the background ${clean(outText).trim().slice(0, 60)}` : `claude --bg failed: ${clean(outText).trim().slice(0, 120)}`, code === 0 ? P.green : P.red, noteMs())
     })
     child.unref()
     return
@@ -674,7 +685,7 @@ function closeAgent() {
   if (!a) return
   const q = closeQuestion(a, where(a))
   if (q.refuse) return say(q.refuse, P.sub)
-  const done = (r, what) => say(r.ok ? what : `Couldn't close ${a.title}: ${clean(r.err).slice(0, 120)}`, r.ok ? P.green : P.red, 8000)
+  const done = (r, what) => say(r.ok ? what : `Couldn't close ${a.title}: ${clean(r.err).slice(0, 120)}`, r.ok ? P.green : P.red, noteMs())
   const yes = {
     'tab+job': async () => {
       const stop = await run([CLAUDE, 'stop', a.jobId])
@@ -715,14 +726,14 @@ function stopMonitor(m) {
     try {
       p = monitorProcess(processes(), m.agent.pid, m.command)
     } catch {}
-    if (!p) return say(`Couldn't find the process for ${clean(m.description)}; it may have just ended`, P.peach, 8000)
+    if (!p) return say(`Couldn't find the process for ${clean(m.description)}; it may have just ended`, P.peach, noteMs())
     try {
       // A group of its own: the whole pipeline goes (tail, sleep, grep).
       process.kill(p.pgid === p.pid ? -p.pid : p.pid, 'SIGTERM')
       markStopped(m.agent.id, m.task)
-      say(`Stopped ${clean(m.description)}; ${m.agent.title} keeps running`, P.green, 8000)
+      say(`Stopped ${clean(m.description)}; ${m.agent.title} keeps running`, P.green, noteMs())
     } catch (err) {
-      say(`Couldn't stop ${clean(m.description)}: ${err.code ?? err.message}`, P.red, 8000)
+      say(`Couldn't stop ${clean(m.description)}: ${err.code ?? err.message}`, P.red, noteMs())
     }
   }
   if (!settings()['hub.askStopMonitor']) return kill()
@@ -735,7 +746,7 @@ function dontAsk(key) {
   try {
     setSetting(key, false)
   } catch (err) {
-    say(`Couldn't save that choice: ${err.code ?? err.message}`, P.red, 8000)
+    say(`Couldn't save that choice: ${err.code ?? err.message}`, P.red, noteMs())
   }
 }
 

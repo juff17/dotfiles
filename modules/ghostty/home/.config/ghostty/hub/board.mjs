@@ -3,10 +3,12 @@
 // x asks before closing. hub.mjs keeps the state and draws; these only
 // compute, so they can be tested (board.test.mjs).
 
+import { load as settings } from './settings.mjs'
+
 export const LANES = ['needs', 'working', 'done', 'idle']
-// Below this width the lanes get too narrow to read, so the hub draws the
-// list it shows beside an open session.
-export const MIN_BOARD_COLS = 96
+// Below this width (Settings' hub.boardCols) the lanes get too narrow to
+// read, so the hub draws the list it shows beside an open session.
+export const minBoardCols = () => settings()['hub.boardCols']
 // Rows the monitors tray keeps for monitors even when few or none run, so
 // the board doesn't jump as monitors come and go; Settings' hub.monitorRows
 // changes it. It grows past this, up to about a third of the screen, when
@@ -34,7 +36,7 @@ export function where(a, win) {
   return a.kind === 'bg' ? 'bg' : 'terminal'
 }
 
-export const listMode = (peek, cols) => Boolean(peek) || cols < MIN_BOARD_COLS
+export const listMode = (peek, cols) => Boolean(peek) || cols < minBoardCols()
 
 // The selected item of a lane, kept by id so it stays put as cards move.
 // When the id is gone the first item takes over; an empty lane keeps the id,

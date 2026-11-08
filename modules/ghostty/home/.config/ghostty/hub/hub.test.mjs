@@ -3,6 +3,10 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { addEntry, cardHeights, classify, counts, describeTool, emptyTranscript, lanes, launch, monitorProcess, monitorsOf, pairParked, parseNotification, repoOf, scrollTo } from './model.mjs'
 import { clean, render, width } from './term.mjs'
+import { mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { set as setSetting } from './settings.mjs'
 
 // No settings file, so every setting reads as its default.
 process.env.AGENT_HUB_SETTINGS = '/nonexistent/agent-hub/settings.json'
@@ -173,6 +177,20 @@ test('a monitor needs action when its last event needs a person', () => {
   const seen = classify({ session: session('idle'), t, alive: () => true, reviewedAt: at(9), now: at(10) })
   assert.equal(seen.monitors[0].state, 'watching')
   assert.notEqual(seen.state, 'needs')
+})
+
+test('a tag left out of Settings’ Count as needing you doesn’t raise a monitor', () => {
+  const before = process.env.AGENT_HUB_SETTINGS
+  process.env.AGENT_HUB_SETTINGS = join(mkdtempSync(join(tmpdir(), 'hub-attention-')), 'settings.json')
+  try {
+    setSetting('hub.attention', ['stuck'])
+    const t = feed([...babysit, user(8, notification('b5sky', '[failed] lint on job 4/9'))])
+    assert.equal(classify({ session: session('idle'), t, alive: () => true, now: at(10) }).monitors[0].state, 'watching')
+    const stuck = feed([...babysit, user(8, notification('b5sky', '[stuck] build waiting for a runner'))])
+    assert.equal(classify({ session: session('idle'), t: stuck, alive: () => true, now: at(10) }).monitors[0].state, 'action')
+  } finally {
+    process.env.AGENT_HUB_SETTINGS = before
+  }
 })
 
 test('a monitor whose command is gone is stale; an expired one ends', () => {

@@ -211,8 +211,16 @@ export function describeTool(tool, cwd = '') {
 
 // ---------------------------------------------------------------- agents
 
-// Event tags from pr-babysit and logger that mean a person has to decide.
-const ATTENTION = new Set(['failed', 'manual', 'stuck', 'conflict', 'conflicts', 'error', 'crash', 'auth', 'setup', 'blocked'])
+// Monitor event tags from Settings: those that mean a person has to decide
+// (hub.attention), and those that mean something broke (hub.broke), shown red.
+// conflicts, GitLab's word, goes with conflict.
+const tagSet = key => {
+  const tags = new Set(settings()[key])
+  if (tags.has('conflict')) tags.add('conflicts')
+  return tags
+}
+export const attentionTags = () => tagSet('hub.attention')
+export const brokeTags = () => tagSet('hub.broke')
 // A monitor that ended on its own (expired, failed, its session restarted)
 // stays on the board for Settings' hub.endedFor minutes, so you see it went.
 // One you stopped leaves at once.
@@ -360,7 +368,7 @@ export function classify({ session, t, subs = [], pane, reviewedAt = 0, alive = 
     else if (alive(m.command) === false) mstate = 'stale'
     if (mstate !== 'ended') {
       if (state === 'needs') mstate = 'action'
-      else if (status === 'idle' && event && ATTENTION.has(event.tag) && event.at > reviewedAt) mstate = 'action'
+      else if (status === 'idle' && event && attentionTags().has(event.tag) && event.at > reviewedAt) mstate = 'action'
     }
     monitors.push({
       key: `${session.sessionId}:${m.task}`,

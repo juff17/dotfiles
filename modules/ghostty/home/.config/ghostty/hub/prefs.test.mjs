@@ -5,8 +5,10 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
 import { dontAsk, readPrefs, recents, remember, skips, storePaths } from './prefs.mjs'
+import { set } from './settings.mjs'
 
 const TMP = mkdtempSync(join(tmpdir(), 'hub-prefs-'))
+process.env.AGENT_HUB_SETTINGS = join(TMP, 'settings.json')
 after(() => rmSync(TMP, { recursive: true, force: true }))
 let n = 0
 const fresh = name => join(TMP, String(++n), 'agent-hub', name)
@@ -36,6 +38,13 @@ test('recents never offer home, and stop at 8', () => {
   const file = fresh('recents.json')
   const many = Array.from({ length: 12 }, (_, i) => at(`/p/${i}`))
   assert.deepEqual(recents(file, [at(HOME), ...many], HOME), many.slice(0, 8).map(a => a.cwd))
+})
+
+test('recents stop at Settings’ Recent folders shown', () => {
+  set('newAgent.recent', 3)
+  const many = Array.from({ length: 5 }, (_, i) => at(`/p/${i}`))
+  assert.deepEqual(recents(fresh('recents.json'), many, HOME), ['/p/0', '/p/1', '/p/2'])
+  set('newAgent.recent', 8)
 })
 
 test('remember puts the folder first without repeating it', () => {

@@ -2,10 +2,17 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import {
-  LANES, LANE_GAP, MIN_BOARD_COLS, MIN_LANE_ROWS, MONITOR_ROWS, activeWindow, boardRows, closeQuestion, keptFocus, laneColumns, listItems, listMode,
+  LANES, LANE_GAP, MIN_LANE_ROWS, minBoardCols, MONITOR_ROWS, activeWindow, boardRows, closeQuestion, keptFocus, laneColumns, listItems, listMode,
   listScroll, listSelection, markedPane, nextLane, selection, showsPermission, shq, step, stepList, tabFocus, trayWindow, visible, where,
 } from './board.mjs'
 import { lanes, monitorsOf } from './model.mjs'
+import { mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { set } from './settings.mjs'
+
+// Its own settings file, so the defaults hold until a test changes one.
+process.env.AGENT_HUB_SETTINGS = join(mkdtempSync(join(tmpdir(), 'hub-board-')), 'settings.json')
 
 const agent = (id, extra = {}) => ({ id, title: id, repo: 'dotfiles', cmd: 'Thinking…', state: 'working', since: 0, monitors: [], ...extra })
 const monitor = (key, extra = {}) => ({ key, task: key, description: `watch ${key}`, state: 'watching', startedAt: 0, ...extra })
@@ -37,8 +44,8 @@ test('where: a tab here, another window\'s tab, a hub tab, background or termina
 })
 
 test('the list shows beside an open session, and on a screen too narrow for lanes', () => {
-  assert.equal(listMode(null, MIN_BOARD_COLS), false)
-  assert.equal(listMode(null, MIN_BOARD_COLS - 1), true)
+  assert.equal(listMode(null, minBoardCols()), false)
+  assert.equal(listMode(null, minBoardCols() - 1), true)
   assert.equal(listMode({ pane: '%1' }, 300), true)
 })
 
@@ -237,4 +244,11 @@ test('the hub takes back the pane marked @peek and the tab it shows', () => {
 test('shq quotes for a shell, single quotes included', () => {
   assert.equal(shq('/a b/newagent.mjs'), "'/a b/newagent.mjs'")
   assert.equal(shq(`{"folder":"it's"}`), `'{"folder":"it'\\''s"}'`)
+})
+
+test('the board turns into the list below Settings’ narrowest board', () => {
+  set('hub.boardCols', 120)
+  assert.equal(listMode(null, 119), true)
+  assert.equal(listMode(null, 120), false)
+  set('hub.boardCols', 96)
 })
