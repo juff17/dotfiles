@@ -30,6 +30,7 @@ import {
   keepCursor,
   keyAction,
   modeAt as modeIn,
+  openAfter,
   parseDiff,
   parseInput,
   parseNumstat,
@@ -160,9 +161,10 @@ async function refresh() {
     const cursorPath = files[cursor]?.path
     if (status !== lastStatus) {
       lastStatus = status
+      const before = files
       files = parseStatus(status)
       cursor = keepCursor(files, cursorPath, cursor)
-      if (!openPath && files.length) openPath = files[0].path
+      openPath = openAfter(openPath, before, files)
     }
     for (const file of files) {
       Object.assign(file, file.untracked ? { del: 0, ...countLines(root, file.path, lineCounts) } : (numstat.get(file.path) ?? {}))

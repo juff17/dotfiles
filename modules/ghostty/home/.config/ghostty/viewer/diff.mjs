@@ -103,6 +103,11 @@ export const keepCursor = (files, cursorPath, cursor) => {
   return keep >= 0 ? keep : Math.min(cursor, Math.max(0, files.length - 1))
 }
 
+// The file to open after a new status. The first file opens when the list
+// fills from empty (the pane's first look at a repo, or new changes after a
+// commit); otherwise the open one stays, even none after you closed it.
+export const openAfter = (openPath, before, files) => (!openPath && !before.length && files.length ? files[0].path : openPath)
+
 // The file list's rows: each file, and under the open one its diff.
 export function bodyRows(files, openPath, openRows) {
   const rows = []

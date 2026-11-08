@@ -18,6 +18,7 @@ import {
   keepCursor,
   keyAction,
   modeAt,
+  openAfter,
   parseDiff,
   parseInput,
   parseNumstat,
@@ -256,6 +257,14 @@ test('cursor stays on its file when the list changes', () => {
   assert.equal(keepCursor(files, 'gone', 9), 2)
   assert.equal(keepCursor([], 'a', 3), 0)
   assert.equal(keepCursor(files, undefined, 0), 0)
+})
+
+test('the first file opens when the list fills, and a closed one stays closed', () => {
+  const a = [{ path: 'a' }, { path: 'b' }]
+  assert.equal(openAfter('', [], a), 'a')
+  assert.equal(openAfter('', a, [...a, { path: 'c' }]), '')
+  assert.equal(openAfter('b', a, a), 'b')
+  assert.equal(openAfter('', [], []), '')
 })
 
 test('body rows: the open file has its diff and a gap under it', () => {
