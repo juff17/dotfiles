@@ -103,9 +103,14 @@ test('focus leaves a lane once it empties, for the next one that has cards', () 
 })
 
 test('tab goes to the monitors strip and back to the first lane', () => {
-  assert.equal(tabFocus(0), 4)
-  assert.equal(tabFocus(2), 4)
-  assert.equal(tabFocus(4), 0)
+  assert.equal(tabFocus(0, filledOnly(0, 4)), 4)
+  assert.equal(tabFocus(2, filledOnly(2, 4)), 4)
+  assert.equal(tabFocus(4, filledOnly(0, 4)), 0)
+})
+
+test('tab with no monitors keeps focus on the lane', () => {
+  assert.equal(tabFocus(2, filledOnly(0, 2)), 2)
+  assert.equal(tabFocus(0, filledOnly(0)), 0)
 })
 
 test('the list has a group per lane, then the monitors, with an empty line where there are none', () => {

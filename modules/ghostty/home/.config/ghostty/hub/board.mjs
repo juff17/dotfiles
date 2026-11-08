@@ -74,8 +74,9 @@ export function keptFocus(focus, filled) {
   return focus
 }
 
-// Tab goes between the lanes and the monitors strip.
-export const tabFocus = focus => (focus === 4 ? 0 : 4)
+// Tab goes between the lanes and the monitors strip; with no monitors it
+// stays put, since the empty strip would only hand focus to another lane.
+export const tabFocus = (focus, filled) => (focus === 4 ? 0 : filled(4) ? 4 : focus)
 
 // The board as one column, beside an open session: a group per lane, then
 // the monitors, each with a header, a line saying so when it's empty, and a

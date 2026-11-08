@@ -740,7 +740,7 @@ const actions = {
   laneRight: () => moveLane(1),
   down: () => moveIn(1),
   up: () => moveIn(-1),
-  tab: () => (focus = tabFocus(focus)),
+  tab: () => (focus = tabFocus(focus, filled)),
   open: () => openSession(focused()),
   allow: () => answer(true),
   deny: () => answer(false),
