@@ -39,21 +39,26 @@ export function remember(file, dir, agents, home) {
   } catch {}
 }
 
+const isObject = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x)
+
+// Prefs that aren't an object (null, a list, a number) read as none, so a
+// hand-edited file can't crash x on a monitor.
 export function readPrefs(file) {
   try {
-    return JSON.parse(readFileSync(file, 'utf8'))
+    const p = JSON.parse(readFileSync(file, 'utf8'))
+    return isObject(p) ? p : {}
   } catch {
     return {}
   }
 }
 
-export const skips = (prefs, name) => Boolean(prefs.skip?.[name])
+export const skips = (prefs, name) => Boolean(isObject(prefs?.skip) && prefs.skip[name])
 
 // Records that question `name` isn't to be asked again, keeping the other
 // prefs. Throws when it can't write, so the hub can say so.
 export function dontAsk(file, name) {
   const p = readPrefs(file)
-  p.skip = { ...p.skip, [name]: true }
+  p.skip = { ...(isObject(p.skip) ? p.skip : {}), [name]: true }
   mkdirSync(dirname(file), { recursive: true })
   writeFileSync(file, `${JSON.stringify(p, null, 2)}\n`)
 }

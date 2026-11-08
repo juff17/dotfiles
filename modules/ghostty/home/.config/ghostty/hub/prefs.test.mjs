@@ -93,6 +93,18 @@ test('a broken prefs file asks again, and a skip rewrites it', () => {
   assert.deepEqual(readPrefs(file), { skip: { 'stop-monitor': true } })
 })
 
+test('prefs that are not an object read as none, and a skip replaces them', () => {
+  for (const body of ['null', '[]', '[1]', '42', '"x"', 'true', '{"skip": null}', '{"skip": "stop-monitor"}', '{"skip": ["stop-monitor"]}']) {
+    const file = fresh('prefs.json')
+    dontAsk(file, 'x')
+    writeFileSync(file, body)
+    assert.equal(skips(readPrefs(file), 'stop-monitor'), false, body)
+    dontAsk(file, 'stop-monitor')
+    assert.equal(skips(readPrefs(file), 'stop-monitor'), true, body)
+    assert.deepEqual(readPrefs(file).skip, { 'stop-monitor': true }, body)
+  }
+})
+
 test('dontAsk throws when it cannot write, so the hub can say so', () => {
   // A file where its folder should be.
   const blocker = join(TMP, 'blocker')
