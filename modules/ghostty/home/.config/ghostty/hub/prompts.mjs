@@ -42,7 +42,7 @@ export const fileOf = id => join(promptsDir(), `${id}.md`)
 export const header = id =>
   `<!-- Your instructions for ${agent(id).about}: ${
     id === 'todo-filing' ? 'added to its system prompt after the fixed one' : 'sent after the fixed prompt, joined into one line'
-  }. Settings › Prompts edits this file. -->\n`
+  }. Settings edits this file, on the agent's Prompt row. -->\n`
 
 // Your instructions for an agent, without comments; '' when there are none.
 export function instructions(id) {
@@ -55,20 +55,15 @@ export function instructions(id) {
   }
 }
 
-// The file to edit, made with its header if it isn't there yet.
-export function ensureFile(id) {
-  const file = fileOf(id)
-  if (!existsSync(file)) {
-    mkdirSync(dirname(file), { recursive: true })
-    writeFileSync(file, header(id))
-  }
-  return file
+// Your instructions for an agent, saved under the file's header; none
+// leaves just the header.
+export function save(id, text) {
+  mkdirSync(promptsDir(), { recursive: true })
+  const body = text.trim()
+  writeFileSync(fileOf(id), `${header(id)}${body ? `${body}\n` : ''}`)
 }
 
-export function clear(id) {
-  mkdirSync(promptsDir(), { recursive: true })
-  writeFileSync(fileOf(id), header(id))
-}
+export const clear = id => save(id, '')
 
 // The skills that can be picked: each folder in ~/.claude/skills with a
 // SKILL.md, by name.

@@ -9,7 +9,7 @@ import { SECTIONS, get, row, set } from '../hub/settings.mjs'
 import * as nav from './settings-nav.mjs'
 import { P } from '../hub/term.mjs'
 import { AGENTS, fileOf, header, instructions } from '../hub/prompts.mjs'
-import { current, fixedPart, fullPrompt, items, onKey, start, wrap } from './settings-nav.mjs'
+import { current, fixedPart, fullPrompt, items, onKey, onPaste, start, wrap } from './settings-nav.mjs'
 
 const LEFT = '\x1b[D'
 const RIGHT = '\x1b[C'
@@ -197,13 +197,53 @@ test('an agent linked to its skill has none to pick', () => {
   assert.equal(s.view, 'pr-babysit', 'space opens it, as ↵ does')
 })
 
-test('e asks for the editor, on an agent’s prompt and in its open prompt', () => {
-  assert.equal(onKey(onSkill('prompts.task.skill'), 'e'), undefined, 'not on other rows')
+test('e opens your instructions in a field; ctrl+s saves them to the file', () => {
+  write('task', 'Be brief.')
+  assert.equal(onKey(onSkill('prompts.task.skill'), 'e'), undefined)
   const s = onAgent('task')
-  assert.equal(onKey(s, 'e'), 'edit')
-  press(s, 'v')
-  assert.equal(s.view, 'task')
-  assert.equal(onKey(s, 'e'), 'edit')
+  press(s, 'e')
+  assert.equal(s.typing.id, 'task')
+  assert.deepEqual(s.typing.field.lines, ['Be brief.'])
+  press(s, '\r', 'q', 'u', 'i', 'e', 't')
+  assert.equal(s.typing.field.lines[1], 'quiet', 'q is typed, not quit, while typing')
+  onPaste(s, ' and\ncareful')
+  press(s, '\x13')
+  assert.equal(s.typing, null)
+  assert.equal(instructions('task'), 'Be brief.\nquiet and\ncareful')
+  assert.equal(readFileSync(fileOf('task'), 'utf8'), `${header('task')}Be brief.\nquiet and\ncareful\n`)
+})
+
+test('esc drops what was typed; alt+s still closes the panel', () => {
+  write('task', 'Be brief.')
+  const s = onAgent('task')
+  press(s, 'e', 'x', '\x1b')
+  assert.equal(s.typing, null)
+  assert.equal(instructions('task'), 'Be brief.')
+  press(s, 'e')
+  assert.equal(onKey(s, '\x1bs'), 'quit')
+})
+
+test('e in the whole prompt goes to the field', () => {
+  const s = onAgent('logger')
+  press(s, 'v', 'e')
+  assert.equal(s.view, null)
+  assert.equal(s.typing.id, 'logger')
+})
+
+test('a save that fails keeps the field and what was typed', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'settings-nav-'))
+  writeFileSync(join(dir, 'file'), '')
+  process.env.AGENT_HUB_PROMPTS = join(dir, 'file', 'prompts')
+  const s = onAgent('task')
+  press(s, 'e', 'h', 'i', '\x13')
+  assert.match(s.note.text, /^Couldn't save/)
+  assert.deepEqual(s.typing.field.lines, ['hi'])
+})
+
+test('pasting with no field open does nothing', () => {
+  const s = onAgent('task')
+  onPaste(s, 'stray')
+  assert.equal(s.typing, null)
 })
 
 test('v or ↵ opens an agent’s whole prompt; esc goes back, not out', () => {

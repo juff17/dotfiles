@@ -7,12 +7,11 @@
 // is in settings-nav.mjs; it takes no clicks.
 //   settings-view.mjs [section id]   the section it opens on
 
-import { spawnSync } from 'node:child_process'
-
 import { BOLD, P, bg, enter, fg, leave, paint, render, split, tokens, width } from '../hub/term.mjs'
 import { SECTIONS, settingsFile, load, show } from '../hub/settings.mjs'
-import { AGENTS, ensureFile, instructions } from '../hub/prompts.mjs'
-import { BOTTOM, NAV, TOP, VALUE, current, fullPrompt, onKey, start, valueSpans, wrap } from './settings-nav.mjs'
+import { AGENTS, instructions } from '../hub/prompts.mjs'
+import { BOTTOM, NAV, TOP, VALUE, current, fullPrompt, onKey, onPaste, start, valueSpans, wrap } from './settings-nav.mjs'
+import { layout } from './textarea.mjs'
 
 const s = start(process.argv[2])
 
@@ -42,8 +41,10 @@ function content(w, values) {
     const fill = on ? SEL : BASE
     if (r.prompt) {
       at.push(lines.length)
-      lines.push(...promptLines(r.prompt, w, on, fill))
-      end.push(lines.length - 1)
+      const { lines: own, cursorLine } = promptLines(r.prompt, w, on, fill)
+      // While typing, the field's cursor is what has to stay in view.
+      end.push(cursorLine === undefined ? lines.length + own.length - 1 : lines.length + cursorLine)
+      lines.push(...own)
       i++
       continue
     }
@@ -63,18 +64,35 @@ function content(w, values) {
   return { lines, at, end }
 }
 
+// An agent's prompt: the start of what it's sent, then your instructions'
+// first line, or while you type them, the field with every line.
 function promptLines(id, w, on, fill) {
   const yours = instructions(id)
   const count = yours ? yours.split('\n').filter(l => l.trim()).length : 0
-  const value = count ? `your ${count} line${count === 1 ? '' : 's'}` : 'e to add instructions'
+  const typing = s.typing?.id === id
+  const value = typing ? 'typing' : count ? `your ${count} line${count === 1 ? '' : 's'}` : 'e to add instructions'
   const sent = fullPrompt(id)[0].text.replace(/\s*\n\s*/g, ' ')
   const lines = [
     render([[count ? '• ' : '  ', fg(P.peach)], ['Prompt', (on ? BOLD : '') + fg(P.text)]], w - VALUE, fill) +
-      render([[value, count ? (on ? BOLD : '') + fg(P.text) : fg(P.overlay1)]], VALUE, fill),
+      render([[value, count || typing ? (on ? BOLD : '') + fg(P.text) : fg(P.overlay1)]], VALUE, fill),
     render([[`  ${sent}`, fg(P.overlay1)]], w, fill),
   ]
-  if (yours) lines.push(render([[`  ${wrap(yours, w)[0]}`, fg(P.text)]], w, fill))
-  return lines
+  if (!typing) {
+    if (yours) lines.push(render([[`  ${wrap(yours, w)[0]}`, fg(P.text)]], w, fill))
+    return { lines }
+  }
+  const BAR = '  ▌ '
+  const { rows: field, cursor } = layout(s.typing.field, w - BAR.length - 1)
+  field.forEach((row, y) => {
+    const spans = [[BAR, fg(P.blue)]]
+    if (y !== cursor.y) spans.push([row, fg(P.text)])
+    else {
+      const cs = [...row]
+      spans.push([cs.slice(0, cursor.i).join(''), fg(P.text)], [cs[cursor.i] ?? ' ', bg(P.text) + fg(P.base)], [cs.slice(cursor.i + 1).join(''), fg(P.text)])
+    }
+    lines.push(render(spans, w, fill))
+  })
+  return { lines, cursorLine: 2 + cursor.y }
 }
 
 function navRow(i) {
@@ -150,6 +168,11 @@ function draw() {
     lines.push(`${nav}${render([['│', fg(P.surface0)]], 1, BASE)}${BASE} ${line}`)
   }
   const r = current(s)
+  if (s.typing) {
+    const hints = [['ctrl+s', 'save'], ['esc', 'cancel'], ['↵', 'new line'], ['↑↓←→', 'move']]
+    lines.push(split(hintSpans(hints), footerRight(), w, BASE))
+    return paint(lines.slice(0, rows()))
+  }
   const keys = r.prompt
     ? [['e', 'edit yours'], ['v', 'full prompt'], ['r', 'clear yours']]
     : r.type === 'flags'
@@ -166,28 +189,6 @@ const quit = () => {
   process.exit(0)
 }
 
-// Your instructions for the selected agent (or the open one) in $VISUAL or
-// $EDITOR, else nvim or vi, on the panel's terminal; back to the panel after.
-function edit() {
-  const id = s.view ?? current(s).prompt
-  let file
-  try {
-    file = ensureFile(id)
-  } catch (err) {
-    s.note = { text: `Couldn't make the file: ${err.code ?? err.message}`, color: P.red }
-    return
-  }
-  const editor =
-    process.env.VISUAL || process.env.EDITOR || (spawnSync('sh', ['-c', 'command -v nvim'], { encoding: 'utf8' }).stdout.trim() ? 'nvim' : 'vi')
-  leave()
-  process.stdin.setRawMode(false)
-  // Through sh so an editor given with its options (`code -w`) works.
-  const run = spawnSync('sh', ['-c', `${editor} "$1"`, 'sh', file], { stdio: 'inherit' })
-  process.stdin.setRawMode(true)
-  enter()
-  s.note = run.status === 0 ? null : { text: `${editor} exited with ${run.error?.code ?? run.status}`, color: P.red }
-}
-
 if (!process.stdin.isTTY) {
   console.error('settings-view needs a terminal.')
   process.exit(1)
@@ -195,10 +196,8 @@ if (!process.stdin.isTTY) {
 process.stdin.setRawMode(true)
 process.stdin.on('data', data => {
   for (const t of tokens(data.toString('utf8'))) {
-    if (!t.key) continue
-    const action = onKey(s, t.key)
-    if (action === 'quit') quit()
-    if (action === 'edit') edit()
+    if (t.paste !== undefined) onPaste(s, t.paste)
+    else if (t.key && onKey(s, t.key) === 'quit') quit()
   }
   draw()
 })

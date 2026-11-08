@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { beforeEach, test } from 'node:test'
 
 import { launch } from './model.mjs'
-import { AGENTS, clear, compose, ensureFile, fileOf, header, instructions, skillOf, skills, stepSkill } from './prompts.mjs'
+import { AGENTS, clear, compose, fileOf, header, instructions, save, skillOf, skills, stepSkill } from './prompts.mjs'
 import { set } from './settings.mjs'
 import { handoffSpec } from '../viewer/todo.mjs'
 
@@ -32,15 +32,13 @@ test('instructions leave out comments and blank space, and read as none when mis
   assert.equal(instructions('task'), 'Be brief.')
 })
 
-test('a new or cleared file holds just its header', () => {
-  const file = ensureFile('logger')
-  assert.equal(readFileSync(file, 'utf8'), header('logger'))
-  assert.equal(instructions('logger'), '')
-  write('logger', 'x')
-  ensureFile('logger')
-  assert.equal(instructions('logger'), 'x', 'ensureFile leaves a file that’s there')
+test('save keeps the header and your lines; clearing leaves just the header', () => {
+  save('logger', '  Watch for 500s.\nIgnore health checks.\n\n')
+  assert.equal(readFileSync(fileOf('logger'), 'utf8'), `${header('logger')}Watch for 500s.\nIgnore health checks.\n`)
+  assert.equal(instructions('logger'), 'Watch for 500s.\nIgnore health checks.')
   clear('logger')
-  assert.equal(readFileSync(file, 'utf8'), header('logger'))
+  assert.equal(readFileSync(fileOf('logger'), 'utf8'), header('logger'))
+  assert.equal(instructions('logger'), '')
 })
 
 test('skills are the folders with a SKILL.md, sorted', () => {

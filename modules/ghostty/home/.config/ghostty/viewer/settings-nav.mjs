@@ -1,20 +1,23 @@
 // The ⚙ settings panel's state and what keys do to it, apart from the
 // terminal so it can be tested; settings-view.mjs draws it. The state is
-// { sec, sel, flag, scroll, note, view, viewScroll, confirm }: the section,
-// the row in it, which flag ←/→ is on in a row of flags, the body's scroll,
-// the footer's note (set when a save fails), the agent whose whole prompt is
-// open over the panel and its scroll, and the agent whose instructions a
-// second r clears. Changes are saved to hub/settings.mjs's file as they're
-// made. It's keys only: clicks do nothing.
+// { sec, sel, flag, scroll, note, view, viewScroll, confirm, typing }: the
+// section, the row in it, which flag ←/→ is on in a row of flags, the body's
+// scroll, the footer's note (set when a save fails), the agent whose whole
+// prompt is open over the panel and its scroll, the agent whose instructions
+// a second r clears, and the instructions being typed ({ id, field }, the
+// field a textarea.mjs one). Changes are saved to hub/settings.mjs's file as
+// they're made. It's keys only: clicks do nothing.
 //
-// An agent's prompt is a row beside its settings ({ prompt: id }): e edits
-// your instructions for it, v or ↵ opens the whole prompt, and r twice clears
+// An agent's prompt is a row beside its settings ({ prompt: id }): e opens
+// your instructions for it in a field under the row, where ctrl+s saves them
+// and esc drops the change; v or ↵ opens the whole prompt, and r twice clears
 // your instructions. Its skill, where it has one to pick, is the setting
 // above it.
 
 import { BOLD, P, bg, fg, width } from '../hub/term.mjs'
 import { SECTIONS, load, reset, set, show, step, toggleFlag } from '../hub/settings.mjs'
-import { agent, clear, compose, instructions, stepSkill } from '../hub/prompts.mjs'
+import { agent, clear, compose, instructions, save as savePrompt, stepSkill } from '../hub/prompts.mjs'
+import { fromText, insert, textKey } from './textarea.mjs'
 import { filerMessage, filerPrompt, filerSystem, handoffSpec } from './todo.mjs'
 
 export const NAV = 22
@@ -33,6 +36,7 @@ export const start = id => ({
   view: null,
   viewScroll: 0,
   confirm: null,
+  typing: null,
 })
 
 // The rows ↑/↓ moves between: the section's settings and agents' prompts.
@@ -173,7 +177,29 @@ function resetKey(s, confirming) {
   save(s, () => clear(r.prompt))
 }
 
-// A key while an agent's whole prompt is open; true when it closes it.
+// e: your instructions for an agent, in a field to type them in.
+export function startTyping(s, id) {
+  s.view = null
+  s.typing = { id, field: fromText(instructions(id)) }
+}
+
+// A key while typing: ctrl+s saves and closes the field, esc drops it.
+function onTypingKey(s, key) {
+  const done = textKey(s.typing.field, key)
+  if (done === 'cancel') s.typing = null
+  if (done === 'save') {
+    const { id, field } = s.typing
+    save(s, () => savePrompt(id, field.lines.join('\n')))
+    if (!s.note) s.typing = null
+  }
+}
+
+// Pasted text goes into the field while typing; elsewhere it's dropped.
+export const onPaste = (s, text) => {
+  if (s.typing) insert(s.typing.field, text)
+}
+
+// A key while an agent's whole prompt is open.
 function onViewKey(s, key) {
   const actions = {
     '\x1b': () => (s.view = null),
@@ -185,20 +211,20 @@ function onViewKey(s, key) {
     '\x1b[B': () => (s.viewScroll += 1),
     '\x1b[A': () => (s.viewScroll = Math.max(0, s.viewScroll - 1)),
     g: () => (s.viewScroll = 0),
-    e: () => 'edit',
+    e: () => startTyping(s, s.view),
   }
-  return Object.hasOwn(actions, key) ? actions[key]() : undefined
+  if (Object.hasOwn(actions, key)) actions[key]()
 }
 
-// A key: 'quit' when it closes the panel, 'edit' when the selected agent's
-// instructions should open in an editor (the view does that), else nothing.
+// A key: 'quit' when it closes the panel, else nothing.
 export function onKey(s, key) {
   // ctrl+c, and the Alt+S that opened it, close it from anywhere.
   if (key === '\x03' || key === '\x1bs') return 'quit'
+  if (s.typing) return void onTypingKey(s, key)
   const confirming = s.confirm
   s.confirm = null
   if (confirming && s.note?.color === P.peach) s.note = null
-  if (s.view) return onViewKey(s, key) === 'edit' ? 'edit' : undefined
+  if (s.view) return void onViewKey(s, key)
   const onPrompt = Boolean(current(s).prompt)
   const actions = {
     q: () => 'quit',
@@ -220,9 +246,8 @@ export function onKey(s, key) {
     ' ': () => toggle(s),
     '\r': () => toggle(s),
     r: () => resetKey(s, confirming),
-    ...(onPrompt && { e: () => 'edit', v: () => openView(s) }),
+    ...(onPrompt && { e: () => startTyping(s, current(s).prompt), v: () => openView(s) }),
   }
   if (!Object.hasOwn(actions, key)) return undefined
-  const result = actions[key]()
-  return result === 'quit' || result === 'edit' ? result : undefined
+  return actions[key]() === 'quit' ? 'quit' : undefined
 }
