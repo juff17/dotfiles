@@ -10,7 +10,8 @@
 // A session can also post a note for something only it knows needs you (a
 // fix ready to push, a finished rebase): pr-babysit's notify.sh writes one
 // JSON file per note to notes/ ({ title, message, session, pane, at }). A note
-// is a ▲ row until you go to it or dismiss it, and is dropped after a day.
+// is a ▲ row until you go to it or dismiss it, and is dropped after a day
+// (Settings' tray.noteHours).
 // An item is new until `seen` records it, which is how the widget keeps its
 // ring until you open the inbox.
 //   tray.mjs snapshot           print the items once; keeps agentd running
@@ -32,7 +33,6 @@ const HERE = dirname(fileURLToPath(import.meta.url))
 const SEEN = join(RUN, 'tray-seen.json')
 const DISMISSED = join(RUN, 'tray-dismissed.json')
 const NOTES = join(RUN, 'notes')
-const NOTE_TTL_MS = 24 * 60 * 60 * 1000
 // The file the hub reads when asked to open an agent (hub.mjs OPEN_AGENT_KEY).
 export const HUB_OPEN = join(RUN, 'hub-open')
 const OPEN_AGENT_KEY = '\x1b[9102~'
@@ -116,7 +116,7 @@ export function readNotes(now = Date.now()) {
   for (const file of files.sort()) {
     try {
       const n = JSON.parse(readFileSync(join(NOTES, file), 'utf8'))
-      if (now - (Number(n.at) || 0) > NOTE_TTL_MS) unlinkSync(join(NOTES, file))
+      if (now - (Number(n.at) || 0) > settings()['tray.noteHours'] * 60 * 60 * 1000) unlinkSync(join(NOTES, file))
       else notes.push({ ...n, file: file.replace(/\.json$/, ''), at: Number(n.at) || 0 })
     } catch {}
   }
@@ -151,7 +151,17 @@ function keepAlive() {
   if (!alivePid(pid)) spawn(process.execPath, [join(HERE, 'agentd.mjs')], { detached: true, stdio: 'ignore' }).unref()
 }
 
-const snapshot = state => ({ at: state?.at ?? 0, ...trayItems(state?.agents ?? [], readSet(SEEN), readSet(DISMISSED), readNotes()) })
+// The widget has no settings of its own; it takes the tray's from here.
+export function widgetSettings() {
+  const s = settings()
+  return { flashMs: s['tray.flash'] * 1000, foldDone: s['tray.foldDone'] }
+}
+
+const snapshot = state => ({
+  at: state?.at ?? 0,
+  ...trayItems(state?.agents ?? [], readSet(SEEN), readSet(DISMISSED), readNotes()),
+  settings: widgetSettings(),
+})
 
 // ------------------------------------------------------------ actions
 

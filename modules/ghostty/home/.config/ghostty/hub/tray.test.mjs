@@ -4,7 +4,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import { trayItems } from './tray.mjs'
+import { trayItems, widgetSettings } from './tray.mjs'
 
 // No settings file, so every setting reads as its default.
 process.env.AGENT_HUB_SETTINGS = '/nonexistent/agent-hub/settings.json'
@@ -136,4 +136,8 @@ test('a note from a session is a ▲ row that goes to that session', () => {
     ],
   )
   assert.equal(t.alert, true)
+})
+
+test('the widget gets its flash length and done folding from Settings', () => {
+  assert.deepEqual(widgetSettings(), { flashMs: 2000, foldDone: true })
 })

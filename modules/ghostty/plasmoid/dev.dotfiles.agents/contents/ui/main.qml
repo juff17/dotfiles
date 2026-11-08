@@ -72,7 +72,8 @@ PlasmoidItem {
     }
 
     // A ▲ or ✗ item seen for the first time fills the chip with its colour
-    // for two seconds; that, and the ring, replace the pop-up.
+    // for as long as Settings says (two seconds, or never at 0); that, and
+    // the ring, replace the pop-up.
     function flashIfNew(items) {
         const now = {}
         let fresh = null
@@ -82,7 +83,7 @@ PlasmoidItem {
             if (it.new && !flashed[it.id] && (!fresh || it.section === "broke")) fresh = it
         }
         flashed = Object.assign(now, {})
-        if (fresh && !root.expanded) {
+        if (fresh && !root.expanded && flashOff.interval > 0) {
             flashColor = M.section[fresh.section]
             flashing = true
             flashOff.restart()
@@ -131,7 +132,7 @@ PlasmoidItem {
     }
     Timer {
         id: flashOff
-        interval: 2000
+        interval: (root.snap.settings && root.snap.settings.flashMs !== undefined) ? root.snap.settings.flashMs : 2000
         onTriggered: root.flashing = false
     }
     Timer {
@@ -182,6 +183,7 @@ PlasmoidItem {
             function onExpandedChanged() {
                 if (root.expanded) {
                     inbox.sel = 0
+                    inbox.showDone = !!(root.snap.settings && root.snap.settings.foldDone === false)
                     inbox.forceActiveFocus()
                 }
             }
