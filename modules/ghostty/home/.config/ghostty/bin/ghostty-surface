@@ -9,8 +9,6 @@
 # also runs `ghostty-surface viewer <window> <dir>` to open its viewer.
 # Any failure falls through to your shell, so a terminal always opens.
 
-TOP_ROWS=${GHOSTTY_TOP_ROWS:-10}
-
 source "$(dirname "$(readlink -f "$0")")/ghostty-lib.sh"
 SELF="$GHOSTTY_CONF/bin/ghostty-surface"
 
@@ -19,21 +17,22 @@ run_shell() { exec "${SHELL:-/bin/sh}"; }
 # Builds the window's session detached, at the terminal's own size so nothing
 # resizes when it attaches, then attaches to it.
 run_layout() {
-  local win=$1 session="layout-$1" rows cols tabs top
+  local win=$1 session="layout-$1" rows cols tabs top top_height
   read -r rows cols < <(stty size </dev/tty) || return
+  top_height=$(top_rows)
   # Left over from an earlier Ghostty process that reused the window number.
   layout kill-session -t "=$session" 2>/dev/null
   layout new-session -d -s "$session" -x "$cols" -y "$rows" -c "$PWD" \
     "$SELF" tabs "$win" "$PWD" || return
   tabs=$(layout display -p -t "$session" '#{pane_id}')
-  top=$(layout split-window -d -v -b -f -l "$TOP_ROWS" -t "$tabs" \
+  top=$(layout split-window -d -v -b -f -l "$top_height" -t "$tabs" \
     -P -F '#{pane_id}' "$SELF" top) || return
   layout set -t "$session" @tabs "$tabs"
   layout set -p -t "$top" @top 1
   # tmux shares a window resize out between the panes, so this puts btop
   # back to its height after one. The window resizes on attach too, when the
   # window manager has maximized it since the size above was read.
-  layout set-hook -t "$session" window-resized "resize-pane -t $top -y $TOP_ROWS"
+  layout set-hook -t "$session" window-resized "resize-pane -t $top -y $top_height"
   # The rail and the hub window; this replaces the hook above with one that
   # also keeps the rails' width.
   add_hub "$win"

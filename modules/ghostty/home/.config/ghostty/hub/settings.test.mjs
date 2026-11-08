@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
+import { execFileSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
@@ -76,4 +78,19 @@ test('values show with their units and labels', () => {
   assert.equal(show(row('prBabysit.interval'), 60), '60s')
   assert.equal(show(row('newAgent.task.runAs'), 'bg'), 'background')
   assert.equal(show(row('tray.foldDone'), false), 'off')
+})
+
+test('the scripts read Settings through ghostty-lib.sh, the environment winning', () => {
+  const file = fresh()
+  set('layout.topRows', 14, file)
+  const lib = fileURLToPath(new URL('../bin/ghostty-lib.sh', import.meta.url))
+  const run = script =>
+    execFileSync('bash', ['-c', `source "$1"; ${script}`, 'bash', lib], {
+      encoding: 'utf8',
+      env: { ...process.env, AGENT_HUB_SETTINGS: file, GHOSTTY_TOP_ROWS: '', GHOSTTY_RAIL_COLS: '' },
+    }).trim()
+  assert.equal(run('top_rows'), '14')
+  assert.equal(run('GHOSTTY_TOP_ROWS=7 top_rows'), '7')
+  assert.equal(run("setting layout.todoWidth '' 70"), '70')
+  assert.equal(run("setting no.such.key '' 33"), '33')
 })

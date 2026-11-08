@@ -1,20 +1,30 @@
 #!/usr/bin/env bash
-# Alt+T (layout.conf) runs this in a tmux popup over the whole window: the
-# todo list (viewer/todo-view.mjs), over the workspace or the hub alike.
-# Alt+T, Esc or q closes it; ↵ goes to an item's tab and closes it too.
-# It follows the window's tab session, like the viewer's Todo mode.
+# The todo list (viewer/todo-view.mjs) in a tmux popup over the whole window,
+# from Alt+T (layout.conf), over the workspace or the hub alike. Alt+T, Esc or
+# q closes it; ↵ goes to an item's tab and closes it too. It follows the
+# window's tab session, like the viewer's Todo mode.
+#   ghostty-todo-panel <client> <dir>        open it on that tmux client; the
+#                                            list counts dir as "this repo"
+#                                            until it reads the active tab
+#   ghostty-todo-panel --panel <session>     what runs inside the popup
 
 source "$(dirname "$(readlink -f "$0")")/ghostty-lib.sh"
 
-# The popup has no pane of its own; the client that pressed Alt+T is the
-# newest, and display reports its session.
-session=$(layout display -p '#{client_session}' 2>/dev/null)
-win=${session#layout-}
-node=$(command -v node || cat "${XDG_CACHE_HOME:-$HOME/.cache}/ghostty-layout/node" 2>/dev/null)
-if [[ -z $node ]]; then
-  echo "Todo needs Node.js, and none was found."
-  read -rsn1 -p "Press any key to close."
-  exit 1
+if [[ $1 == --panel ]]; then
+  win=${2#layout-}
+  node=$(command -v node || cat "${XDG_CACHE_HOME:-$HOME/.cache}/ghostty-layout/node" 2>/dev/null)
+  if [[ -z $node ]]; then
+    echo "Todo needs Node.js, and none was found."
+    read -rsn1 -p "Press any key to close."
+    exit 1
+  fi
+  [[ $win =~ ^[0-9]+$ ]] && export DV_TABS="$TABS_SOCKET:ghostty-$win"
+  TD_POPUP=1 exec "$node" "$GHOSTTY_CONF/viewer/todo-view.mjs" "$PWD"
 fi
-[[ $win =~ ^[0-9]+$ ]] && export DV_TABS="$TABS_SOCKET:ghostty-$win"
-TD_POPUP=1 exec "$node" "$GHOSTTY_CONF/viewer/todo-view.mjs" "$PWD"
+
+client=$1 dir=$2
+session=$(layout display -p -c "$client" '#{client_session}' 2>/dev/null)
+width=$(setting layout.todoWidth '' 70)
+height=$(setting layout.todoHeight '' 75)
+layout display-popup -c "$client" -E -w "$width%" -h "$height%" -b rounded -S "fg=#89b4fa" -s "bg=#1e1e2e" -d "$dir" \
+  "$(printf '%q ' "$GHOSTTY_CONF/bin/ghostty-todo-panel" --panel "$session")"

@@ -45,7 +45,7 @@ open_viewer() {
   local win=$1 dir=$2 tabs viewer i
   tabs=$(layout show -t "layout-$win" -v @tabs 2>/dev/null) || return
   # DV_TABS tells Diagrams and Diff whose active tab to follow.
-  viewer=$(layout split-window -d -h -b -l "${GHOSTTY_VIEWER_SHARE:-40}%" \
+  viewer=$(layout split-window -d -h -b -l "$(setting layout.viewerPercent GHOSTTY_VIEWER_SHARE 40)%" \
     -t "$tabs" -P -F '#{pane_id}' -c "$dir" \
     -e "DV_TABS=$TABS_SOCKET:ghostty-$win" -e "VIEWER_ID=$(viewer_id "$win")" \
     "$GHOSTTY_CONF/bin/ghostty-viewer" "$dir" 2>/dev/null) || return
@@ -59,27 +59,34 @@ open_viewer() {
   layout select-pane -t "$tabs"
 }
 
-# The rail's width: GHOSTTY_RAIL_COLS, else Settings' layout.railCols (6).
-rail_cols() {
-  if [[ -n ${GHOSTTY_RAIL_COLS:-} ]]; then
-    echo "$GHOSTTY_RAIL_COLS"
+# setting <key> <env var> <fallback>: a value from Settings (hub/settings.mjs).
+# The environment variable wins when it's set (pass '' for none); the
+# fallback stands in when Node can't be found or can't read it.
+setting() {
+  local key=$1 env=$2 fallback=$3 node
+  if [[ -n $env && -n ${!env:-} ]]; then
+    echo "${!env}"
     return
   fi
-  local node
   node=$(command -v node || cat "${XDG_CACHE_HOME:-$HOME/.cache}/ghostty-layout/node" 2>/dev/null)
   [[ -n $node ]] && "$node" --input-type=module -e \
-    "console.log((await import(process.argv[1])).get('layout.railCols'))" "$GHOSTTY_CONF/hub/settings.mjs" 2>/dev/null ||
-    echo 6
+    "const v = (await import(process.argv[1])).get(process.argv[2]); if (v === undefined) process.exit(1); console.log(v)" \
+    "$GHOSTTY_CONF/hub/settings.mjs" "$key" 2>/dev/null ||
+    echo "$fallback"
 }
+
+rail_cols() { setting layout.railCols GHOSTTY_RAIL_COLS 6; }
+top_rows() { setting layout.topRows GHOSTTY_TOP_ROWS 10; }
 
 # Adds the agent hub to window <win>'s outer session: the rail down the left
 # of the workspace, and a second tmux window, hub, with its own rail and the
 # hub itself. The rail's work and hub buttons, and Ctrl+Shift+A, switch
 # between the two (layout.conf). GHOSTTY_RAIL=0 leaves it all out.
 add_hub() {
-  local win=$1 session="layout-$1" cols tabs top rail hub hub_rail
+  local win=$1 session="layout-$1" cols rows tabs top rail hub hub_rail
   [[ ${GHOSTTY_RAIL:-1} == 0 ]] && return 0
   cols=$(rail_cols)
+  rows=$(top_rows)
   [[ -n $(layout show -t "$session" -v @hub 2>/dev/null) ]] && return 0
   tabs=$(layout show -t "$session" -v @tabs 2>/dev/null) || return
   local bin="$GHOSTTY_CONF/bin/ghostty-hub"
@@ -97,7 +104,7 @@ add_hub() {
   # the rails' width back after one.
   top=$(layout list-panes -s -t "$session" -F '#{pane_id} #{@top}' | awk '$2 == 1 { print $1; exit }')
   layout set-hook -t "$session" window-resized \
-    "${top:+resize-pane -t $top -y ${GHOSTTY_TOP_ROWS:-10} ; }resize-pane -t $rail -x $cols ; resize-pane -t $hub_rail -x $cols"
+    "${top:+resize-pane -t $top -y $rows ; }resize-pane -t $rail -x $cols ; resize-pane -t $hub_rail -x $cols"
 }
 
 # Makes sure window <win> has the hub's tab session, hubtabs-<win>, on the tab

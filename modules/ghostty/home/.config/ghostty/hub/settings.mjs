@@ -141,6 +141,13 @@ export const SECTIONS = [
     rows: [
       number('layout.railCols', 'Rail width', 6, { min: 5, max: 12, unit: ' cols' }),
       number('layout.diagramsPercent', 'Alt+D window size', 85, { min: 50, max: 100, step: 5, unit: '%' }, 'of the Ghostty window'),
+      number('layout.viewerPercent', 'Viewer pane width', 40, { min: 20, max: 70, step: 5, unit: '%' }, 'in new windows; GHOSTTY_VIEWER_SHARE wins'),
+      number('layout.topRows', 'btop height', 10, { min: 4, max: 30, unit: ' rows' }, 'in new windows; GHOSTTY_TOP_ROWS wins'),
+      head('Popups'),
+      number('layout.todoWidth', 'Alt+T width', 70, { min: 40, max: 100, step: 5, unit: '%' }),
+      number('layout.todoHeight', 'Alt+T height', 75, { min: 40, max: 100, step: 5, unit: '%' }),
+      number('layout.helpPercent', 'Alt+H size', 80, { min: 40, max: 100, step: 5, unit: '%' }),
+      number('layout.settingsPercent', 'Settings size', 80, { min: 40, max: 100, step: 5, unit: '%' }, 'takes effect the next time it opens'),
     ],
   },
   {

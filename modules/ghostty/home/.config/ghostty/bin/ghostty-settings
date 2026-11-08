@@ -18,5 +18,6 @@ if [[ $1 == --panel ]]; then
 fi
 
 client=$1
-layout display-popup -c "$client" -E -w 80% -h 80% -b rounded -S "fg=#89b4fa" -s "bg=#1e1e2e" \
+size=$(setting layout.settingsPercent '' 80)
+layout display-popup -c "$client" -E -w "$size%" -h "$size%" -b rounded -S "fg=#89b4fa" -s "bg=#1e1e2e" \
   "$(printf '%q ' "$GHOSTTY_CONF/bin/ghostty-settings" --panel)"
