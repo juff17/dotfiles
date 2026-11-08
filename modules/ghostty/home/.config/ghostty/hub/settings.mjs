@@ -127,6 +127,7 @@ export const SECTIONS = [
     name: 'Tray',
     where: 'the Agents widget in the panel and its Meta+A inbox',
     rows: [
+      head('Widget'),
       number('tray.flash', 'Flash on a new ▲ or ✗', 2, { min: 0, max: 10, unit: 's' }, '0 turns the flash off'),
       number('tray.noteHours', 'Notes expire after', 24, { min: 1, max: 168, unit: 'h' }, 'notify.sh items you haven’t opened'),
       bool('tray.foldDone', 'Fold done items', true, 'into one line until you press Show'),
@@ -142,6 +143,7 @@ export const SECTIONS = [
     name: 'Layout',
     where: 'the parts of every Ghostty window',
     rows: [
+      head('Window'),
       number('layout.railCols', 'Rail width', 6, { min: 5, max: 12, unit: ' cols' }),
       number('layout.diagramsPercent', 'Alt+D window size', 85, { min: 50, max: 100, step: 5, unit: '%' }, 'of the Ghostty window'),
       number('layout.viewerPercent', 'Viewer pane width', 40, { min: 20, max: 70, step: 5, unit: '%' }, 'in new windows; GHOSTTY_VIEWER_SHARE wins'),

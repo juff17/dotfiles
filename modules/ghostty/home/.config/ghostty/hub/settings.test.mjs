@@ -94,3 +94,7 @@ test('the scripts read Settings through ghostty-lib.sh, the environment winning'
   assert.equal(run("setting layout.todoWidth '' 70"), '70')
   assert.equal(run("setting no.such.key '' 33"), '33')
 })
+
+test('every section starts with a heading', () => {
+  for (const s of SECTIONS) assert.ok(s.rows[0].head, s.name)
+})
