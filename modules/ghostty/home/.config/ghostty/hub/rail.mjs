@@ -76,10 +76,10 @@ function draw() {
   lines.push(count('✻', c.working, P.blue))
   lines.push(count('✓', c.done, P.green))
   lines.push(count('○', c.idle, P.sub))
-  const tail = (icon, label, key) => [render([[` ${icon}`, fg(P.sub)]], w, BG), render([[` ${label}`, fg(P.sub)]], w, BG), render([[` ${key}`, fg(P.overlay0)]], w, BG)]
+  const tail = (icon, label) => [render([[` ${icon}`, fg(P.sub)]], w, BG), render([[` ${label}`, fg(P.sub)]], w, BG)]
   const bottom = [
-    [newAgent, tail('+', 'new', 'alt+n')],
-    [help, tail('?', 'help', 'alt+h')],
+    [newAgent, tail('+', 'new')],
+    [help, tail('?', 'help')],
   ]
   const height = bottom.reduce((n, [, ls]) => n + ls.length + 1, 0)
   while (lines.length < rows() - height) lines.push(render([], w, BG))
