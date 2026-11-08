@@ -144,26 +144,43 @@ test('takes no clicks: a click is a mouse report, never a key', () => {
   assert.ok(click.every(t => t.mouse && !t.key))
 })
 
-// The Prompts section, on agent `id`.
-function onAgent(id) {
-  const s = start('prompts')
-  s.sel = AGENTS.findIndex(a => a.id === id)
+// The section a row is in, with that row selected: an agent's prompt by id,
+// or a setting by key.
+function onRow(match) {
+  const sec = SECTIONS.find(x => x.rows.some(match))
+  const s = start(sec.id)
+  s.sel = items(s).findIndex(match)
   return s
 }
+const onAgent = id => onRow(r => r.prompt === id)
+const onSkill = key => onRow(r => r.key === key)
 const write = (id, text) => {
   mkdirSync(process.env.AGENT_HUB_PROMPTS, { recursive: true })
   writeFileSync(fileOf(id), `${header(id)}${text}`)
 }
 
-test('Prompts lists the agents, and ↑↓ moves between them', () => {
-  const s = start('prompts')
-  assert.deepEqual(items(s), AGENTS)
-  press(s, DOWN, DOWN)
-  assert.equal(current(s).id, AGENTS[2].id)
+test('every agent’s prompt sits in a section with its settings, after its skill', () => {
+  for (const a of AGENTS) {
+    const sec = SECTIONS.filter(x => x.rows.some(r => r.prompt === a.id))
+    assert.equal(sec.length, 1, a.id)
+    const rows = sec[0].rows
+    const at = rows.findIndex(r => r.prompt === a.id)
+    if (a.skillKey) assert.equal(rows[at - 1].key, a.skillKey, `${a.id}'s skill is the row above it`)
+    else assert.ok(!rows.some(r => r.type === 'skill'), `${a.id} has its own skill`)
+  }
+  assert.ok(!SECTIONS.some(x => x.id === 'prompts'), 'no section of prompts on their own')
+})
+
+test('↑↓ moves through settings and prompts alike', () => {
+  const s = onSkill('prompts.handoff.skill')
+  press(s, DOWN)
+  assert.equal(current(s).prompt, 'todo-handoff')
+  press(s, DOWN)
+  assert.equal(current(s).key, 'todo.filing.model')
 })
 
 test('← and → walk an agent’s skill round none and the skills on disk', () => {
-  const s = onAgent('todo-handoff')
+  const s = onSkill('prompts.handoff.skill')
   press(s, RIGHT)
   assert.equal(get('prompts.handoff.skill'), 'alpha')
   press(s, RIGHT, RIGHT)
@@ -174,12 +191,14 @@ test('← and → walk an agent’s skill round none and the skills on disk', ()
 
 test('an agent linked to its skill has none to pick', () => {
   const s = onAgent('pr-babysit')
-  press(s, RIGHT, LEFT)
-  for (const r of SECTIONS.find(x => x.id === 'prompts').rows) assert.equal(get(r.key), 'none')
+  press(s, RIGHT, LEFT, ' ')
+  for (const r of SECTIONS.flatMap(x => x.rows).filter(r => r.type === 'skill')) assert.equal(get(r.key), 'none')
   assert.equal(s.note, null)
+  assert.equal(s.view, 'pr-babysit', 'space opens it, as ↵ does')
 })
 
-test('e asks for the editor, on an agent and in its open prompt', () => {
+test('e asks for the editor, on an agent’s prompt and in its open prompt', () => {
+  assert.equal(onKey(onSkill('prompts.task.skill'), 'e'), undefined, 'not on other rows')
   const s = onAgent('task')
   assert.equal(onKey(s, 'e'), 'edit')
   press(s, 'v')
@@ -223,8 +242,7 @@ test('r with no instructions does nothing', () => {
 
 test('the whole prompt puts the skill first and your instructions last', () => {
   write('todo-handoff', 'Run ./test.sh before you commit.\nKeep commits small.')
-  const s = onAgent('todo-handoff')
-  press(s, RIGHT)
+  press(onSkill('prompts.handoff.skill'), RIGHT)
   const [part] = fullPrompt('todo-handoff')
   assert.match(part.text, /^\/alpha Work on this item from my todo list \(todo \{id\}/)
   assert.match(part.text, /ghostty-todo done \{id\} Run \.\/test\.sh before you commit\. Keep commits small\.$/)
@@ -238,8 +256,7 @@ test('a linked agent’s prompt is its skill and target, then yours', () => {
 
 test('the filer gets your instructions in its system prompt and the skill in its message', () => {
   write('todo-filing', 'Prefer the dotfiles repo.')
-  const s = onAgent('todo-filing')
-  press(s, RIGHT, RIGHT)
+  press(onSkill('prompts.filing.skill'), RIGHT, RIGHT)
   const [system, message] = fullPrompt('todo-filing')
   assert.ok(system.text.startsWith(fixedPart('todo-filing')))
   assert.ok(system.text.endsWith('\nPrefer the dotfiles repo.'))

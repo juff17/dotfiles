@@ -1,19 +1,20 @@
 // The ⚙ settings panel's state and what keys do to it, apart from the
 // terminal so it can be tested; settings-view.mjs draws it. The state is
 // { sec, sel, flag, scroll, note, view, viewScroll, confirm }: the section,
-// the setting in it, which flag ←/→ is on in a row of flags, the body's
-// scroll, the footer's note (set when a save fails), the agent whose whole
-// prompt is open over the panel and its scroll, and the agent whose
-// instructions a second r clears. Changes are saved to hub/settings.mjs's
-// file as they're made. It's keys only: clicks do nothing.
+// the row in it, which flag ←/→ is on in a row of flags, the body's scroll,
+// the footer's note (set when a save fails), the agent whose whole prompt is
+// open over the panel and its scroll, and the agent whose instructions a
+// second r clears. Changes are saved to hub/settings.mjs's file as they're
+// made. It's keys only: clicks do nothing.
 //
-// The Prompts section lists agents (hub/prompts.mjs AGENTS) instead of
-// settings: ←/→ picks an agent's skill, e edits your instructions for it, v or
-// ↵ opens its whole prompt.
+// An agent's prompt is a row beside its settings ({ prompt: id }): e edits
+// your instructions for it, v or ↵ opens the whole prompt, and r twice clears
+// your instructions. Its skill, where it has one to pick, is the setting
+// above it.
 
 import { BOLD, P, bg, fg, width } from '../hub/term.mjs'
 import { SECTIONS, load, reset, set, show, step, toggleFlag } from '../hub/settings.mjs'
-import { AGENTS, clear, compose, instructions, stepSkill } from '../hub/prompts.mjs'
+import { agent, clear, compose, instructions, stepSkill } from '../hub/prompts.mjs'
 import { filerMessage, filerPrompt, filerSystem, handoffSpec } from './todo.mjs'
 
 export const NAV = 22
@@ -34,9 +35,8 @@ export const start = id => ({
   confirm: null,
 })
 
-export const isPrompts = s => SECTIONS[s.sec].id === 'prompts'
-// The settings of the section, or in Prompts its agents.
-export const items = s => (isPrompts(s) ? AGENTS : SECTIONS[s.sec].rows.filter(r => r.key))
+// The rows ↑/↓ moves between: the section's settings and agents' prompts.
+export const items = s => SECTIONS[s.sec].rows.filter(r => r.key || r.prompt)
 export const current = s => items(s)[s.sel]
 
 // A setting's value as spans, `on` when it's the selected one.
@@ -133,41 +133,44 @@ export function pickRow(s, i) {
   s.flag = 0
 }
 
-// ←/→: the next value, in a row of flags the next flag, or in Prompts the
-// agent's next skill (none for one linked to its skill).
+// ←/→: the next value, the next skill on disk, or in a row of flags the
+// next flag. A prompt has nothing to step.
 export function change(s, dir) {
   const r = current(s)
-  if (isPrompts(s)) {
-    if (r.skillKey) save(s, () => set(r.skillKey, stepSkill(load()[r.skillKey], dir)))
-  } else if (r.type === 'flags') s.flag = (s.flag + dir + r.choices.length) % r.choices.length
+  if (r.prompt) return
+  if (r.type === 'flags') s.flag = (s.flag + dir + r.choices.length) % r.choices.length
+  else if (r.type === 'skill') save(s, () => set(r.key, stepSkill(load()[r.key], dir)))
   else save(s, () => set(r.key, step(r, load()[r.key], dir)))
 }
 
-// Space or ↵: a switch or flag turned over, else the next value.
+// Space or ↵: a switch or flag turned over, a prompt opened, else the next
+// value.
 export function toggle(s) {
   const r = current(s)
+  if (r.prompt) return openView(s)
+  if (r.type === 'skill') return change(s, 1)
   const v = load()[r.key]
   if (r.type === 'flags') save(s, () => set(r.key, toggleFlag(r, v, r.choices[s.flag].value)))
   else save(s, () => set(r.key, step(r, v, 1)))
 }
 
 export function openView(s) {
-  s.view = current(s).id
+  s.view = current(s).prompt
   s.viewScroll = 0
 }
 
-// r: a setting back to its default. In Prompts it clears your instructions,
-// on the second r in a row, as there's no default to go back to.
+// r: a setting back to its default. On a prompt it clears your
+// instructions, on the second r in a row, as there's no default to go back to.
 function resetKey(s, confirming) {
   const r = current(s)
-  if (!isPrompts(s)) return save(s, () => reset(r.key))
-  if (!instructions(r.id)) return
-  if (confirming !== r.id) {
-    s.confirm = r.id
-    s.note = { text: `r again clears your ${r.name} instructions`, color: P.peach }
+  if (!r.prompt) return save(s, () => reset(r.key))
+  if (!instructions(r.prompt)) return
+  if (confirming !== r.prompt) {
+    s.confirm = r.prompt
+    s.note = { text: `r again clears your ${agent(r.prompt).name} instructions`, color: P.peach }
     return
   }
-  save(s, () => clear(r.id))
+  save(s, () => clear(r.prompt))
 }
 
 // A key while an agent's whole prompt is open; true when it closes it.
@@ -196,7 +199,7 @@ export function onKey(s, key) {
   s.confirm = null
   if (confirming && s.note?.color === P.peach) s.note = null
   if (s.view) return onViewKey(s, key) === 'edit' ? 'edit' : undefined
-  const prompts = isPrompts(s)
+  const onPrompt = Boolean(current(s).prompt)
   const actions = {
     q: () => 'quit',
     '\x1b': () => 'quit',
@@ -214,10 +217,10 @@ export function onKey(s, key) {
     l: () => change(s, 1),
     '\x1b[D': () => change(s, -1),
     '\x1b[C': () => change(s, 1),
-    ' ': () => (prompts ? undefined : toggle(s)),
-    '\r': () => (prompts ? openView(s) : toggle(s)),
+    ' ': () => toggle(s),
+    '\r': () => toggle(s),
     r: () => resetKey(s, confirming),
-    ...(prompts && { e: () => 'edit', v: () => openView(s) }),
+    ...(onPrompt && { e: () => 'edit', v: () => openView(s) }),
   }
   if (!Object.hasOwn(actions, key)) return undefined
   const result = actions[key]()

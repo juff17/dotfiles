@@ -23,7 +23,10 @@ const bool = (key, label, def, sub = '') => ({ key, label, sub, type: 'bool', de
 const flags = (key, label, choices, def, sub = '') => ({ key, label, sub, type: 'flags', choices: opts(choices), default: def })
 // A skill the agent's prompt runs through, by name, or none. The names come
 // from the skills on disk (hub/prompts.mjs), so any name reads as valid.
-const skill = (key, label) => ({ key, label, sub: '', type: 'skill', default: 'none' })
+const skill = key => ({ key, label: 'Skill', sub: 'its prompt runs through it; from ~/.claude/skills', type: 'skill', default: 'none' })
+// An agent's prompt (hub/prompts.mjs): not a setting, but a row the panel
+// shows beside the agent's settings, where its instructions are edited.
+const prompt = id => ({ prompt: id })
 
 const MODEL = ['default', 'opus', 'sonnet', 'haiku']
 const MODE = ['default', 'auto', 'acceptEdits', 'plan']
@@ -44,8 +47,8 @@ export const SECTIONS = [
       ...agent('newAgent.task', 'opus'),
       choice('newAgent.task.runAs', 'Run as', [['tab', 'new tab'], ['bg', 'background']], 'tab'),
       choice('newAgent.task.branch', 'Branch', [['worktree', 'worktree'], ['current', 'current branch']], 'worktree'),
-      head('Log watcher'),
-      ...agent('newAgent.logs', 'sonnet'),
+      skill('prompts.task.skill'),
+      prompt('task'),
       head('Form'),
       number('newAgent.recent', 'Recent folders shown', 8, { min: 1, max: 8 }, 'under Folder; 8 is all the form has room for'),
     ],
@@ -57,6 +60,7 @@ export const SECTIONS = [
     rows: [
       head('Agent'),
       ...agent('newAgent.pr', 'sonnet', 'when started from New agent'),
+      prompt('pr-babysit'),
       head('Watcher'),
       number('prBabysit.interval', 'Check the PR every', 60, { min: 15, max: 600, step: 15, unit: 's' }, 'watch_pr.py --interval'),
       number('prBabysit.stuckAfter', 'A job is stuck after', 30, { min: 5, max: 240, step: 5, unit: 'm' }, 'waiting for a runner; watch_pr.py --stuck-after'),
@@ -66,8 +70,12 @@ export const SECTIONS = [
   {
     id: 'logger',
     name: 'Log watcher',
-    where: 'what every log watcher (logger’s watch_logs.py) passes on',
+    where: 'log watchers started from New agent, and what every watch_logs.py passes on',
     rows: [
+      head('Agent'),
+      ...agent('newAgent.logs', 'sonnet', 'when started from New agent'),
+      prompt('logger'),
+      head('Watcher'),
       number('logger.dedup', 'Hide repeats for', 120, { min: 0, max: 3600, step: 30, unit: 's' }, 'the same line again within this is dropped; 0 keeps every one; --dedup'),
       number('logger.floodLimit', 'Most lines per 10 s', 25, { min: 5, max: 200, step: 5 }, 'past this, lines are dropped and counted'),
       number('logger.traceLines', 'Stack trace lines kept', 15, { min: 0, max: 100, step: 5 }, 'after the error line that starts one'),
@@ -85,10 +93,14 @@ export const SECTIONS = [
       choice('todo.handoff.effort', 'Effort', EFFORT, 'medium'),
       choice('todo.handoff.runAs', 'Run in', [['tab', 'new tab'], ['bg', 'background']], 'tab', 't in the picker; the alt+t popup outside a window always runs in the background'),
       choice('todo.handoff.branch', 'Branch', [['worktree', 'own worktree'], ['branch', 'branch it was added on']], 'worktree', 'b in the picker; only for todos added in git'),
+      skill('prompts.handoff.skill'),
+      prompt('todo-handoff'),
       head('Filing'),
       choice('todo.filing.model', 'Model', [['haiku', 'haiku 5.5'], ['sonnet', 'sonnet 5.5']], 'haiku', 'writes the title, category and note'),
       choice('todo.filing.effort', 'Effort', ['low', 'medium', 'high'], 'medium'),
       number('todo.filing.limit', 'Give up after', 3, { min: 1, max: 10, unit: 'm' }, 'then the item shows the error'),
+      skill('prompts.filing.skill'),
+      prompt('todo-filing'),
       head('List'),
       number('todo.keepDone', 'Keep done items', 7, { min: 1, max: 60, unit: 'd' }, 'under “done today”, then dropped'),
       number('todo.noteSecs', 'Notes show for', 4, { min: 2, max: 30, unit: 's' }, 'what the list says after you add, hand off or finish something'),
@@ -161,18 +173,6 @@ export const SECTIONS = [
       number('viewer.maxZoom', 'Most zoom', 16, { min: 2, max: 32, unit: '×' }, 'big diagrams can stop sooner: the picture has only so many cells'),
       head('Diff'),
       number('viewer.scrollLines', 'Lines per scroll', 3, { min: 1, max: 20 }, 'a wheel notch, or J / K'),
-    ],
-  },
-  {
-    // Drawn as one block per agent (hub/prompts.mjs AGENTS) rather than these
-    // rows, which hold just the skills that can be picked.
-    id: 'prompts',
-    name: 'Prompts',
-    where: 'what each agent is told: its skill, the fixed part, then your instructions',
-    rows: [
-      skill('prompts.task.skill', 'Task skill'),
-      skill('prompts.handoff.skill', 'Todo hand-off skill'),
-      skill('prompts.filing.skill', 'Todo filing skill'),
     ],
   },
 ]

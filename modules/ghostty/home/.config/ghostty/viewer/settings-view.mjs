@@ -11,8 +11,8 @@ import { spawnSync } from 'node:child_process'
 
 import { BOLD, P, bg, enter, fg, leave, paint, render, split, tokens, width } from '../hub/term.mjs'
 import { SECTIONS, settingsFile, load, show } from '../hub/settings.mjs'
-import { AGENTS, ensureFile, instructions, skillOf } from '../hub/prompts.mjs'
-import { BOTTOM, NAV, TOP, VALUE, current, fixedPart, fullPrompt, isPrompts, onKey, start, valueSpans, wrap } from './settings-nav.mjs'
+import { AGENTS, ensureFile, instructions } from '../hub/prompts.mjs'
+import { BOTTOM, NAV, TOP, VALUE, current, fullPrompt, onKey, start, valueSpans, wrap } from './settings-nav.mjs'
 
 const s = start(process.argv[2])
 
@@ -24,8 +24,9 @@ const SEL = bg(P.surface0)
 const tilde = p => p.replace(process.env.HOME ?? '\0', '~')
 
 // The right side: each heading, then two lines a setting: its name and value,
-// and what it does. `at` and `end` are each setting's first and last line,
-// for scrolling.
+// and what it does. An agent's prompt shows the start of what it's sent, and
+// your instructions' first line under that. `at` and `end` are each row's
+// first and last line, for scrolling.
 function content(w, values) {
   const lines = []
   const at = []
@@ -39,6 +40,13 @@ function content(w, values) {
     }
     const on = i === s.sel
     const fill = on ? SEL : BASE
+    if (r.prompt) {
+      at.push(lines.length)
+      lines.push(...promptLines(r.prompt, w, on, fill))
+      end.push(lines.length - 1)
+      i++
+      continue
+    }
     const v = values[r.key]
     const changed = JSON.stringify(v) !== JSON.stringify(r.default)
     const vw = r.type === 'flags' ? Math.min(w - 20, r.choices.reduce((n, c) => n + width(c.label) + 3, 0)) : VALUE
@@ -55,42 +63,18 @@ function content(w, values) {
   return { lines, at, end }
 }
 
-// Prompts: a block per agent, in three bands: its skill, the fixed part
-// (dimmed, its first lines) and your instructions (bright).
-const BAND = 8
-const ACT = 10
-const FIXED_LINES = 3
-function promptBlocks(w) {
-  const lines = []
-  const at = []
-  const end = []
-  const tw = w - BAND - ACT
-  AGENTS.forEach((a, i) => {
-    const on = i === s.sel
-    const fill = on ? SEL : BASE
-    const dim = fg(on ? P.sub : P.overlay1)
-    const band = (name, spans, act = '') =>
-      lines.push(render([[`  ${name}`, dim]], BAND, fill) + render(spans, tw, fill) + render([[act, dim]], ACT, fill))
-    if (lines.length) lines.push(render([], w, BASE))
-    at.push(lines.length)
-    lines.push(render([[a.name.toUpperCase(), BOLD + fg(P.peach)]], w, fill))
-    if (a.linked) band('skill', [[fixedPart(a.id), dim]], 'linked')
-    else {
-      const skill = skillOf(a.id)
-      const text = skill ? `/${skill}` : 'none'
-      band('skill', on ? [['‹ ', fg(P.blue)], [text, BOLD + fg(P.text)], [' ›', fg(P.blue)]] : [[text, fg(skill ? P.text : P.overlay1)]])
-      const fixed = wrap(fixedPart(a.id), tw)
-      fixed.slice(0, FIXED_LINES).forEach((l, n) => {
-        const more = n === FIXED_LINES - 1 && fixed.length > FIXED_LINES
-        band(n === 0 ? 'fixed' : '', [[more ? `${l.slice(0, -2)} …` : l, dim]], n === 0 ? 'locked' : '')
-      })
-    }
-    const yours = instructions(a.id)
-    const first = wrap(yours, tw)
-    band('yours', yours ? [[first[0] + (first.length > 1 ? ' …' : ''), fg(P.text)]] : [['(none)', fg(P.overlay1)]], 'e edit')
-    end.push(lines.length - 1)
-  })
-  return { lines, at, end }
+function promptLines(id, w, on, fill) {
+  const yours = instructions(id)
+  const count = yours ? yours.split('\n').filter(l => l.trim()).length : 0
+  const value = count ? `${count} line${count === 1 ? '' : 's'} of yours` : 'none of yours'
+  const sent = fullPrompt(id)[0].text.replace(/\s*\n\s*/g, ' ')
+  const lines = [
+    render([[count ? '• ' : '  ', fg(P.peach)], ['Prompt', (on ? BOLD : '') + fg(P.text)]], w - VALUE, fill) +
+      render([[value, on ? BOLD + fg(P.text) : fg(P.text)]], VALUE, fill),
+    render([[`  ${sent}`, fg(P.overlay1)]], w, fill),
+  ]
+  if (yours) lines.push(render([[`  ${wrap(yours, w)[0]}`, fg(P.text)]], w, fill))
+  return lines
 }
 
 function navRow(i) {
@@ -110,7 +94,7 @@ function footerRight() {
   if (s.note) return [[`${s.note.text} `, fg(s.note.color)]]
   // The prompts folder's full path is too long beside the keys; it's in the
   // dotfiles repo, beside hub/.
-  const id = s.view ?? (isPrompts(s) && current(s).id)
+  const id = s.view ?? current(s).prompt
   return [[`${id ? `prompts/${id}.md` : `saved to ${tilde(settingsFile())}`} `, fg(P.overlay1)]]
 }
 
@@ -127,7 +111,7 @@ function drawView(w) {
   const room = bodyRows()
   s.viewScroll = Math.max(0, Math.min(s.viewScroll, body.length - room))
   const lines = [
-    split([[` Settings · Prompts › ${a.name}`, BOLD + fg(P.blue)]], [['esc', fg(P.text)], [' back ', fg(P.sub)]], w, BASE),
+    split([[` Settings · ${SECTIONS[s.sec].name} › ${a.name} prompt`, BOLD + fg(P.blue)]], [['esc', fg(P.text)], [' back ', fg(P.sub)]], w, BASE),
     render([], w, BASE),
     render([[` what ${a.about} is sent; {braces} are filled in when it starts`, fg(P.sub)]], w, BASE),
     render([], w, BASE),
@@ -144,7 +128,7 @@ function draw() {
   const w = cols()
   if (s.view) return drawView(w)
   const right = w - NAV - 2
-  const { lines: body, at, end } = isPrompts(s) ? promptBlocks(right) : content(right, load())
+  const { lines: body, at, end } = content(right, load())
   // Keep the selected setting in view, with the line above it, which is its
   // heading for the first under one; the first setting scrolls to the top.
   const first = at[s.sel] ?? 0
@@ -166,14 +150,14 @@ function draw() {
     lines.push(`${nav}${render([['│', fg(P.surface0)]], 1, BASE)}${BASE} ${line}`)
   }
   const r = current(s)
-  const keys = isPrompts(s)
-    ? [...(r.linked ? [] : [['←→', 'skill']]), ['e', 'edit yours'], ['v', 'full prompt'], ['r', 'clear yours']]
+  const keys = r.prompt
+    ? [['e', 'edit yours'], ['v', 'full prompt'], ['r', 'clear yours']]
     : r.type === 'flags'
       ? [['←→', 'pick'], ['space', 'turn on/off'], ['r', 'default']]
       : r.type === 'bool'
         ? [['space', 'turn on/off'], ['r', 'default']]
         : [['←→', 'change'], ['r', 'default']]
-  lines.push(split(hintSpans([['↑↓', isPrompts(s) ? 'agent' : 'setting'], ['tab', 'section'], ...keys]), footerRight(), w, BASE))
+  lines.push(split(hintSpans([['↑↓', 'setting'], ['tab', 'section'], ...keys]), footerRight(), w, BASE))
   paint(lines.slice(0, rows()))
 }
 
@@ -185,7 +169,7 @@ const quit = () => {
 // Your instructions for the selected agent (or the open one) in $VISUAL or
 // $EDITOR, else nvim or vi, on the panel's terminal; back to the panel after.
 function edit() {
-  const id = s.view ?? current(s).id
+  const id = s.view ?? current(s).prompt
   let file
   try {
     file = ensureFile(id)
