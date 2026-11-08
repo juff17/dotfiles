@@ -283,7 +283,8 @@ export function key(k, paste) {
   if (choice && (k === '\x1b[C' || k === '\x1b[D' || k === ' ')) {
     const [n, prop] = choice
     if (!n) return
-    d[prop] = (d[prop] + (k === '\x1b[D' ? n - 1 : 1)) % n
+    // Recent is -1 while Folder isn't one of them: → takes the first, ← the last.
+    d[prop] = d[prop] < 0 ? (k === '\x1b[D' ? n - 1 : 0) : (d[prop] + (k === '\x1b[D' ? n - 1 : 1)) % n
     if (prop === 'recent') {
       const p = tilde(recents[d.recent] ?? '')
       d.folder = { text: p, at: p.length }
@@ -383,7 +384,8 @@ export function form({ folder = '', recents: given = [] } = {}) {
     model: 0,
     mode: 0,
     effort: 0,
-    recent: Math.max(0, recents.indexOf(root)),
+    // Which recent Folder is, -1 for none, so none shows as chosen.
+    recent: recents.indexOf(root),
     field: 'prompt',
     folder: { text: tilde(root), at: tilde(root).length },
     prompt: { text: '', at: 0 },

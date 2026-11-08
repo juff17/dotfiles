@@ -56,7 +56,7 @@ test('the folder is the repo when given a worktree, else the newest recent, else
   assert.equal(form().folder.text, '~/projects')
   // Outside home the path stays as it is.
   assert.equal(form({ folder: '/srv/app' }).folder.text, '/srv/app')
-  assert.equal(form({ folder: '/srv/app', recents: ['/x'] }).recent, 0)
+  assert.equal(form({ folder: '/srv/app', recents: ['/x'] }).recent, -1)
 })
 
 test('Esc and Ctrl+C cancel without a spec', () => {
@@ -209,8 +209,21 @@ test('Recent steps through the recents and fills Folder; with none it does nothi
   assert.equal(d.folder.text, '/srv/app')
   const e = at(form({ folder: P }), 'recent')
   keys(RIGHT)
-  assert.equal(e.recent, 0)
+  assert.equal(e.recent, -1)
   assert.equal(e.folder.text, '~/projects')
+})
+
+test('with Folder not among the recents, → takes the first recent and ← the last', () => {
+  const recents = [join(P, 'Beta'), '/srv/app', join(P, 'alphabet')]
+  const d = at(form({ folder: join(P, 'alpha'), recents }), 'recent')
+  assert.equal(d.recent, -1)
+  keys(RIGHT)
+  assert.equal(d.recent, 0)
+  assert.equal(d.folder.text, '~/projects/Beta')
+  const e = at(form({ folder: join(P, 'alpha'), recents }), 'recent')
+  keys(LEFT)
+  assert.equal(e.recent, 2)
+  assert.equal(e.folder.text, '~/projects/alphabet')
 })
 
 test('text fields: arrows, home and end, backspace, ctrl+u and ctrl+w', () => {
