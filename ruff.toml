@@ -1,0 +1,19 @@
+target-version = "py314"
+
+[lint]
+# Ruff's default set, minus rules the existing scripts break on purpose or for
+# style only. Turn one back on once the code meets it.
+ignore = [
+  "PLW1510", # subprocess.run without check=: the scripts read returncode themselves
+  "RUF059",  # unused unpacked variable: tuple unpacking documents the shape
+  "UP031",   # printf-style formatting
+  "EXE001",  # shebang on a non-executable file: run as `python3 file.py`
+  "FURB162", # fromisoformat with a "Z" replace: style only
+  "RUF012",  # mutable class default in test fixtures
+  "ISC004",  # implicit string concat in a collection
+  "SIM115",  # open() outside a with block
+  "SIM117",  # nested with statements
+  "SIM905",  # str.split on a literal: the stopword string reads better than a list
+  "S112",    # try/except/continue
+  "BLE001",  # blind except
+]

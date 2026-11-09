@@ -63,7 +63,7 @@ Each clause earns its place:
 - **capability** — *what* they want to be able to do. Describe the need, not
   the implementation.
 - **benefit** — *why* it's worth doing. The ticket should deliver something meaningful,
-  and the "so that" is where you say what. If you can't finish the sentence, question 
+  and the "so that" is where you say what. If you can't finish the sentence, question
   whether the ticket is worth its own slot.
 
 Most work fits this form even when it isn't a shiny user feature. For a bug,

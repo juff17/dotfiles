@@ -32,9 +32,8 @@ import subprocess
 import sys
 import threading
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-
 
 # The hub's Settings panel (ghostty module, hub/settings.mjs, its Log watcher
 # section) keeps the limits below and --dedup's default here. A missing file,
@@ -89,12 +88,12 @@ def emit(line):
 
 
 def now_utc():
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def rfc3339(dt):
     # A timestamp with no offset is taken as local time, as astimezone() does.
-    return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return dt.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def parse_since(value):
@@ -109,11 +108,11 @@ def parse_since(value):
 
 def normalize(text):
     """Collapse ids, numbers and timestamps so repeats of one message match."""
-    text = re.sub(r"\b[0-9a-f]{8}-[0-9a-f-]{27}\b", "<uuid>", text, flags=re.I)
-    text = re.sub(r"\b[0-9a-f]{12,}\b", "<hex>", text, flags=re.I)
+    text = re.sub(r"\b[0-9a-f]{8}-[0-9a-f-]{27}\b", "<uuid>", text, flags=re.IGNORECASE)
+    text = re.sub(r"\b[0-9a-f]{12,}\b", "<hex>", text, flags=re.IGNORECASE)
     # Short hashes and ids (git's 7-char abbrevs, 8-char trace ids) only when
     # they mix letters and digits, so plain words and numbers are left alone.
-    text = re.sub(r"\b(?=[0-9a-f]*[a-f])(?=[0-9a-f]*\d)[0-9a-f]{7,11}\b", "<hex>", text, flags=re.I)
+    text = re.sub(r"\b(?=[0-9a-f]*[a-f])(?=[0-9a-f]*\d)[0-9a-f]{7,11}\b", "<hex>", text, flags=re.IGNORECASE)
     text = re.sub(r"\d+", "<n>", text)
     return text
 

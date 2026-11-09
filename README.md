@@ -89,6 +89,29 @@ those places is picked up without changing `test.sh`. When you change a behaviou
 test that pins it in the same commit. See [docs/ghostty.md](docs/ghostty.md#tests) and
 [modules/claude/README.md](modules/claude/README.md#tests) for what each suite covers.
 
+## Pre-commit
+
+[pre-commit](https://pre-commit.com) lints the staged files, then runs the test suite for each part
+they touch. Set it up once per clone:
+
+```bash
+uv tool install pre-commit
+pre-commit install
+pre-commit run --all-files   # every hook on every file, by hand
+```
+
+| Hook | Checks | Config |
+|---|---|---|
+| `pre-commit-hooks` | JSON, YAML and TOML parse; no merge markers, private keys or large files; trailing whitespace and final newlines (fixed in place) | |
+| `ruff check` | Python | [`ruff.toml`](ruff.toml) |
+| `shellcheck` | shell scripts, warnings and errors only | [`.shellcheckrc`](.shellcheckrc) |
+| `biome lint` | JS and TS, safe fixes applied in place | [`biome.json`](biome.json) |
+| `tests (ghostty / claude / mods)` | `./test.sh <suite>`, only when a file that suite covers is staged | |
+
+The linter configs leave out rules the existing code breaks on purpose; each config says why.
+`z.sh` (upstream) and `.p10k.zsh` (generated) are skipped. CI runs the same lint hooks in its `lint`
+job, and the tests in their own jobs.
+
 ## Machine-local shell settings
 `.zshrc` sources `~/.zshrc.local` last if it exists. Put anything specific to one machine there (CA bundle
 overrides, tokens, work-only settings); it isn't tracked here.

@@ -1,0 +1,4 @@
+# Sourced files are found at run time from $HOME, not from this repo.
+disable=SC1091
+# False positive on assignments like mode=diff, where the value is a command name.
+disable=SC2209

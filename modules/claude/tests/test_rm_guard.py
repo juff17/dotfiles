@@ -4,7 +4,6 @@ nothing here runs rm."""
 
 import json
 import os
-import shutil
 import subprocess
 import tempfile
 import unittest
@@ -181,7 +180,7 @@ class Bypasses(Guard):
         self.assertNotAllowed(f"bash -c 'rm {PAD}/x'")
         self.assertAsks(f'bash -c "rm {PAD}/x; rm -rf /etc"')
         self.assertNotAllowed(f"bash -c rm {PAD}/x")
-        self.assertNotAllowed(f"python3 - <<EOF\nimport os; os.remove('/etc/x')\nEOF")
+        self.assertNotAllowed("python3 - <<EOF\nimport os; os.remove('/etc/x')\nEOF")
         for wrapper in ("sudo", "xargs", "command", "env", "nohup", "time", "nice", "exec"):
             self.assertAsks(f"{wrapper} rm {PAD}/x")
 

@@ -1,0 +1,63 @@
+# Linters run on the staged files; each test suite runs only when a file it
+# covers is staged. CI runs the lint hooks; its own jobs run the tests.
+#   pre-commit install                  once per clone
+#   pre-commit run --all-files          everything, by hand
+
+# z.sh is upstream rupa/z, and .p10k.zsh is written by `p10k configure`.
+exclude: ^modules/shell/home/(\.scripts/z\.sh|\.p10k\.zsh)$
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-merge-conflict
+      - id: check-added-large-files
+      - id: detect-private-key
+      - id: check-json
+      - id: check-yaml
+      - id: check-toml
+      - id: check-executables-have-shebangs
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.17.4
+    hooks:
+      - id: ruff-check
+
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.11.0.1-1
+    hooks:
+      - id: shellcheck
+        args: [--severity=warning]
+
+  - repo: https://github.com/biomejs/pre-commit
+    rev: v2.6.4
+    hooks:
+      - id: biome-lint
+        additional_dependencies: ["@biomejs/biome@2.6.6"]
+
+  # pass_filenames: false because test.sh runs a whole suite, not single files.
+  - repo: local
+    hooks:
+      - id: test-ghostty
+        name: tests (ghostty)
+        entry: ./test.sh ghostty
+        language: system
+        pass_filenames: false
+        files: ^modules/ghostty/home/\.config/ghostty/(hub|viewer)/.*\.mjs$
+      - id: test-claude
+        name: tests (claude)
+        entry: ./test.sh claude
+        language: system
+        pass_filenames: false
+        files: ^modules/claude/(?!mods/)
+        exclude: \.md$
+      - id: test-mods
+        name: tests (mods)
+        entry: ./test.sh mods
+        language: system
+        pass_filenames: false
+        files: ^modules/claude/mods/
+        exclude: \.md$

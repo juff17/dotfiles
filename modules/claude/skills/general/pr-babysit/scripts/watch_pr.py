@@ -26,9 +26,8 @@ import subprocess
 import sys
 import time
 import urllib.parse
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-
 
 # The hub's Settings panel (ghostty module, hub/settings.mjs) keeps the
 # defaults for --interval and --stuck-after here. A missing file, or a value
@@ -63,7 +62,7 @@ def when(iso):
 def age_minutes(iso):
     if not iso:
         return 0
-    return (datetime.now(timezone.utc) - when(iso)).total_seconds() / 60
+    return (datetime.now(UTC) - when(iso)).total_seconds() / 60
 
 
 class AuthError(Exception):
@@ -79,7 +78,7 @@ def run(cmd, cwd=None):
     if p.returncode != 0:
         err = (p.stderr or p.stdout).strip()
         last = err.splitlines()[-1] if err else f"exit {p.returncode}"
-        if re.search(r"\b401\b|Bad credentials|Unauthorized", err, re.I):
+        if re.search(r"\b401\b|Bad credentials|Unauthorized", err, re.IGNORECASE):
             raise AuthError(last)
         raise ApiError(last)
     return p.stdout

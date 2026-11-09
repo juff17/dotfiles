@@ -5,7 +5,7 @@
 #   ./test.sh ghostty    just these: ghostty, claude, mods
 set -uo pipefail
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit 1
 ROOT=$PWD
 GHOSTTY=modules/ghostty/home/.config/ghostty
 
