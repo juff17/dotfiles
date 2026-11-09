@@ -108,7 +108,7 @@ let only = false
 let showDone = false
 let cursorId = ''
 // The ids m marked, for w to hand off together.
-let marked = new Set()
+const marked = new Set()
 let scroll = 0
 // What the status row is asking for: a message for Claude; a title, a
 // category and a note; changes to an item; how to hand items off; or a yes.

@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # Shared helpers for the layout scripts. Sourced, not run.
 #
 # Each Ghostty window runs an outer tmux (layout.conf) that lays the window

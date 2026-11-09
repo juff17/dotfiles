@@ -62,7 +62,8 @@ export const clean = s => String(s ?? '').replace(/[\x00-\x1f\x7f-\x9f]+/g, ' ')
 
 const WIDE =
   /\p{Emoji_Presentation}|[ᄀ-ᅟ⺀-〾ぁ-꓏가-힣豈-﫿︰-﹏＀-｠￠-￦]|[\u{20000}-\u{3FFFD}]/u
-const ZERO = /[\p{Mn}\p{Me}​-‏️]/u
+// biome-ignore lint/suspicious/noMisleadingCharacterClass: each zero-width code point is matched on its own, not as a pair
+const ZERO = /[\p{Mn}\p{Me}\u200B-\u200F\uFE0F]/u
 
 export const charWidth = ch => (ZERO.test(ch) ? 0 : WIDE.test(ch) ? 2 : 1)
 export const width = s => {
