@@ -19,7 +19,7 @@ import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
-  LANES, LANE_GAP, activeWindow, boardRows, closeQuestion, keptFocus, laneColumns, listItems as itemsOf, listMode as isListMode,
+  LANES, LANE_GAP, shownLanes, activeWindow, boardRows, closeQuestion, keptFocus, laneColumns, listItems as itemsOf, listMode as isListMode,
   listScroll, listSelection, markedPane, nextLane, selection, showsPermission, shq, step, stepList, tabFocus, trayWindow, visible as matching, where as whereOf,
 } from './board.mjs'
 import { RUN, follow, markReviewed, markStopped } from './client.mjs'
@@ -359,8 +359,9 @@ function drawBoard() {
   const c = counts(visible())
   const lines = [summary(c, W), render([], W)]
   const { stripH, laneH } = boardRows(H, strip().length, settings()['hub.monitorRows'])
-  const at = laneColumns(W)
-  const cols_ = LANES.map((name, i) => lane(name, at[i].w, laneH, i, at[i].x))
+  const shown = shownLanes()
+  const at = laneColumns(W, shown.length)
+  const cols_ = shown.map((name, i) => lane(name, at[i].w, laneH, i, at[i].x))
   for (let r = 0; r < laneH; r++) lines.push(cols_.map(c => c[r]).join(' '.repeat(LANE_GAP)))
   lines.push(render([], W))
   lines.push(...monitorRows(W, stripH, lines.length + 1))
@@ -518,7 +519,7 @@ function pickMonitor(key) {
 }
 
 // Whether lane i (4: the monitors strip) has anything to select.
-const filled = i => (i === 4 ? strip() : board()[LANES[i]]).length > 0
+const filled = i => (i === 4 ? strip() : i < shownLanes().length ? board()[LANES[i]] : []).length > 0
 const moveLane = n => (focus = nextLane(focus, n, filled))
 const keepFocus = () => (focus = keptFocus(focus, filled))
 

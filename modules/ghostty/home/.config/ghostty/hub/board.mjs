@@ -6,6 +6,9 @@
 import { load as settings } from './settings.mjs'
 
 export const LANES = ['needs', 'working', 'done', 'idle']
+// The lanes the board draws: Idle is last, so turning it off in Settings
+// leaves every other lane at its index.
+export const shownLanes = () => (settings()['hub.idleLane'] ? LANES : LANES.slice(0, 3))
 // Below this width (Settings' hub.boardCols) the lanes get too narrow to
 // read, so the hub draws the list it shows beside an open session.
 export const minBoardCols = () => settings()['hub.boardCols']
@@ -91,7 +94,7 @@ export function listItems(l, monitors) {
     if (!list.length) items.push({ empty: name })
     for (const x of list) items.push(toItem(x))
   }
-  for (const name of LANES) group(name, l[name], a => ({ id: a.id, agent: a, lane: name }))
+  for (const name of shownLanes()) group(name, l[name], a => ({ id: a.id, agent: a, lane: name }))
   group('monitors', monitors, m => ({ id: `m:${m.key}`, agent: m.agent, monitor: m }))
   return items
 }
@@ -134,11 +137,11 @@ export function boardRows(H, mons, kept = MONITOR_ROWS) {
   return { stripH, laneH }
 }
 
-// Each lane's width and first column on a screen W wide: four equal lanes,
+// Each lane's width and first column on a screen W wide: n equal lanes,
 // the last taking what's left over.
-export function laneColumns(W) {
-  const w = Math.floor((W - 3 * LANE_GAP) / 4)
-  return LANES.map((_, i) => ({ w: i === 3 ? W - 3 * (w + LANE_GAP) : w, x: 1 + i * (w + LANE_GAP) }))
+export function laneColumns(W, n = shownLanes().length) {
+  const w = Math.floor((W - (n - 1) * LANE_GAP) / n)
+  return Array.from({ length: n }, (_, i) => ({ w: i === n - 1 ? W - (n - 1) * (w + LANE_GAP) : w, x: 1 + i * (w + LANE_GAP) }))
 }
 
 // The tray's first monitor and how many it shows in `space` rows: a full

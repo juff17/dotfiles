@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import {
-  LANES, LANE_GAP, MIN_LANE_ROWS, minBoardCols, MONITOR_ROWS, activeWindow, boardRows, closeQuestion, keptFocus, laneColumns, listItems, listMode,
+  LANES, LANE_GAP, MIN_LANE_ROWS, shownLanes, minBoardCols, MONITOR_ROWS, activeWindow, boardRows, closeQuestion, keptFocus, laneColumns, listItems, listMode,
   listScroll, listSelection, markedPane, nextLane, selection, showsPermission, shq, step, stepList, tabFocus, trayWindow, visible, where,
 } from './board.mjs'
 import { lanes, monitorsOf } from './model.mjs'
@@ -251,4 +251,18 @@ test('the board turns into the list below Settings’ narrowest board', () => {
   assert.equal(listMode(null, 119), true)
   assert.equal(listMode(null, 120), false)
   set('hub.boardCols', 96)
+})
+
+test('with the Idle lane off, three lanes fill the width and the list has no idle group', () => {
+  set('hub.idleLane', false)
+  try {
+    assert.deepEqual(shownLanes(), ['needs', 'working', 'done'])
+    const cols = laneColumns(97)
+    assert.equal(cols.length, 3)
+    assert.equal(cols.reduce((n, c) => n + c.w, 0) + 2 * LANE_GAP, 97)
+    const items = listItems(lanes([agent('a', { state: 'idle' })]), [])
+    assert.ok(!items.some(x => x.group === 'idle'))
+  } finally {
+    set('hub.idleLane', true)
+  }
 })
