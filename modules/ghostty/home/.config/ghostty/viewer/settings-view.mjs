@@ -47,6 +47,11 @@ function content(w, values) {
       lines.push(render([[`  ${tilde(fileOf(r.prompt))}`, fg(P.overlay1)]], w, BASE))
       continue
     }
+    if (r.fixed) {
+      lines.push(render([[`  ${r.label}`, fg(P.text)]], w - VALUE, BASE) + render([[r.fixed, fg(P.sub)]], VALUE, BASE))
+      lines.push(render([[`  ${r.sub}`, fg(P.overlay1)]], w, BASE))
+      continue
+    }
     const on = i === s.sel
     const fill = on ? SEL : BASE
     const v = values[r.key]

@@ -24,10 +24,18 @@ const flags = (key, label, choices, def, sub = '') => ({ key, label, sub, type: 
 // Where an agent's instructions are (hub/prompts.mjs): not a setting, but a
 // line the panel shows beside the agent's settings.
 const prompt = id => ({ prompt: id })
+// A value set somewhere else (KDE, layout.conf) or not up to you, shown so
+// the panel lists it with the rest.
+const fixed = (label, value, sub = '') => ({ fixed: value, label, sub })
+// One setting shown in a second section under its own name there.
+const alias = (key, label, sub = '') => ({ alias: key, label, sub })
 
 const MODEL = ['default', 'opus', 'sonnet', 'haiku']
 const MODE = ['default', 'auto', 'acceptEdits', 'plan']
 const EFFORT = ['default', 'low', 'medium', 'high', 'xhigh']
+const ASK = [['ask', 'ask'], ['auto', 'auto']]
+const TRAY_SECTIONS = [['you', '▲ you'], ['broke', '✗ broke'], ['work', '✻ work'], ['watch', '◉ watch'], ['done', '✓ done']]
+const SOUNDS = ['message-new-instant', 'bell', 'complete', 'dialog-warning', 'message']
 const agent = (prefix, model, sub = '') => [
   choice(`${prefix}.model`, 'Model', MODEL, model, sub),
   choice(`${prefix}.mode`, 'Permission mode', MODE, 'auto'),
@@ -45,8 +53,17 @@ export const SECTIONS = [
       choice('newAgent.task.runAs', 'Run as', [['tab', 'new tab'], ['bg', 'background']], 'tab'),
       choice('newAgent.task.branch', 'Branch', [['worktree', 'worktree'], ['current', 'current branch']], 'worktree'),
       prompt('task'),
-      head('Form'),
+      head('Folders'),
       number('newAgent.recent', 'Recent folders shown', 8, { min: 1, max: 8 }, 'under Folder; 8 is all the form has room for'),
+      choice(
+        'newAgent.rankBy',
+        'Rank folders by',
+        [['frecency', 'z.sh frecency'], ['recent', 'last used']],
+        'frecency',
+        'frecency from ~/.z, merged with folders agents ran in; without ~/.z, last used',
+      ),
+      bool('newAgent.gitOnly', 'Only git repos', true, 'a subfolder counts as its repo; folders outside git are left out'),
+      choice('newAgent.defaultFolder', 'Default folder', [['tab', 'active tab'], ['projects', '~/projects']], 'tab', 'where Folder starts; the active tab’s repo, else the newest recent'),
     ],
   },
   {
@@ -60,6 +77,37 @@ export const SECTIONS = [
       number('prBabysit.interval', 'Check the PR every', 60, { min: 15, max: 600, step: 15, unit: 's' }, 'watch_pr.py --interval'),
       number('prBabysit.stuckAfter', 'A job is stuck after', 30, { min: 5, max: 240, step: 5, unit: 'm' }, 'waiting for a runner; watch_pr.py --stuck-after'),
       number('prBabysit.errorAfter', 'Warn after failed checks', 5, { min: 1, max: 20 }, 'API calls failing this many checks in a row raise an error; it keeps trying'),
+      bool('prBabysit.notifyStage', 'Notify on stage finished', false, '[stage] events in the tray, not just chat'),
+      bool('prBabysit.autoFix', 'Auto-fix review comments', true, 'commit obvious fixes without asking first; off asks about each'),
+      head('Act on its own'),
+      alias('approvals.push', 'Auto push changes', 'push fixes and rebases once lint and tests pass; refused if anyone pushed since'),
+      choice(
+        'prBabysit.autoRebase',
+        'Auto rebase',
+        [['off', 'off'], ['clean', 'when clean'], ['always', 'always']],
+        'off',
+        'when behind the base; off rebases only for conflicts or when the host requires it',
+      ),
+      alias('approvals.reply', 'Auto reply to reviewers', 'after a fix is committed; posted under your name'),
+    ],
+  },
+  {
+    id: 'approvals',
+    name: 'Approvals',
+    where: 'what babysitters do on their own, and what waits for you in Alt+A and the tray',
+    rows: [
+      head('Auto-approve'),
+      choice('approvals.retry', 'Retry a flaky job', ASK, 'ask', 'runner lost, network, registry; once per job'),
+      choice('approvals.move', 'Move local commits after a push', ASK, 'ask', 'rebase babysit commits onto the new head'),
+      choice('approvals.manual', 'Run a manual job', ASK, 'ask', 'GitLab play button; deploy stages always ask'),
+      choice('approvals.push', 'Push fixes to the PR', ASK, 'ask', 'goes out under your name; same as PR babysit › Auto push'),
+      choice('approvals.reply', 'Post a reply', [['off', 'off'], ['draft', 'draft for approval'], ['post', 'post']], 'draft', 'same as PR babysit › Auto reply'),
+      fixed('Approve a deployment', 'ask, always', 'GitHub environment rules'),
+      head('When you approve'),
+      choice('approvals.edited', 'An edited reply', [['post', 'post it'], ['confirm', 'show it once more']], 'post', 'after e in the popup'),
+      choice('approvals.editor', 'Editor for e', [['editor', '$EDITOR'], ['inline', 'inline box']], 'editor', 'with no $EDITOR set, the inline box'),
+      fixed('Popup key', 'alt+a', 'tmux binding in layout.conf'),
+      bool('approvals.trayButtons', 'Also show buttons in the tray', true, 'Post, Push, Retry and Run on babysit rows in the Meta+A inbox'),
     ],
   },
   {
@@ -87,6 +135,7 @@ export const SECTIONS = [
       choice('todo.handoff.effort', 'Effort', EFFORT, 'medium'),
       choice('todo.handoff.runAs', 'Run in', [['tab', 'new tab'], ['bg', 'background']], 'tab', 't in the picker; the alt+t popup outside a window always runs in the background'),
       choice('todo.handoff.branch', 'Branch', [['worktree', 'own worktree'], ['branch', 'branch it was added on']], 'worktree', 'b in the picker; only for todos added in git'),
+      choice('todo.handoff.merge', 'Before merging into main', [['ask', 'ask'], ['never', 'never merge']], 'ask', 'own-worktree agents only'),
       prompt('todo-handoff'),
       head('Filing'),
       choice('todo.filing.model', 'Model', [['haiku', 'haiku 5.5'], ['sonnet', 'sonnet 5.5']], 'haiku', 'writes the title, category and note'),
@@ -104,6 +153,7 @@ export const SECTIONS = [
     rows: [
       head('Lanes'),
       number('hub.doneCards', 'Done cards before folding', 2, { min: 0, max: 6 }, 'the rest fold to a line each'),
+      bool('hub.idleLane', 'Show the Idle lane', true, 'off gives its room to the other three; idle agents still count'),
       number('hub.listCols', 'List width beside a session', 46, { min: 36, max: 80, step: 2, unit: ' cols' }),
       number('hub.boardCols', 'Narrowest board', 96, { min: 60, max: 200, step: 4, unit: ' cols' }, 'a narrower hub shows one list instead of the lanes'),
       number('hub.noteSecs', 'Notes show for', 8, { min: 2, max: 60, unit: 's' }, 'what the footer says after you start, stop or close something'),
@@ -127,15 +177,26 @@ export const SECTIONS = [
     name: 'Tray',
     where: 'the Agents widget in the panel and its Meta+A inbox',
     rows: [
-      head('Widget'),
+      head('Panel chip'),
+      flags('tray.count', 'Count', TRAY_SECTIONS, TRAY_SECTIONS.map(c => c[0]), 'glyphs shown on the chip'),
       number('tray.flash', 'Flash on a new ▲ or ✗', 2, { min: 0, max: 10, unit: 's' }, '0 turns the flash off'),
-      number('tray.noteHours', 'Notes expire after', 24, { min: 1, max: 168, unit: 'h' }, 'notify.sh items you haven’t opened'),
-      bool('tray.foldDone', 'Fold done items', true, 'into one line until you press Show'),
-      number('tray.messageSecs', 'Results show for', 6, { min: 2, max: 30, unit: 's' }, 'what the inbox says after Allow, Deny or Go'),
+      bool('tray.ring', 'Ring until the inbox opens', true, 'a ring round the chip while something is new'),
+      fixed('Shortcut', 'Meta+A', 'set in KDE’s Keyboard Shortcuts, shown here'),
       number('tray.pollSecs', 'Check agents every', 2, { min: 1, max: 10, unit: 's' }),
       head('Inbox'),
+      number('tray.noteHours', 'Notes expire after', 24, { min: 1, max: 168, unit: 'h' }, 'notify.sh items you haven’t opened'),
+      bool('tray.foldDone', 'Fold done items', true, 'into one line until you press Show'),
+      alias('approvals.trayButtons', 'Approve buttons on babysit rows', 'Post, Push, Retry and Run; same as Approvals › Also show buttons'),
+      bool('tray.desktop', 'Desktop pop-up too', false, 'a KDE notification for a new ▲ or ✗'),
+      number('tray.messageSecs', 'Results show for', 6, { min: 2, max: 30, unit: 's' }, 'what the inbox says after a button'),
       number('tray.inboxWidth', 'Width', 600, { min: 400, max: 1200, step: 50, unit: ' px' }),
       number('tray.inboxHeight', 'Most height', 720, { min: 300, max: 1400, step: 60, unit: ' px' }, 'it grows with its items up to this'),
+      head('Sounds'),
+      bool('tray.soundYou', 'Sound when something needs you', false, 'a new ▲ in the tray'),
+      bool('tray.soundBroke', 'Sound when something breaks', false, 'a new ✗ in the tray'),
+      choice('tray.sound', 'Sound', SOUNDS, 'message-new-instant', 'from the freedesktop sound theme'),
+      bool('tray.quiet', 'Quiet while Ghostty is focused', true, 'only play when you are in another window'),
+      bool('tray.tabBell', 'Tab bell', true, 'ghostty-claude-ping turns a tab red when Claude stops or asks'),
     ],
   },
   {
@@ -190,6 +251,14 @@ export const SECTIONS = [
 export const ROWS = SECTIONS.flatMap(s => s.rows.filter(r => r.key))
 const BY_KEY = new Map(ROWS.map(r => [r.key, r]))
 export const row = key => BY_KEY.get(key)
+// An alias becomes its setting's row under the alias's own name, so both
+// sections change the one value.
+for (const s of SECTIONS)
+  s.rows = s.rows.map(r => {
+    if (!r.alias) return r
+    if (!BY_KEY.has(r.alias)) throw new Error(`No setting ${r.alias} for ${r.label}`)
+    return { ...BY_KEY.get(r.alias), label: r.label, sub: r.sub }
+  })
 
 export function valid(r, v) {
   if (r.type === 'choice') return r.choices.some(c => c.value === v)

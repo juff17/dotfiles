@@ -98,3 +98,19 @@ test('the scripts read Settings through ghostty-lib.sh, the environment winning'
 test('every section starts with a heading', () => {
   for (const s of SECTIONS) assert.ok(s.rows[0].head, s.name)
 })
+
+test('an alias row is its setting under another name, in another section', () => {
+  const file = fresh()
+  const babysit = SECTIONS.find(s => s.id === 'prBabysit').rows.find(r => r.label === 'Auto push changes')
+  assert.equal(babysit.key, 'approvals.push')
+  assert.deepEqual(babysit.choices, row('approvals.push').choices)
+  set(babysit.key, 'auto', file)
+  assert.equal(load(file)['approvals.push'], 'auto')
+  assert.equal(ROWS.filter(r => r.key === 'approvals.push').length, 1)
+})
+
+test('fixed rows show a value but are not settings', () => {
+  const fixed = SECTIONS.flatMap(s => s.rows).filter(r => r.fixed)
+  assert.ok(fixed.some(r => r.label === 'Popup key' && r.fixed === 'alt+a'))
+  for (const r of fixed) assert.equal(r.key, undefined)
+})
