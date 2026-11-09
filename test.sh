@@ -7,6 +7,10 @@ set -uo pipefail
 
 cd "$(dirname "$0")" || exit 1
 ROOT=$PWD
+# A git hook (pre-commit) runs with GIT_DIR and friends set to this repo, and
+# tests that make folders of their own would then see this repo in them.
+# shellcheck disable=SC2046
+unset $(git rev-parse --local-env-vars)
 GHOSTTY=modules/ghostty/home/.config/ghostty
 
 suite_ghostty() { node --test "$GHOSTTY"/viewer/*.test.mjs "$GHOSTTY"/hub/*.test.mjs; }
