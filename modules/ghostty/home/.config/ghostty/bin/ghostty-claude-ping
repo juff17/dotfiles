@@ -5,6 +5,12 @@
 
 [[ ${TMUX:-} == */"ghostty,"* && -n ${TMUX_PANE:-} ]] || exit 0
 
+# Settings › Tray › Tab bell. Read with jq, not ghostty-lib.sh's node, since
+# this runs at the end of every turn.
+settings=${AGENT_HUB_SETTINGS:-${XDG_STATE_HOME:-$HOME/.local/state}/agent-hub/settings.json}
+bell=$(jq -r 'if has("tray.tabBell") then ."tray.tabBell" else true end' "$settings" 2>/dev/null)
+[[ $bell == false ]] && exit 0
+
 tty=$(tmux display -p -t "$TMUX_PANE" '#{pane_tty}')
 [[ -w $tty ]] && printf '\a' >"$tty"
 exit 0
