@@ -46,7 +46,7 @@ open_viewer() {
   local win=$1 dir=$2 tabs viewer i
   tabs=$(layout show -t "layout-$win" -v @tabs 2>/dev/null) || return
   # DV_TABS tells Diagrams and Diff whose active tab to follow.
-  viewer=$(layout split-window -d -h -b -l "$(setting layout.viewerPercent GHOSTTY_VIEWER_SHARE 40)%" \
+  viewer=$(layout split-window -d -h -b -l "$(setting layout.viewerPercent GHOSTTY_VIEWER_SHARE 60)%" \
     -t "$tabs" -P -F '#{pane_id}' -c "$dir" \
     -e "DV_TABS=$TABS_SOCKET:ghostty-$win" -e "VIEWER_ID=$(viewer_id "$win")" \
     "$GHOSTTY_CONF/bin/ghostty-viewer" "$dir" 2>/dev/null) || return
