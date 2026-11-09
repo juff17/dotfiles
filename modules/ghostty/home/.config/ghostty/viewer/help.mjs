@@ -147,6 +147,7 @@ export const SECTIONS = [
       ['↑ / ↓  ↵', 'A push’s commits, and open one’s diff', true],
       ['space', 'Keep or drop the commit; a push without it goes back to the babysitter', true],
       ['d', 'Every change in the push, in less', true],
+      ['J / K  pgdn / pgup', 'Scroll a proposal too tall for the popup; a waits until all of it was on screen', true],
       ['g', 'Go to the babysit session'],
       ['esc or alt+a', 'Close'],
     ],

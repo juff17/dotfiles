@@ -36,10 +36,15 @@ const label = (text, w, color = P.sub) => render([[` ${text}`, BOLD + fg(color)]
 const short = sha => String(sha ?? '').slice(0, 7)
 const stat = c => `+${c.added ?? 0} −${c.removed ?? 0}`
 
-// Text in a dark box, wrapped, at most `most` lines.
-function box(text, w, most, { caret } = {}) {
+// Text in a dark box, wrapped with its own line breaks kept, at most
+// `most` lines.
+function box(text, w, most = Infinity, { caret } = {}) {
   const inner = w - 6
-  let lines = wrap(caret === undefined ? clean(text) : withCaret(text, caret), inner)
+  const kept = String(text ?? '')
+    .split('\n')
+    .map(clean)
+    .join('\n')
+  let lines = wrap(caret === undefined ? kept : withCaret(text, caret), inner)
   if (lines.length > most) lines = [...lines.slice(0, most - 1), `${lines[most - 1]} …`]
   return [
     render([], 2, BASE) + render([], w - 4, BOX) + render([], 2, BASE),
@@ -96,7 +101,7 @@ function body(p, w) {
 
   if (p.kind === 'reply') {
     out.push(label(p.thread?.author ? `THEIR COMMENT · @${p.thread.author}` : 'THEIR COMMENT', w))
-    out.push(...box(p.thread?.body ?? '', w, 6))
+    out.push(...box(p.thread?.body ?? '', w, 12))
     if (p.commit) {
       out.push(blank(w), label('WHAT I DID', w))
       out.push(
@@ -112,7 +117,7 @@ function body(p, w) {
       )
     }
     out.push(blank(w), label(s.editing ? 'REPLY THAT WILL BE POSTED · editing' : 'REPLY THAT WILL BE POSTED', w, P.peach))
-    out.push(...box(s.editing ? s.draft : A.bodyOf(s, p), w, 10, s.editing ? { caret: s.at } : {}))
+    out.push(...box(s.editing ? s.draft : A.bodyOf(s, p), w, Infinity, s.editing ? { caret: s.at } : {}))
     const how = A.inline(process.env) ? 'Press e to edit it here.' : 'Press e to edit it in $EDITOR.'
     out.push(render([[` Posted as you, exactly as shown${s.edited ? ', with your edit' : ''}. ${how}`, fg(P.sub)]], w, BASE))
   } else if (p.kind === 'push') {
@@ -141,9 +146,25 @@ function body(p, w) {
       [leaseOk, leaseOk ? `lease ${short(p.lease)} matches remote` : `remote moved to ${short(p.remote_head) || 'nothing'}`],
     ]
     out.push(render(checks.flatMap(([ok, name]) => [[' '], [` ${ok ? '✓' : '✗'} ${clean(name)} `, fg(ok ? P.green : P.red) + bg(ok ? '#1f2b26' : '#2b1f27')]]), w, BASE))
+    if (p.removes?.length) {
+      out.push(blank(w), label(`TAKES OFF THE BRANCH · ${p.removes.length} commit${p.removes.length === 1 ? '' : 's'} on ${p.branch} now`, w, P.red))
+      for (const c of p.removes)
+        out.push(
+          render(
+            [
+              ['  − ', fg(P.red)],
+              [short(c.sha), fg(P.red)],
+              [`  ${clean(c.subject)}  `, fg(P.text)],
+              [stat(c), fg(P.sub)],
+            ],
+            w,
+            BASE,
+          ),
+        )
+    }
     out.push(blank(w))
     const command = s.drop.size ? `${p.command}   (after dropping ${s.drop.size}: handed back to the session)` : p.command
-    out.push(...box(command, w, 3))
+    out.push(...box(command, w))
   } else {
     const what = {
       retry: `Retries ${p.job?.name} once.${p.job?.reason ? ` Why it looks flaky: ${p.job.reason}.` : ''}`,
@@ -214,9 +235,18 @@ function draw() {
     render([['─'.repeat(w)]], w, BASE + fg(P.surface0)),
   ]
   const room = h - lines.length - 4
-  let main = p ? body(p, w) : [blank(w), render([['  Nothing is waiting for you.', fg(P.sub)]], w, BASE)]
-  if (main.length > room) main = [...main.slice(0, room - 1), render([[' ▾ more than fits; make the popup taller', fg(P.overlay1)]], w, BASE)]
-  lines.push(...main)
+  const main = p ? body(p, w) : [blank(w), render([['  Nothing is waiting for you.', fg(P.sub)]], w, BASE)]
+  // What doesn't fit scrolls; a stays off until all of it has been shown.
+  const fits = main.length <= room
+  const view = fits ? room : room - 1
+  s.scroll = Math.max(0, Math.min(s.scroll, main.length - view))
+  lines.push(...main.slice(s.scroll, s.scroll + view))
+  if (!fits) {
+    const below = main.length - s.scroll - view
+    lines.push(render([[below > 0 ? ` ▾ ${below} more lines: J or PgDn` : ' ▴ K or PgUp for the top', fg(P.overlay1)]], w, BASE))
+  }
+  s.seenTo = Math.max(s.seenTo, s.scroll + view)
+  s.hidden = s.seenTo < main.length
   while (lines.length < h - 4) lines.push(blank(w))
   lines.push(p ? buttons(p, w) : blank(w))
   lines.push(blank(w))
@@ -240,8 +270,8 @@ function draw() {
 
 // ------------------------------------------------------------ effects
 
-function refresh() {
-  A.reload(s, readApprovals())
+function refresh(settledHere = false) {
+  A.reload(s, readApprovals(), settledHere)
 }
 
 let closing = null
@@ -256,7 +286,7 @@ async function settle(p, args, doing) {
   const r = await runApproval(p, args)
   busy = ''
   s.note = { text: r.message || (r.ok ? 'Done' : 'Failed'), tone: r.ok ? 'green' : 'red' }
-  refresh()
+  refresh(true)
   closeSoonIfEmpty()
   draw()
 }

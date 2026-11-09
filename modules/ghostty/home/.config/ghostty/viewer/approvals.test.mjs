@@ -141,3 +141,32 @@ test('reload keeps the proposal shown, or the one after a settled one', () => {
   assert.equal(current(s), null)
   assert.equal(onKey(s, 'a'), undefined)
 })
+
+test('when what you read is replaced, the first a only says so', () => {
+  const s = start([push(), retry()], 'p1')
+  onKey(s, ' ')
+  reload(s, [push({ id: 'p2' }), retry()])
+  assert.equal(current(s).id, 'p2')
+  assert.equal(s.drop.size, 0)
+  assert.equal(onKey(s, 'a'), undefined)
+  assert.match(s.note.text, /replaced what you were reading/)
+  assert.equal(onKey(s, 'a').do, 'approve')
+  reload(s, [retry()])
+  onKey(s, '\x1b[B')
+  assert.equal(onKey(s, 'a').do, 'approve', 'any other key counts as a look')
+})
+
+test('a waits until all of a proposal has been on screen; J and K scroll', () => {
+  const s = start([reply()])
+  s.hidden = true
+  assert.equal(onKey(s, 'a'), undefined)
+  assert.equal(onKey(s, 'A'), undefined)
+  assert.match(s.note.text, /J or PgDn/)
+  onKey(s, 'J')
+  assert.equal(s.scroll, 5)
+  onKey(s, 'K')
+  onKey(s, 'K')
+  assert.equal(s.scroll, 0)
+  s.hidden = false
+  assert.equal(onKey(s, 'a').do, 'approve')
+})

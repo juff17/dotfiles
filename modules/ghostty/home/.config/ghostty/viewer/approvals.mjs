@@ -4,9 +4,16 @@
 // approval.py, read through hub/tray.mjs), one at a time.
 //
 // The state is { list, i, commit, open, drop, editing, draft, at, edited,
-// note }: the proposals, the one shown, the push commit selected, the
-// commits whose diff is open and those dropped, the inline reply editor,
-// whether the reply was edited, and the footer's note.
+// note, scroll, seenTo, hidden, changed }: the proposals, the one shown, the
+// push commit selected, the commits whose diff is open and those dropped,
+// the inline reply editor, whether the reply was edited, the footer's note,
+// how far the body is scrolled and how much of it has been on screen
+// (the view sets hidden while some never was), and whether the proposal
+// shown just replaced the one you were looking at.
+//
+// Approving needs the whole proposal to have been on screen, and a look at
+// one that replaced what you were reading, so a key never approves
+// something you didn't see.
 //
 // onKey returns what the view has to do: nothing, 'quit', or an effect
 // { do, p, ... }: approve (with the edited body, the dropped commits, and
@@ -27,13 +34,17 @@ export const start = (list, focus = '') => ({
   at: undefined,
   edited: false,
   note: null,
+  scroll: 0,
+  seenTo: 0,
+  hidden: false,
+  changed: false,
 })
 
 export const current = s => s.list[Math.min(s.i, s.list.length - 1)] ?? null
 
 // The proposals again, after one was settled or a new one came: the one
 // shown stays shown while it's there.
-export function reload(s, list) {
+export function reload(s, list, settledHere = false) {
   const id = current(s)?.id
   const at = list.findIndex(p => p.id === id)
   s.list = list
@@ -41,6 +52,10 @@ export function reload(s, list) {
   else {
     s.i = Math.min(s.i, Math.max(0, list.length - 1))
     reset(s)
+    if (id && list.length && !settledHere) {
+      s.changed = true
+      s.note = { text: 'What you were reading was settled or replaced; this is another one', tone: 'peach' }
+    }
   }
 }
 
@@ -52,6 +67,24 @@ function reset(s) {
   s.draft = ''
   s.at = undefined
   s.edited = false
+  s.scroll = 0
+  s.seenTo = 0
+  s.hidden = false
+  s.changed = false
+}
+
+// Whether a may approve now; if not, says why in the note.
+function ready(s) {
+  if (s.changed) {
+    s.changed = false
+    s.note = { text: 'This replaced what you were reading. Look it over, then press a again.', tone: 'peach' }
+    return false
+  }
+  if (s.hidden) {
+    s.note = { text: 'Not all of it has been on screen: J or PgDn to the end first', tone: 'peach' }
+    return false
+  }
+  return true
 }
 
 function move(s, n) {
@@ -135,9 +168,13 @@ export function onKey(s, key, env = process.env) {
         s.note = { text: 'Keep at least one commit, or press r for not yet', tone: 'peach' }
       }
     },
-    a: () => approval(s, p),
+    J: () => (s.scroll += 5),
+    '\x1b[6~': () => (s.scroll += 10),
+    K: () => (s.scroll = Math.max(0, s.scroll - 5)),
+    '\x1b[5~': () => (s.scroll = Math.max(0, s.scroll - 10)),
+    a: () => (ready(s) ? approval(s, p) : undefined),
     A: () => {
-      if (canAlways(p)) return approval(s, p, true)
+      if (canAlways(p)) return ready(s) ? approval(s, p, true) : undefined
       s.note = { text: p.kind === 'deploy' ? 'A deployment always asks' : 'Press a to try it again', tone: 'peach' }
       return undefined
     },
@@ -155,6 +192,7 @@ export function onKey(s, key, env = process.env) {
     g: () => ({ do: 'go', p }),
     d: () => (p.kind === 'push' ? { do: 'diff', p } : undefined),
   }
+  if (key !== 'a' && key !== 'A') s.changed = false
   const effect = Object.hasOwn(keys, key) ? keys[key]() : undefined
   return effect && typeof effect === 'object' ? effect : undefined
 }

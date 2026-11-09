@@ -85,6 +85,8 @@ export function readApprovals(dir = APPROVALS) {
 export const APPROVE = { reply: 'post', push: 'push', manual: 'run', deploy: 'approve', retry: 'retry', move: 'move' }
 const APPROVE_ACTIONS = new Set([...Object.values(APPROVE), 'again'])
 const GLYPH = { reply: '↩', push: '↑', manual: '▶', deploy: '▶', retry: '✗', move: '⇅' }
+// The longest reply the inbox's three-line preview shows whole.
+export const PREVIEW_MOST = 200
 
 const sessionOf = (p, agents) =>
   agents.find(x => p.claude_session && x.id === p.claude_session) ?? agents.find(x => p.pane && x.pane?.pane === p.pane)
@@ -116,13 +118,22 @@ export function approvalRow(p, agents, buttons = true) {
     move: [`onto ${String(p.onto ?? '').slice(0, 7)}`],
   }[p.kind] ?? []
   const title = p.kind === 'retry' ? `${job.name} failed, looks flaky` : p.title
+  if (p.removes?.length) detail.push(`replaces ${p.removes.length} on the remote`)
+  // The tray approves only what it shows whole: a reply short enough for its
+  // preview, and a push that takes nothing off the branch. Anything else
+  // opens in Alt+A first.
+  const whole = p.kind !== 'reply' || (String(p.body ?? '').length <= PREVIEW_MOST && !/\n/.test(p.body ?? ''))
   const actions = !buttons
     ? ['review', ...(a ? ['go'] : [])]
-    : {
-        reply: ['post', 'edit', 'skip'],
-        push: ['push', 'review', 'go'],
-        retry: ['retry', 'go'],
-      }[p.kind] ?? [APPROVE[p.kind], 'skip']
+    : p.kind === 'reply' && !whole
+      ? ['review', 'skip']
+      : p.kind === 'push' && p.removes?.length
+        ? ['review', 'go']
+        : ({
+            reply: ['post', 'edit', 'skip'],
+            push: ['push', 'review', 'go'],
+            retry: ['retry', 'go'],
+          }[p.kind] ?? [APPROVE[p.kind], 'skip'])
   return {
     ...row(p.kind === 'retry' ? 'broke' : 'you', GLYPH[p.kind] ?? '▲', `a:${p.id}`, a, title, [where, ...detail].join(' · '), p.at, actions),
     ...base,

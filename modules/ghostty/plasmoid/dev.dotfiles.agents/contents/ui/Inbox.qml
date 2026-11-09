@@ -191,6 +191,7 @@ Rectangle {
                 Text {
                     Layout.fillWidth: true
                     text: String(r.item.title).replace(/\s+/g, " ")
+                    textFormat: Text.PlainText
                     color: M.text
                     font.pixelSize: 13
                     font.weight: r.loud ? Font.DemiBold : Font.Normal
@@ -199,6 +200,7 @@ Rectangle {
                 Text {
                     Layout.fillWidth: true
                     text: String(r.item.meta).replace(/\s+/g, " ")
+                    textFormat: Text.PlainText
                     visible: text !== ""
                     color: M.subtext0
                     font.pixelSize: 12
@@ -226,6 +228,7 @@ Rectangle {
                 anchors.leftMargin: 8
                 anchors.rightMargin: 8
                 text: "“" + String(r.item.preview || "").replace(/\s+/g, " ") + "”"
+                textFormat: Text.PlainText
                 color: M.subtext1
                 font.pixelSize: 12
                 wrapMode: Text.Wrap

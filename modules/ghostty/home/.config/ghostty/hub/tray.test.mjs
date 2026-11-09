@@ -245,3 +245,22 @@ test('runApproval runs the proposal’s own approval.py under zsh and reads its 
   assert.equal((await runApproval({ script: '/bin/sh' }, ['approve', 'p1'], exec)).ok, false, 'only an approval.py')
   assert.equal((await runApproval({ script: join(dir, 'nope', 'approval.py') }, ['approve'], exec)).ok, false)
 })
+
+test('the tray only approves what it shows whole: a long reply or a push that drops commits opens in Alt+A', () => {
+  const rows = trayItems([], new Set(), new Set(), [], [
+    proposal('reply', { id: 'long', body: 'x'.repeat(201) }),
+    proposal('reply', { id: 'lines', body: 'one\ntwo' }),
+    proposal('reply', { id: 'short', body: 'x'.repeat(200) }),
+    proposal('push', { id: 'force', local: 'b', branch: 'f', commits: [], removes: [{ sha: 'a' }] }),
+  ]).items
+  assert.deepEqual(
+    rows.map(r => [r.approval, r.actions]),
+    [
+      ['long', ['review', 'skip']],
+      ['lines', ['review', 'skip']],
+      ['short', ['post', 'edit', 'skip']],
+      ['force', ['review', 'go']],
+    ],
+  )
+  assert.match(rows[3].meta, /replaces 1 on the remote/)
+})
