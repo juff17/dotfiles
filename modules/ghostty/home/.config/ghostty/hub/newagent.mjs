@@ -81,7 +81,7 @@ function input(field, w, on, ghost = '') {
   const { before, under, after } = caretParts(shown, at, w)
   if (ghost && at === length(shown)) {
     const [first, ...rest] = ghost
-    return render([[before, fg(P.text)], [first, '\x1b[7m' + fg(P.overlay1)], [rest.join(''), fg(P.overlay1)]], w, BOX)
+    return render([[before, fg(P.text)], [first, `\x1b[7m${fg(P.overlay1)}`], [rest.join(''), fg(P.overlay1)]], w, BOX)
   }
   return render([[before, fg(P.text)], [under, '\x1b[7m'], [after, fg(P.text)]], w, BOX)
 }

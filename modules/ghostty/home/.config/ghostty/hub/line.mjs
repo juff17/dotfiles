@@ -121,7 +121,7 @@ export function splitAt(text, at) {
 // the character under it and one more, and cut at the end.
 export function caretParts(text, at, w) {
   const chars = [...text]
-  let i = Math.max(0, Math.min(at ?? chars.length, chars.length))
+  const i = Math.max(0, Math.min(at ?? chars.length, chars.length))
   const before = chars.slice(0, i).join('')
   let j = i + 1
   while (j < chars.length && charWidth(chars[j]) === 0) j++
