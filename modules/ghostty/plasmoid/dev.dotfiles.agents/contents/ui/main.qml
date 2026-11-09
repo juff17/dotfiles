@@ -1,8 +1,9 @@
 // The Agents panel widget: the hub's agents as counts in the panel and an
-// inbox to act from, in place of desktop pop-ups. Everything it shows and
-// does goes through `ghostty-hub tray` (hub/tray.mjs): a snapshot every two
-// seconds, `seen` when the inbox opens, `act` for a button, `hub` for the
-// link. AGENT_TRAY_HUB points it at another ghostty-hub, for testing.
+// inbox to act from. Everything it shows and does goes through
+// `ghostty-hub tray` (hub/tray.mjs): a snapshot every two seconds, `seen`
+// when the inbox opens, `act` for a button, `hub` for the link. A new ▲ or ✗
+// can also pop up a desktop notification and play a sound, as Settings ›
+// Tray says. AGENT_TRAY_HUB points it at another ghostty-hub, for testing.
 import QtQuick
 import QtQuick.Layouts
 import org.kde.plasma.plasmoid
@@ -76,22 +77,56 @@ PlasmoidItem {
     }
 
     // A ▲ or ✗ item seen for the first time fills the chip with its colour
-    // for as long as Settings says (two seconds, or never at 0); that, and
-    // the ring, replace the pop-up.
+    // for as long as Settings says (two seconds, or never at 0), and, if
+    // Settings turn them on, pops up a notification and plays a sound.
     function flashIfNew(items) {
         const now = {}
         let fresh = null
+        const news = []
         for (const it of items) {
             if (it.section !== "you" && it.section !== "broke") continue
             now[it.id] = true
-            if (it.new && !flashed[it.id] && (!fresh || it.section === "broke")) fresh = it
+            if (it.new && !flashed[it.id]) {
+                news.push(it)
+                if (!fresh || it.section === "broke") fresh = it
+            }
         }
+        // The first snapshot after the widget starts isn't news.
+        const first = !started
+        started = true
         flashed = Object.assign(now, {})
-        if (fresh && !root.expanded && flashOff.interval > 0) {
+        if (!fresh || first || root.expanded) return
+        if (flashOff.interval > 0) {
             flashColor = M.section[fresh.section]
             flashing = true
             flashOff.restart()
         }
+        if (setting("desktop", false))
+            for (const it of news.slice(0, 3))
+                fire("notify-send -a Agents -i " + (it.section === "broke" ? "dialog-error" : "dialog-information")
+                     + " " + quote((it.section === "broke" ? "✗ " : "▲ ") + it.title) + " " + quote(it.meta || ""))
+        const loud = news.some(it => it.section === "broke" ? setting("soundBroke", false) : setting("soundYou", false))
+        if (loud && !(setting("quiet", true) && ghosttyActive())) {
+            const name = String(setting("sound", "message-new-instant")).replace(/[^a-z-]/g, "")
+            fire("canberra-gtk-play -i " + name + " 2>/dev/null || paplay /usr/share/sounds/freedesktop/stereo/" + name + ".oga")
+        }
+    }
+    property bool started: false
+
+    // Runs a command whose output nobody needs.
+    function fire(cmd) {
+        calls += 1
+        fireAndForget.connectSource(cmd + " #" + calls)
+    }
+
+    // Whether the window in front is Ghostty's.
+    function ghosttyActive() {
+        for (let i = 0; i < tasks.count; i++) {
+            const idx = tasks.index(i, 0)
+            const app = String(tasks.data(idx, TaskManager.AbstractTasksModel.AppId) || "")
+            if (app.toLowerCase().indexOf("ghostty") >= 0 && tasks.data(idx, TaskManager.AbstractTasksModel.IsActive)) return true
+        }
+        return false
     }
 
     // Brings Ghostty to the front. Only the panel can raise a window on
@@ -113,6 +148,13 @@ PlasmoidItem {
         filterByActivity: false
         filterByScreen: false
         groupMode: TaskManager.TasksModel.GroupDisabled
+    }
+
+    P5Support.DataSource {
+        id: fireAndForget
+        engine: "executable"
+        connectedSources: []
+        onNewData: source => disconnectSource(source)
     }
 
     P5Support.DataSource {
@@ -163,7 +205,8 @@ PlasmoidItem {
             id: chip
             anchors.centerIn: parent
             counts: root.snap.counts || {}
-            ring: root.snap.unseen && !root.expanded
+            shown: root.setting("count", ["you", "broke", "work", "watch", "done"])
+            ring: root.snap.unseen && !root.expanded && root.setting("ring", true)
             flashing: root.flashing
             flashColor: root.flashColor
             fontSize: parent.size
