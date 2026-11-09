@@ -4,7 +4,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import { trayItems, widgetSettings } from './tray.mjs'
+import { readApprovals, runApproval, trayItems, widgetSettings } from './tray.mjs'
 
 // No settings file, so every setting reads as its default.
 process.env.AGENT_HUB_SETTINGS = '/nonexistent/agent-hub/settings.json'
@@ -144,6 +144,104 @@ test('a note from a session is a ▲ row that goes to that session', () => {
   assert.equal(t.alert, true)
 })
 
-test('the widget gets its flash length and done folding from Settings', () => {
-  assert.deepEqual(widgetSettings(), { flashMs: 2000, foldDone: true, messageMs: 6000, pollMs: 2000, inboxWidth: 600, inboxHeight: 720 })
+test('the widget gets its chip, sounds, flash and inbox from Settings', () => {
+  assert.deepEqual(widgetSettings(), {
+    count: ['you', 'broke', 'work', 'watch', 'done'],
+    ring: true,
+    desktop: false,
+    soundYou: false,
+    soundBroke: false,
+    sound: 'message-new-instant',
+    quiet: true,
+    flashMs: 2000,
+    foldDone: true,
+    messageMs: 6000,
+    pollMs: 2000,
+    inboxWidth: 600,
+    inboxHeight: 720,
+  })
+})
+
+const proposal = (kind, extra = {}) => ({
+  id: `1-${kind}-ab`,
+  kind,
+  at: 5000,
+  status: 'pending',
+  claude_session: 's1',
+  pane: '',
+  pr: { repo: 'ci-playground', ref: '!128' },
+  title: `${kind} title`,
+  script: '/x/approval.py',
+  ...extra,
+})
+
+test('proposals are rows with their own buttons, a reply showing its text', () => {
+  const babysit = agent('s1', 'idle', { repo: 'ci-playground' })
+  const ps = [
+    proposal('reply', { title: 'Reply to @alice on auth.py:42', body: 'Good catch, see 3f9a1c2.' }),
+    proposal('push', { title: 'Push 2 commits to feat', local: 'babysit/128', branch: 'feat', commits: [{ added: 6, removed: 2 }, { added: 12, removed: 4 }] }),
+    proposal('manual', { title: 'Run deploy:staging', job: { name: 'deploy:staging', stage: 'deploy' } }),
+    proposal('retry', { job: { name: 'test:integration', reason: 'runner lost connection' } }),
+  ]
+  const t = trayItems([babysit], new Set(), new Set(), [], ps)
+  const rows = t.items.filter(i => i.approval)
+  assert.deepEqual(
+    rows.map(i => [i.section, i.glyph, i.title, i.meta, i.actions]),
+    [
+      ['you', '↩', 'Reply to @alice on auth.py:42', 'ci-playground !128 · babysit · reply', ['post', 'edit', 'skip']],
+      ['you', '↑', 'Push 2 commits to feat', 'ci-playground !128 · babysit/128 → feat · +18 −6', ['push', 'review', 'go']],
+      ['you', '▶', 'Run deploy:staging', 'ci-playground !128 · deploy stage', ['run', 'skip']],
+      ['broke', '✗', 'test:integration failed, looks flaky', 'ci-playground !128 · runner lost connection', ['retry', 'go']],
+    ],
+  )
+  assert.equal(rows[0].preview, 'Good catch, see 3f9a1c2.')
+  assert.equal(rows[0].agent, 's1', 'Go finds the session that proposed it')
+  assert.equal(t.counts.you, 3)
+  assert.equal(t.counts.broke, 1)
+})
+
+test('a failed proposal is a ✗ row to try again, go to, or dismiss', () => {
+  const r = trayItems([], new Set(), new Set(), [], [proposal('push', { status: 'failed', title: 'Push 2 commits to feat', result: { message: 'Someone pushed', at: 9 } })])
+  assert.deepEqual(
+    r.items.map(i => [i.section, i.id, i.title, i.meta, i.actions]),
+    [['broke', 'af:1-push-ab', 'Push 2 commits to feat failed', 'ci-playground !128 · Someone pushed', ['again', 'go', 'dismiss']]],
+  )
+})
+
+test('with tray buttons off, a proposal only opens Alt+A or its session', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'tray-buttons-'))
+  const was = process.env.AGENT_HUB_SETTINGS
+  process.env.AGENT_HUB_SETTINGS = join(dir, 'settings.json')
+  writeFileSync(process.env.AGENT_HUB_SETTINGS, JSON.stringify({ 'approvals.trayButtons': false }))
+  const t = trayItems([agent('s1', 'idle')], new Set(), new Set(), [], [proposal('reply', { body: 'x' })])
+  process.env.AGENT_HUB_SETTINGS = was
+  assert.deepEqual(t.items[0].actions, ['review', 'go'])
+})
+
+test('readApprovals lists pending and failed proposals, skipping settled and broken files', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'tray-approvals-'))
+  writeFileSync(join(dir, '1.json'), JSON.stringify(proposal('reply')))
+  writeFileSync(join(dir, '2.json'), JSON.stringify(proposal('push', { id: '2', status: 'failed' })))
+  writeFileSync(join(dir, '3.json'), JSON.stringify(proposal('retry', { id: '3', status: 'done' })))
+  writeFileSync(join(dir, '4.json'), '{ broken')
+  writeFileSync(join(dir, 'log.jsonl'), '')
+  assert.deepEqual(
+    readApprovals(dir).map(p => p.status),
+    ['pending', 'failed'],
+  )
+  assert.deepEqual(readApprovals(join(dir, 'missing')), [])
+})
+
+test('runApproval runs the proposal’s own approval.py under zsh and reads its JSON answer', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'tray-run-'))
+  const script = join(dir, 'approval.py')
+  writeFileSync(script, '')
+  const seen = []
+  const exec = async args => (seen.push(args), { ok: true, out: '{"ok": true, "message": "Posted the reply to @alice"}\n', err: '' })
+  assert.deepEqual(await runApproval({ script }, ['approve', 'p1'], exec), { ok: true, message: 'Posted the reply to @alice' })
+  assert.deepEqual(seen[0].slice(-4), ['python3', script, 'approve', 'p1'])
+  const failing = async () => ({ ok: false, out: '', err: 'Traceback\nSystemExit: boom' })
+  assert.deepEqual(await runApproval({ script }, ['approve', 'p1'], failing), { ok: false, message: 'SystemExit: boom' })
+  assert.equal((await runApproval({ script: '/bin/sh' }, ['approve', 'p1'], exec)).ok, false, 'only an approval.py')
+  assert.equal((await runApproval({ script: join(dir, 'nope', 'approval.py') }, ['approve'], exec)).ok, false)
 })

@@ -1,7 +1,9 @@
 // The inbox: every item from the tray command in sections, needs-you first,
-// each with its buttons. The first button is the usual answer and is drawn
-// in blue; 1 and 2 press the first two, ↵ goes to the agent, x dismisses,
-// j and k move. Done items fold into one line until shown.
+// each with its buttons. A button that answers or approves is filled in its
+// section's colour, one that opens something is blue, one that turns it down
+// is grey; ↵ presses the first, 1 2 3 the first three, x dismisses, j and k
+// move. A babysitter's reply shows the text it would post. Done items fold
+// into one line until shown.
 import QtQuick
 import QtQuick.Layouts
 import "mocha.js" as M
@@ -53,9 +55,9 @@ Rectangle {
         const k = event.key
         if (k === Qt.Key_J || k === Qt.Key_Down) sel = Math.min(rows.length - 1, sel + 1)
         else if (k === Qt.Key_K || k === Qt.Key_Up) sel = Math.max(0, sel - 1)
-        else if ((k === Qt.Key_Return || k === Qt.Key_Enter) && current) act("go", current.id)
-        else if ((k === Qt.Key_1 || k === Qt.Key_2) && current) {
-            const a = current.actions[k === Qt.Key_1 ? 0 : 1]
+        else if ((k === Qt.Key_Return || k === Qt.Key_Enter) && current) act(current.actions[0] || "go", current.id)
+        else if ((k === Qt.Key_1 || k === Qt.Key_2 || k === Qt.Key_3) && current) {
+            const a = current.actions[k - Qt.Key_1]
             if (a) act(a, current.id)
         } else if (k === Qt.Key_X && current) act("dismiss", current.id)
         else if (k === Qt.Key_Escape) close()
@@ -63,21 +65,23 @@ Rectangle {
         event.accepted = true
     }
 
-    // One action button: an outline, blue for the usual answer, with the
-    // key that presses it.
+    // One action button with the key that presses it: filled in `fill` for
+    // an answer, a blue outline to open something, a grey one otherwise.
     component ActButton: Rectangle {
         id: b
         property string label
-        property bool primary: false
+        property string look: "plain"
+        property color fill: M.peach
         property string keyHint: ""
         signal clicked()
 
+        readonly property color ink: look === "fill" ? M.crust : look === "blue" ? M.blue : M.subtext1
         implicitWidth: br.implicitWidth + 16
-        implicitHeight: 22
+        implicitHeight: 24
         radius: 6
-        color: ma.containsMouse ? M.surface0 : "transparent"
-        border.width: 1
-        border.color: primary ? M.blue : M.surface1
+        color: look === "fill" ? (ma.containsMouse ? Qt.lighter(fill, 1.1) : fill) : ma.containsMouse ? M.surface0 : "transparent"
+        border.width: look === "fill" ? 0 : 1
+        border.color: look === "blue" ? M.blue : M.surface1
 
         Row {
             id: br
@@ -85,14 +89,15 @@ Rectangle {
             spacing: 6
             Text {
                 text: b.label
-                color: b.primary ? M.blue : M.subtext1
+                color: b.ink
                 font.pixelSize: 12
-                font.weight: b.primary ? Font.DemiBold : Font.Medium
+                font.weight: b.look === "plain" ? Font.Medium : Font.DemiBold
             }
             Text {
                 text: b.keyHint
                 visible: b.keyHint !== ""
-                color: b.primary ? "#9989b4fa" : M.overlay1
+                color: b.ink
+                opacity: 0.65
                 font.family: M.mono
                 font.pixelSize: 11
             }
@@ -106,18 +111,48 @@ Rectangle {
         }
     }
 
-    readonly property var labels: ({ allow: "Allow", deny: "Deny", go: "Go", dismiss: "Dismiss" })
+    readonly property var labels: ({
+        allow: "Allow", deny: "Deny", go: "Go", dismiss: "Dismiss",
+        post: "Post", edit: "Edit", skip: "Skip", push: "Push", review: "Review",
+        run: "Run", retry: "Retry", approve: "Approve", move: "Move", again: "Try again"
+    })
+    readonly property var fills: ["allow", "post", "push", "run", "retry", "approve", "move", "again"]
+    readonly property var blues: ["go", "edit", "review"]
+    function lookOf(action) {
+        return fills.indexOf(action) >= 0 ? "fill" : blues.indexOf(action) >= 0 ? "blue" : "plain"
+    }
+
+    // A row's buttons, in order, with their keys.
+    component Buttons: Row {
+        id: bs
+        required property var item
+        spacing: 5
+        Repeater {
+            model: bs.item.actions
+            ActButton {
+                required property string modelData
+                required property int index
+                label: inbox.labels[modelData] || modelData
+                look: inbox.lookOf(modelData)
+                fill: M.section[bs.item.section] || M.peach
+                keyHint: index < 3 ? String(index + 1) : ""
+                onClicked: inbox.act(modelData, bs.item.id)
+            }
+        }
+    }
 
     // One item: its glyph in a square of its section's colour, its title and
-    // where it is, and its buttons.
+    // where it is, and its buttons: on the right, or under it when there are
+    // three or a reply to show.
     component ItemRow: Rectangle {
         id: r
         required property var item
         readonly property bool loud: item.section === "you" || item.section === "broke"
         readonly property bool selected: inbox.currentId === item.id
+        readonly property bool below: !!item.preview || (item.actions || []).length > 2
 
         Layout.fillWidth: true
-        implicitHeight: rl.implicitHeight + (item.section === "work" ? 6 : 10)
+        implicitHeight: rc.implicitHeight + (below ? 10 : item.section === "work" ? 6 : 10)
         radius: 6
         color: selected ? M.surface0 : (M.tint[item.section] || "transparent")
 
@@ -125,11 +160,17 @@ Rectangle {
             anchors.fill: parent
             onClicked: inbox.sel = Math.max(0, inbox.rows.findIndex(x => x.id === r.item.id))
         }
+        ColumnLayout {
+            id: rc
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: 5
         RowLayout {
             id: rl
-            anchors.fill: parent
-            anchors.leftMargin: 8
-            anchors.rightMargin: 8
+            Layout.fillWidth: true
+            Layout.leftMargin: 8
+            Layout.rightMargin: 8
             spacing: 10
             Rectangle {
                 Layout.preferredWidth: 20
@@ -164,20 +205,39 @@ Rectangle {
                     elide: Text.ElideRight
                 }
             }
-            Row {
-                spacing: 5
-                Repeater {
-                    model: r.item.actions
-                    ActButton {
-                        required property string modelData
-                        required property int index
-                        label: inbox.labels[modelData] || modelData
-                        primary: index === 0
-                        keyHint: index < 2 ? String(index + 1) : ""
-                        onClicked: inbox.act(modelData, r.item.id)
-                    }
-                }
+            Buttons {
+                item: r.item
+                visible: !r.below
             }
+        }
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.leftMargin: 38
+            Layout.rightMargin: 8
+            visible: !!r.item.preview
+            implicitHeight: pv.implicitHeight + 12
+            radius: 5
+            color: M.crust
+            Text {
+                id: pv
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.leftMargin: 8
+                anchors.rightMargin: 8
+                text: "“" + String(r.item.preview || "").replace(/\s+/g, " ") + "”"
+                color: M.subtext1
+                font.pixelSize: 12
+                wrapMode: Text.Wrap
+                maximumLineCount: 3
+                elide: Text.ElideRight
+            }
+        }
+        Buttons {
+            item: r.item
+            visible: r.below
+            Layout.leftMargin: 38
+        }
         }
     }
 
@@ -331,7 +391,7 @@ Rectangle {
                     visible: inbox.message === ""
                 }
                 Text {
-                    text: "j k move · ↵ go · 1 2 buttons · x dismiss"
+                    text: "j k move · ↵ first button · 1 2 3 buttons · x dismiss"
                     color: M.overlay1
                     font.family: M.mono
                     font.pixelSize: 11
