@@ -398,6 +398,7 @@ function emptyRows(height) {
 }
 
 const CARET = '\x1b[7m \x1b[0m'
+const caretBlock = ({ before, under, after }) => `${C.text}${before}\x1b[7m${under}\x1b[27m${after}${C.reset}`
 const PLACEHOLDER = {
   claude: 'Describe the item and let Claude handle it, or Shift+A to add it by hand',
   title: 'What needs doing',
@@ -426,7 +427,7 @@ function inputRow(label, pillBg, text, placeholder = '', right = null, at = unde
   const side = right && width() - lead - right.width >= need ? right : null
   const room = width() - lead - 1 - (side ? side.width + 2 : 0)
   const body = text
-    ? `${C.text}${ui.caretShown(ui.caretWindow(text, at, room + 1))}${C.reset}`
+    ? caretBlock(ui.caretParts(text, at, room + 1))
     : `${CARET}${C.hint}${fit(placeholder, room).trimEnd()}${C.reset}`
   return side ? `${pill}${body}\x1b[${width() - side.width + 1}G${side.text}` : `${pill}${body}`
 }

@@ -8,36 +8,15 @@
 import { existsSync } from 'node:fs'
 import { homedir } from 'node:os'
 
-import { charWidth, width as cells } from '../hub/term.mjs'
+import { width as cells } from '../hub/term.mjs'
+import { caretParts, caretShown, editLine, head, length, tail, withCaret } from '../hub/line.mjs'
 import { load as settings } from '../hub/settings.mjs'
 import { CATEGORIES, DEFAULT_CATEGORY, HANDOFF_MODELS, TYPES, filingState, handoffPlace, inGit } from './todo.mjs'
 
 // Widths are in terminal cells: a CJK character or an emoji takes two.
-export { cells }
+export { cells, caretParts, caretShown, editLine, head, tail, withCaret }
 
 export const tidy = text => String(text).replace(/\t/g, '  ').replace(/[\x00-\x1f\x7f]/g, '')
-
-// The most of text, from its start or its end, that fits in w cells.
-export function head(text, w) {
-  let out = ''
-  let used = 0
-  for (const ch of text) {
-    if (used + charWidth(ch) > w) break
-    out += ch
-    used += charWidth(ch)
-  }
-  return out
-}
-export function tail(text, w) {
-  let out = ''
-  let used = 0
-  for (const ch of [...text].reverse()) {
-    if (used + charWidth(ch) > w) break
-    out = ch + out
-    used += charWidth(ch)
-  }
-  return out
-}
 
 // Exactly w cells: padded, or cut with an ellipsis. A wide character that
 // would straddle the edge goes, and a space fills its place.
@@ -203,59 +182,6 @@ export const FIELDS = ['title', 'cat', 'note']
 export const EDIT_FIELDS = ['title', 'cat', 'type', 'repo', 'note']
 export const FIELD_NAMES = { title: 'title', cat: 'category', type: 'type', repo: 'directory', note: 'note' }
 
-const LEFT = ['\x1b[D']
-const RIGHT = ['\x1b[C']
-const WORD_LEFT = ['\x1b[1;5D', '\x1b[1;3D', '\x1bb']
-const WORD_RIGHT = ['\x1b[1;5C', '\x1b[1;3C', '\x1bf']
-const HOME = ['\x1b[H', '\x1b[1~', '\x01']
-const END = ['\x1b[F', '\x1b[4~', '\x05']
-
-// A line being typed, after one key, with the caret `at` code points in
-// (undefined is the end). The arrows, Home and End (or Ctrl+A and Ctrl+E)
-// move the caret, Ctrl or Alt with an arrow a word; backspace and Delete
-// take the character before or under it, Ctrl+U everything before it,
-// Ctrl+K everything after, Ctrl+W the word before; any other printable key
-// goes in at the caret. Code points, not cells, so a wide character is one
-// step; the caret steps over zero-width marks, so it never sits on one.
-export function editLine(text, at, key) {
-  const chars = [...text]
-  let i = Math.max(0, Math.min(at ?? chars.length, chars.length))
-  const zero = j => j < chars.length && charWidth(chars[j]) === 0
-  const done = (out, to) => ({ text: out.join(''), at: to })
-  if (LEFT.includes(key)) {
-    i = Math.max(0, i - 1)
-    while (i > 0 && zero(i)) i--
-    return done(chars, i)
-  }
-  if (RIGHT.includes(key)) {
-    i = Math.min(chars.length, i + 1)
-    while (zero(i)) i++
-    return done(chars, i)
-  }
-  if (WORD_LEFT.includes(key)) {
-    while (i > 0 && /\s/.test(chars[i - 1])) i--
-    while (i > 0 && !/\s/.test(chars[i - 1])) i--
-    return done(chars, i)
-  }
-  if (WORD_RIGHT.includes(key)) {
-    while (i < chars.length && /\s/.test(chars[i])) i++
-    while (i < chars.length && !/\s/.test(chars[i])) i++
-    return done(chars, i)
-  }
-  if (HOME.includes(key)) return done(chars, 0)
-  if (END.includes(key)) return done(chars, chars.length)
-  if (key === '\x7f' || key === '\b') return i ? done(chars.toSpliced(i - 1, 1), i - 1) : done(chars, 0)
-  if (key === '\x1b[3~') return done(chars.toSpliced(i, 1), i)
-  if (key === '\x15') return done(chars.slice(i), 0)
-  if (key === '\x0b') return done(chars.slice(0, i), i)
-  if (key === '\x17') {
-    const before = chars.slice(0, i).join('').replace(/\S*\s*$/, '')
-    return done([...before, ...chars.slice(i)], [...before].length)
-  }
-  if (!key.startsWith('\x1b') && key >= ' ') return done(chars.toSpliced(i, 0, ...key), i + [...key].length)
-  return done(chars, i)
-}
-
 // editLine for a line with the caret at its end.
 export const editText = (text, key) => editLine(text, undefined, key).text
 
@@ -264,32 +190,8 @@ export const editText = (text, key) => editLine(text, undefined, key).text
 function typeInto(prompt, field, key) {
   const { text, at } = editLine(prompt[field], prompt.at, key)
   prompt[field] = text
-  if (at < [...text].length) prompt.at = at
+  if (at < length(text)) prompt.at = at
   else delete prompt.at
-}
-
-// Marks the caret in a line, for wrapping or cutting with it: a one-cell
-// stand-in, which caretShown turns back into the caret.
-export const CARET_MARK = ''
-export const withCaret = (text, at) => {
-  const chars = [...text]
-  return chars.toSpliced(at ?? chars.length, 0, CARET_MARK).join('')
-}
-
-// A line with the caret mark in it, drawn: the character after the mark in
-// reverse video, or a reverse-video space when nothing follows it on the line.
-export const caretShown = line =>
-  line.replace(new RegExp(`${CARET_MARK}(.[\\p{Mn}\\p{Me}\\u200b-\\u200f\\ufe0f]*)?`, 'u'), (_, ch) => `\x1b[7m${ch ?? ' '}\x1b[27m`)
-
-// The part of a line, with the caret marked, that fits in w cells and keeps
-// the caret in sight: all of it when it fits, else cut from the start up to
-// just before the caret, leaving the character under it, and cut at the end.
-export function caretWindow(text, at, w) {
-  const marked = withCaret(text, at)
-  if (cells(marked) <= w) return marked
-  const [before, after] = marked.split(CARET_MARK)
-  const lead = tail(before, Math.max(0, w - 1 - cells(head(after, 2))))
-  return head(`${lead}${CARET_MARK}${after}`, w)
 }
 
 // On a filing that failed, starts from its message and replaces it.
