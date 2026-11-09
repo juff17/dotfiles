@@ -3,7 +3,7 @@ name: gitlink
 description: >
   Build shareable, clickable web permalinks to specific lines of code on the
   repo's git host. Use this whenever the user wants to share, link to, or point
-  someone at a snippet, function, file, or line range — phrasings like 
+  someone at a snippet, function, file, or line range — phrasings like
   "send me a link to these lines", "get a permalink", "shareable link to this code".
 license: MIT
 ---

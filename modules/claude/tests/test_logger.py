@@ -8,7 +8,6 @@ import importlib.util
 import io
 import json
 import os
-import re
 import signal
 import string
 import subprocess
@@ -16,7 +15,7 @@ import sys
 import tempfile
 import threading
 import unittest
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
@@ -38,7 +37,7 @@ with mock.patch.dict(os.environ, {"AGENT_HUB_SETTINGS": "/nonexistent/agent-hub/
 dl = load("discover_link")
 cm = load("change_markers")
 
-NOW = datetime(2026, 10, 8, 14, 0, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 10, 8, 14, 0, 0, tzinfo=UTC)
 
 
 def run_script(name, *argv, env=None, cwd=None):

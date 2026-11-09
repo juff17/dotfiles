@@ -42,7 +42,7 @@ const plain = s =>
   firstLine(s)
     .replace(/^#+\s+|^[-*]\s+|^>\s+/, '')
     .replace(/\*\*|__|`/g, '')
-const unescape = s =>
+const unescapeHtml = s =>
   s.replace(/&(lt|gt|amp|quot|#39);/g, (_, n) => ({ lt: '<', gt: '>', amp: '&', quot: '"', '#39': "'" })[n])
 
 // The text a person typed, or null for the wrappers Claude Code puts in the
@@ -68,9 +68,9 @@ export function parseNotification(text) {
   const ids = [...text.matchAll(/<task-id>([^<]+)<\/task-id>/g)].map(m => m[1])
   const id = ids[0]
   if (!id) return null
-  const summary = unescape(text.match(/<summary>([\s\S]*?)<\/summary>/)?.[1] ?? '')
+  const summary = unescapeHtml(text.match(/<summary>([\s\S]*?)<\/summary>/)?.[1] ?? '')
   const event = text.match(/<event>([\s\S]*?)<\/event>/)?.[1]
-  const lines = event === undefined ? [] : unescape(event).split('\n').map(l => l.trim()).filter(Boolean)
+  const lines = event === undefined ? [] : unescapeHtml(event).split('\n').map(l => l.trim()).filter(Boolean)
   return { id, ids, summary, lines }
 }
 

@@ -15,7 +15,7 @@ export const SECTIONS = [
       ['alt+s', 'Settings'],
       ['alt+d', 'Diagrams of the active tab, open session or selected card'],
       ['alt+n', 'New agent'],
-      ['alt+v', "Open the current tab's repo or worktree in VS Code"],
+      ['alt+e', "Open the current tab's repo or worktree in your editor (Settings › Editor)"],
       ['ctrl+shift+a', 'Switch between the workspace and the hub'],
       ['ctrl+shift+b', 'Back to the board (closes the session the hub opened)', true],
       ['ctrl+shift+n', 'New window with the layout'],
