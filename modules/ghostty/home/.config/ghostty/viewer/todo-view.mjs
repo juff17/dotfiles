@@ -314,7 +314,7 @@ function repoPicks(room) {
   const matches = ui.repoMatches(prompt)
   const typed = prompt.find ? `${C.text}${prompt.find}${C.reset}${CARET} ` : ''
   const lead = prompt.find ? ui.cells(prompt.find) + 2 : 0
-  if (!matches.length) return `${typed}${C.peach}no repo matches${C.reset}`
+  if (!matches.length) return `${typed}${C.peach}no directory matches${C.reset}`
   const at = Math.max(0, matches.indexOf(prompt.repo))
   const count = `${at + 1}/${matches.length}`
   let used = lead + count.length + 2

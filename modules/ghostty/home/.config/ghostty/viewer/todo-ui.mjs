@@ -201,7 +201,7 @@ export const position = (list, current, marks) =>
 export const FIELDS = ['title', 'cat', 'note']
 // Adding by hand skips the type, since t sets it after; the edit form has it.
 export const EDIT_FIELDS = ['title', 'cat', 'type', 'repo', 'note']
-export const FIELD_NAMES = { title: 'title', cat: 'category', type: 'type', repo: 'repo', note: 'note' }
+export const FIELD_NAMES = { title: 'title', cat: 'category', type: 'type', repo: 'directory', note: 'note' }
 
 // A line being typed, after one key: backspace, Ctrl+U clears, Ctrl+W
 // drops the last word, and any other printable key goes on the end.
