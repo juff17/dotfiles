@@ -12,6 +12,7 @@ export const SECTIONS = [
     keys: [
       ['alt+h', 'This help'],
       ['alt+t', 'Todo list in a popup'],
+      ['alt+a', 'What babysitters want to post, push or run, to approve'],
       ['alt+s', 'Settings'],
       ['alt+d', 'Diagrams of the active tab, open session or selected card'],
       ['alt+n', 'New agent'],
@@ -130,6 +131,24 @@ export const SECTIONS = [
       ['tab', 'Complete the folder', true],
       ['ctrl+s', 'Start'],
       ['esc', 'Cancel'],
+    ],
+  },
+  {
+    id: 'approvals',
+    name: 'Approvals',
+    color: '#fab387',
+    where: 'alt+a, or Edit and Review in the tray',
+    keys: [
+      ['j / k', 'Next / previous proposal'],
+      ['a', 'Approve: post, push, retry or run it as shown'],
+      ['shift+a', 'Approve, and always do this kind on its own (Settings › Approvals)', true],
+      ['e', 'Edit the reply, inline or in $EDITOR (Settings › Approvals)'],
+      ['r', 'Reject it, or not yet for a push'],
+      ['↑ / ↓  ↵', 'A push’s commits, and open one’s diff', true],
+      ['space', 'Keep or drop the commit; a push without it goes back to the babysitter', true],
+      ['d', 'Every change in the push, in less', true],
+      ['g', 'Go to the babysit session'],
+      ['esc or alt+a', 'Close'],
     ],
   },
   {
