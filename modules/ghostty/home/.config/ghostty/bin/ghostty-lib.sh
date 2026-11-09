@@ -43,13 +43,21 @@ viewer_dir_file() {
 # allow-passthrough on its pane between its first round of questions, which
 # tmux answers, and its second, which Ghostty answers a moment later.
 open_viewer() {
-  local win=$1 dir=$2 tabs viewer i
+  local win=$1 dir=$2 tabs viewer share left i
   tabs=$(layout show -t "layout-$win" -v @tabs 2>/dev/null) || return
+  share=$(setting layout.viewerPercent GHOSTTY_VIEWER_SHARE 30)
   # DV_TABS tells Diagrams and Diff whose active tab to follow.
-  viewer=$(layout split-window -d -h -b -l "$(setting layout.viewerPercent GHOSTTY_VIEWER_SHARE 30)%" \
+  viewer=$(layout split-window -d -h -b -l "$share%" \
     -t "$tabs" -P -F '#{pane_id}' -c "$dir" \
     -e "DV_TABS=$TABS_SOCKET:ghostty-$win" -e "VIEWER_ID=$(viewer_id "$win")" \
     "$GHOSTTY_CONF/bin/ghostty-viewer" "$dir" 2>/dev/null) || return
+  # Ghostty opens a window small and the window manager grows it after, and
+  # tmux shares that growth out between the panes, so the viewer would end
+  # up far from its share of the row. This puts it back after every resize,
+  # which also undoes a drag of its divider. The hook's [0] is add_hub's.
+  left=$(layout display -p -t "$viewer" '#{pane_left}')
+  layout set-hook -t "layout-$win" 'window-resized[1]' \
+    "run -C 'resize-pane -t $viewer -x #{e|/:#{e|*:#{e|-:#{window_width},$left},$share},100}'"
   command -v yazi >/dev/null || return 0
   layout select-pane -t "$viewer"
   for ((i = 0; i < 40; i++)); do
