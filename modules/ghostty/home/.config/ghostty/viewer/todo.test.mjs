@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
+import { set as setSetting } from '../hub/settings.mjs'
 import { launch } from '../hub/model.mjs'
 import { FILING_TIMEOUT_MS, INSTALLED_CLI, KEEP_DONE_MS, add, age, arrange, category, change, fill, filerMessage, filingState, find, handoffPlace, handoffSpec, inGit, knownRepos, load, newId, prune, remove, repoOf, taskType } from './todo.mjs'
 
@@ -168,6 +169,11 @@ test('a hand-off starts one task agent per item, in its repo', () => {
   assert.equal(handoffSpec(it, { worktree: false }, all).cwd, '/r/dot/.claude/worktrees/w', 'on the current branch, where it was added')
   assert.doesNotMatch(handoffSpec(it, { worktree: false }, all).prompt, /remove the worktree/, 'no cleanup offer without a worktree of its own')
   assert.match(spec.prompt, /ask me whether to merge it; never merge unasked/, 'merging waits for the user')
+  const was = process.env.AGENT_HUB_SETTINGS
+  process.env.AGENT_HUB_SETTINGS = join(mkdtempSync(join(tmpdir(), 'todo-merge-')), 'settings.json')
+  setSetting('todo.handoff.merge', 'never')
+  assert.match(handoffSpec(it, {}, all).prompt, /never merge it, I merge it myself/, 'Settings can rule merging out')
+  process.env.AGENT_HUB_SETTINGS = was
   assert.equal(handoffSpec(it, { worktree: false }, d => d === '/r/dot').cwd, '/r/dot', 'falls back when its worktree is gone')
   assert.equal(handoffSpec(it, {}, () => false), undefined)
   const loose = handoffSpec({ ...it, repo: 'none', root: '/r/pix', worktree: '', cwd: '/r/pix' }, {}, all)
