@@ -297,15 +297,85 @@ class Approvals(unittest.TestCase):
 
     def test_a_github_manual_job_is_a_deployment_and_always_asks(self):
         self.set(**{"approvals.manual": "auto"})
+        self.reply({"repos/u/gad/actions/jobs/5": {"name": "e2e", "run_id": 9},
+                    "repos/u/gad/actions/runs/9/pending_deployments":
+                        [{"environment": {"id": 3, "name": "qa"}, "current_user_can_approve": True}]})
         _, out, pid = self.propose("manual", "--job", "5", "--name", "e2e")
         self.assertTrue(out.startswith("[proposed] "), out)
-        self.assertEqual((ap.load(pid)["kind"], ap.load(pid)["title"]), ("deploy", "Approve e2e"))
+        self.assertEqual((ap.load(pid)["kind"], ap.load(pid)["title"]), ("deploy", "Approve e2e (qa)"))
+        self.reply({"repos/u/gad/actions/jobs/6": {"name": "e2e"}})
+        with self.assertRaisesRegex(SystemExit, "Nothing you can approve"):
+            self.propose("manual", "--job", "6", "--name", "e2e")
 
-    def test_an_outside_status_cannot_be_retried_from_here(self):
-        _, _, pid = self.propose("retry", "--job", "status:ci/jenkins", "--name", "jenkins")
+    def test_an_outside_status_or_a_workflow_run_is_never_a_retry(self):
+        with self.assertRaisesRegex(SystemExit, "outside CI"):
+            self.propose("retry", "--job", "status:ci/jenkins", "--name", "jenkins")
+        with self.assertRaisesRegex(SystemExit, "run: id"):
+            self.propose("retry", "--job", "run:5", "--name", "fork workflow")
+
+    def test_a_retry_takes_the_jobs_real_name_and_a_deploying_one_asks(self):
+        self.set(**{"approvals.retry": "auto"})
+        self.reply({"repos/u/gad/actions/jobs/80": {"name": "deploy-prod", "head_sha": ""}})
+        _, out, pid = self.propose("retry", "--job", "80", "--name", "harmless")
+        self.assertTrue(out.startswith("[proposed] "), out)
+        self.assertEqual(ap.load(pid)["title"], "Retry deploy-prod")
+
+    def test_a_retry_runs_on_its_own_once_per_job_name_though_each_retry_gets_a_new_id(self):
+        self.set(**{"approvals.retry": "auto"})
+        _, out, _ = self.propose("retry", "--job", "77", "--name", "test:integration")
+        self.assertTrue(out.startswith("[auto] "), out)
+        _, out, _ = self.propose("retry", "--job", "78", "--name", "test:integration")
+        self.assertTrue(out.startswith("[proposed] "), out)
+
+    def test_a_job_from_an_older_commit_than_the_pr_head_is_not_run(self):
+        self.reply({"repos/u/gad/actions/jobs/77": {"name": "test", "head_sha": "a" * 40},
+                    "repos/u/gad/pulls/91": {"head": {"sha": "b" * 40}}})
+        _, _, pid = self.propose("retry", "--job", "77", "--name", "test")
         code, out = self.run_cli("approve", pid)
         self.assertEqual(code, 1)
-        self.assertIn("outside CI", json.loads(out)["message"])
+        self.assertIn("the PR is at bbbbbbb now", json.loads(out)["message"])
+        self.assertFalse(self.posts())
+
+    def test_a_deployment_approves_only_the_environments_proposed(self):
+        pending = [{"environment": {"id": 1, "name": "staging"}, "current_user_can_approve": True}]
+        self.reply({"repos/u/gad/actions/jobs/5": {"name": "deploy", "run_id": 9},
+                    "repos/u/gad/actions/runs/9/pending_deployments": pending})
+        _, _, pid = self.propose("deploy", "--job", "5", "--name", "deploy")
+        self.assertEqual(ap.load(pid)["title"], "Approve deploy (staging)")
+        # Staging went through elsewhere; production now waits on the same run.
+        self.reply({"repos/u/gad/actions/runs/9/pending_deployments":
+                    [{"environment": {"id": 2, "name": "production"}, "current_user_can_approve": True}]})
+        code, out = self.run_cli("approve", pid)
+        self.assertEqual(code, 1)
+        self.assertIn("nothing was approved", json.loads(out)["message"])
+        self.assertFalse(self.posts())
+        self.reply({"repos/u/gad/actions/runs/9/pending_deployments": pending + [
+            {"environment": {"id": 2, "name": "production"}, "current_user_can_approve": True}]})
+        self.assertEqual(self.run_cli("approve", pid)[0], 0)
+        self.assertIn("environment_ids[]=1", self.posts()[0])
+        self.assertNotIn("environment_ids[]=2", self.posts()[0])
+
+    def test_a_push_that_takes_commits_off_the_branch_shows_them_and_always_asks(self):
+        remote, clone, lease = self.repo()
+        self.set(**{"approvals.push": "auto"})
+        # The branch was rebuilt without the base's last commit.
+        git(clone, "reset", "-q", "--hard", "HEAD~2")
+        (clone / "other.py").write_text("x")
+        git(clone, "add", ".")
+        git(clone, "commit", "-q", "--amend", "-m", "base, redone")
+        _, out, pid = self.propose("push")
+        self.assertTrue(out.startswith("[proposed] "), out)
+        self.assertEqual([c["subject"] for c in ap.load(pid)["removes"]], ["base"])
+
+    def test_a_proposal_being_approved_is_not_removed_or_brought_back(self):
+        _, _, pid = self.propose("reply", "--comment", "rc:55", "--body", "one")
+        with ap.locked(pid):
+            self.assertFalse(ap.remove(pid))
+            with self.assertRaisesRegex(SystemExit, "being approved right now"):
+                self.propose("reply", "--comment", "rc:55", "--body", "two")
+        self.assertTrue(ap.remove(pid))
+        ap.finish({"id": pid, "pr": {"key": KEY}, "kind": "reply"}, "done", True, "Posted")
+        self.assertIsNone(ap.load(pid), "a removed proposal stays removed")
 
 
 class Watcher(unittest.TestCase):

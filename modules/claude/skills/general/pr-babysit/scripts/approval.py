@@ -86,8 +86,16 @@ def save(p):
 
 
 def remove(pid):
-    path_of(pid).unlink(missing_ok=True)
-    (ROOT / f"{pid}.lock").unlink(missing_ok=True)
+    """Removes a proposal, unless an approval of it is running. Its lock file
+    stays: one that's unlinked while held would let a second run start."""
+    ROOT.mkdir(parents=True, exist_ok=True)
+    with open(ROOT / f"{pid}.lock", "w") as handle:
+        try:
+            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return False
+        path_of(pid).unlink(missing_ok=True)
+    return True
 
 
 def every():
@@ -113,8 +121,9 @@ def locked(pid):
 
 def log(p, result):
     ROOT.mkdir(parents=True, exist_ok=True)
+    job = p.get("job") or {}
     entry = {"at": int(time.time() * 1000), "pr": p["pr"]["key"], "kind": p["kind"],
-             "job": (p.get("job") or {}).get("id"), "ok": result["ok"], "auto": result.get("auto", False)}
+             "job": job.get("id"), "name": job.get("name"), "ok": result["ok"], "auto": result.get("auto", False)}
     with open(LOG, "a") as f:
         f.write(json.dumps(entry) + "\n")
 
@@ -272,6 +281,10 @@ def build(args):
                 p["remote_head"] = remote_head(wt, p["remote"], p["branch"])
             except RuntimeError:
                 p["remote_head"] = ""
+            # What the force push takes off the branch: none for a plain
+            # push, the old commits after a rebase. Shown, so nothing goes
+            # unseen.
+            p["removes"] = [commit_info(wt, sha) for sha in git(wt, "rev-list", f"HEAD..{lease}").split()]
             n = len(shas)
             p["title"] = f"Push {n} commit{'s' if n != 1 else ''} to {p['branch']}"
             p["command"] = push_command(p)
@@ -279,12 +292,59 @@ def build(args):
     else:
         if not args.job or not args.name:
             raise SystemExit(f"A {args.kind} needs --job and --name")
-        p["job"] = {"id": args.job, "name": args.name, "reason": args.reason or "", "stage": args.stage or ""}
+        jid = str(args.job)
+        if jid.startswith("status:"):
+            raise SystemExit(f"{args.name} is an outside CI status; it can only be rerun from its own page")
+        if jid.startswith("run:") and args.kind != "deploy":
+            raise SystemExit("A run: id is a workflow waiting for approval: propose it as manual or deploy")
+        p["job"] = {"id": args.job, "name": args.name, "reason": args.reason or "", "stage": args.stage or "",
+                    **job_facts(args.url, jid, args.kind)}
         verb = {"retry": "Retry", "manual": "Run", "deploy": "Approve"}[args.kind]
-        p["title"] = f"{verb} {args.name}"
+        envs = ", ".join(e["name"] for e in p["job"].get("environments", []))
+        p["title"] = f"{verb} {p['job']['name']}" + (f" ({envs})" if envs else "")
         p["key"] = f"{args.kind}:{args.job}"
     p["where"] = where
     return p
+
+
+def job_facts(url, jid, kind):
+    """What the forge says about a job, over what the agent passed: its real
+    name and stage (which decide whether it deploys), the commit it runs on,
+    and for a GitHub deployment the environments waiting, which are all that
+    approving it will approve."""
+    forge, number = w.parse_url(url)
+    facts = {}
+    if isinstance(forge, w.GitHub):
+        if jid.startswith("run:"):
+            r = forge.api(f"repos/{forge.project}/actions/runs/{jid[4:]}") or {}
+            facts.update(sha=r.get("head_sha", ""), run_id=jid[4:])
+        else:
+            j = forge.api(f"repos/{forge.project}/actions/jobs/{jid}") or {}
+            if j.get("name"):
+                facts["name"] = j["name"]
+            facts.update(sha=j.get("head_sha", ""), run_id=j.get("run_id", ""))
+            if kind == "deploy":
+                if not facts["run_id"]:
+                    raise SystemExit(f"Nothing you can approve is waiting on {jid}: GitHub names no workflow run for it")
+                pending = forge.api(f"repos/{forge.project}/actions/runs/{facts['run_id']}/pending_deployments") or []
+                facts["environments"] = [{"id": d["environment"]["id"], "name": d["environment"].get("name", "")}
+                                         for d in pending if d.get("current_user_can_approve")]
+                if not facts["environments"]:
+                    raise SystemExit(f"Nothing you can approve is waiting on {jid}")
+    else:
+        j = forge.api(f"{forge.proj()}/jobs/{jid}") or {}
+        if j.get("name"):
+            facts["name"] = j["name"]
+        if j.get("stage"):
+            facts["stage"] = j["stage"]
+        facts["sha"] = (j.get("commit") or {}).get("id") or (j.get("pipeline") or {}).get("sha") or ""
+    return {k: v for k, v in facts.items() if v not in (None, "")}
+
+
+def head_now(forge, number):
+    if isinstance(forge, w.GitHub):
+        return forge.api(f"repos/{forge.project}/pulls/{number}")["head"]["sha"]
+    return forge.api(f"{forge.proj()}/merge_requests/{number}")["sha"]
 
 
 def push_command(p, head=None):
@@ -301,15 +361,22 @@ def propose(args):
         # GitHub's waiting jobs are environment or workflow approvals.
         args.kind, mode = "deploy", "ask"
     p = build(args)
-    if args.kind == "manual" and DEPLOYS.search(f"{args.name} {args.stage or ''}"):
+    job = p.get("job") or {}
+    if args.kind in ("manual", "retry") and DEPLOYS.search(f"{job.get('name', '')} {job.get('stage', '')}"):
         mode = "ask"
-    retried = any(h.get("kind") == "retry" and str(h.get("job")) == str(args.job) and h.get("pr") == p["pr"]["key"] for h in history())
+    # A retry makes a new job id, so "once" is per job name on the PR.
+    retried = any(h.get("kind") == "retry" and h.get("pr") == p["pr"]["key"] and h.get("auto")
+                  and (h.get("name") == job.get("name") or str(h.get("job")) == str(job.get("id"))) for h in history())
     if args.kind == "retry" and retried:
+        mode = "ask"
+    # A push that takes commits off the branch always waits for the user.
+    if p.get("removes"):
         mode = "ask"
     # A new proposal replaces an older one about the same thing.
     for old in every():
-        if old.get("pr", {}).get("key") == p["pr"]["key"] and old.get("key") == p["key"] and old.get("status") in ("pending", "failed"):
-            remove(old["id"])
+        if old.get("pr", {}).get("key") == p["pr"]["key"] and old.get("key") == p["key"] and old.get("status") in ("pending", "failed") \
+                and not remove(old["id"]):
+            raise SystemExit(f"{old['id']} is being approved right now; wait for its [approval] event")
     save(p)
     if mode == "auto":
         result = approve(p["id"], auto=True)
@@ -327,7 +394,8 @@ def finish(p, status, ok, message, auto=False, **extra):
     p["result"] = {"ok": ok, "message": message, "at": int(time.time() * 1000), "auto": auto, **extra}
     # The session already heard about what it ran itself.
     p["reported"] = auto
-    save(p)
+    if path_of(p["id"]).exists():
+        save(p)
     if status in ("done", "failed"):
         log(p, p["result"])
     return {"ok": ok, "message": message, "id": p["id"], "status": status}
@@ -362,6 +430,9 @@ def run_push(p):
     now = remote_head(wt, p["remote"], p["branch"])
     if now != p["lease"]:
         raise RuntimeError(f"Someone pushed to {p['branch']} since {p['lease'][:7]} (now {now[:7] or 'gone'}); nothing was pushed")
+    removes = git(wt, "rev-list", f"{p['head']}..{p['lease']}").split()
+    if removes != [c["sha"] for c in p.get("removes", [])]:
+        raise RuntimeError("The commits this push would take off the branch changed; propose it again")
     git(wt, "push", f"--force-with-lease={p['branch']}:{p['lease']}", p["remote"], f"{p['head']}:refs/heads/{p['branch']}")
     n = len(p["commits"])
     return f"Pushed {n} commit{'s' if n != 1 else ''} to {p['branch']}, now at {p['head'][:7]}", {"head": p["head"]}
@@ -370,21 +441,29 @@ def run_push(p):
 def run_job(p, forge):
     job, kind = p["job"], p["kind"]
     jid = str(job["id"])
+    if job.get("sha"):
+        head = head_now(forge, p["pr"]["number"])
+        if head != job["sha"]:
+            raise RuntimeError(f"{job['name']} is from {job['sha'][:7]}, but the PR is at {head[:7]} now; nothing was run")
     if isinstance(forge, w.GitHub):
         if jid.startswith("status:"):
             raise RuntimeError(f"{job['name']} is an outside CI status; it can only be rerun from its own page")
         if jid.startswith("run:"):
+            if kind != "deploy":
+                raise RuntimeError("A workflow approval is only run as a deployment")
             api(forge, f"repos/{forge.project}/actions/runs/{jid[4:]}/approve", "POST")
             return f"Approved workflow run {job['name']}"
         if kind == "retry":
             api(forge, f"repos/{forge.project}/actions/jobs/{jid}/rerun", "POST")
             return f"Retried {job['name']}"
-        # An environment approval: the job is a check run of a workflow run.
-        run_id = (forge.api(f"repos/{forge.project}/actions/jobs/{jid}") or {}).get("run_id")
+        # An environment approval: only the environments the user saw, and
+        # only while every one of them still waits.
+        run_id, wanted = job.get("run_id"), {e["id"] for e in job.get("environments", [])}
         pending = forge.api(f"repos/{forge.project}/actions/runs/{run_id}/pending_deployments") or []
-        envs = [d["environment"]["id"] for d in pending if d.get("current_user_can_approve")]
-        if not envs:
-            raise RuntimeError(f"Nothing you can approve is waiting on {job['name']}")
+        waiting = {d["environment"]["id"] for d in pending if d.get("current_user_can_approve")}
+        if not wanted or not wanted <= waiting:
+            raise RuntimeError(f"What {job['name']} waited on changed since it was proposed; nothing was approved")
+        envs = sorted(wanted)
         cmd = [forge.cli, "api", "--hostname", forge.host, "-X", "POST",
                f"repos/{forge.project}/actions/runs/{run_id}/pending_deployments",
                "-f", "state=approved", "-f", "comment=Approved from pr-babysit"]
@@ -426,6 +505,9 @@ def approve(pid, body=None, drop=(), auto=False):
             return finish(p, "failed", False, f"{token_hint(p)} ({e})", auto)
         except (w.ApiError, RuntimeError, subprocess.TimeoutExpired, OSError) as e:
             return finish(p, "failed", False, str(e), auto)
+        # Whatever else goes wrong must still reach the tray and the session.
+        except Exception as e:
+            return finish(p, "failed", False, f"{type(e).__name__}: {e}", auto)
         return finish(p, "done", True, message, auto, **extra)
 
 
@@ -521,8 +603,8 @@ def main(argv=None):
     elif args.cmd == "reject":
         result = reject(args.id)
     elif args.cmd == "dismiss":
-        remove(path_of(args.id).stem)
-        result = {"ok": True, "message": "Dismissed"}
+        gone = remove(path_of(args.id).stem)
+        result = {"ok": gone, "message": "Dismissed" if gone else "It's being approved right now"}
     else:
         print(json.dumps(every(), indent=2))
         return 0

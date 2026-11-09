@@ -94,7 +94,19 @@ def approval_outcomes(forge, number, session):
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     import approval
 
-    return approval.outcomes(f"{forge.host}/{forge.project}#{number}", session)
+    # A broken approvals folder mustn't end the watch; the next check tries
+    # again, and the same error is told once.
+    try:
+        return approval.outcomes(f"{forge.host}/{forge.project}#{number}", session)
+    except (OSError, ValueError, KeyError) as e:
+        said = f"couldn't read the approvals folder: {e}"
+        if said in TOLD:
+            return []
+        TOLD.add(said)
+        return [said]
+
+
+TOLD = set()
 
 
 def emit(tag, msg):
