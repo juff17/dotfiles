@@ -22,6 +22,7 @@ test('every board key names its action', () => {
     E: 'reviewAll',
     o: 'goToTab',
     x: 'close',
+    '\x18': 'close',
     n: 'new',
     '/': 'filter',
     '\x1b': 'back',

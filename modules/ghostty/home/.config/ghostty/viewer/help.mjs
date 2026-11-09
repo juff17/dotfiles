@@ -114,7 +114,7 @@ export const SECTIONS = [
       ['a / d', 'Allow / deny the permission prompt'],
       ['e / E', 'Mark the done agent seen / all of them', true],
       ['o', 'Go to the agent’s tab'],
-      ['x', 'Close its tab, or stop a monitor (asks first)'],
+      ['x  ctrl+x', 'Close its tab, or stop a monitor (asks first)'],
       ['/', 'Filter by name, repo or command'],
       ['n', 'New agent'],
     ],

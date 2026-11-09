@@ -35,6 +35,8 @@ export const KEYS = {
   E: 'reviewAll',
   o: 'goToTab',
   x: 'close',
+  // Ctrl+X, for the list beside an open session.
+  '\x18': 'close',
   n: 'new',
   '/': 'filter',
   '\x1b': 'back',
