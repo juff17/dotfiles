@@ -23,6 +23,7 @@ import {
   listScroll, listSelection, markedPane, nextLane, selection, showsPermission, shq, step, stepList, tabFocus, trayWindow, visible as matching, where as whereOf,
 } from './board.mjs'
 import { RUN, follow, markReviewed, markStopped } from './client.mjs'
+import { splitAt } from './line.mjs'
 import { DIAGRAMS_KEY, NEW_AGENT_KEY, OPEN_AGENT_KEY, PEEK_CLOSING_KEY, answerConfirm, filterKey, hitAt, keyAction, mouseAction } from './keys.mjs'
 import { HUB_OPEN } from './tray.mjs'
 import { attentionTags, brokeTags, cardHeights, counts, lanes, launch, monitorProcess, monitorsOf, scrollTo } from './model.mjs'
@@ -60,6 +61,7 @@ const selected = { needs: null, working: null, done: null, idle: null, monitors:
 const scroll = { needs: 0, working: 0, done: 0, idle: 0, list: 0 }
 let filter = ''
 let filtering = false
+let filterAt // the filter's caret, as hub/line.mjs keeps it; none is the end
 let peek = null // { pane, id }
 let listSel = null // id in the list beside an open session
 let confirm = null // { text, yes, skip }: skip names the setting that asks it, which answering a turns off
@@ -166,7 +168,7 @@ function summary(c, width_) {
     [`  ◉ ${c.watching} watching`, fg(P.teal)],
   ]
   const right = []
-  if (filtering || filter) right.push([`/${filter}${filtering ? '▏' : ''}  `, fg(P.yellow)])
+  if (filtering || filter) right.push([`/${filtering ? splitAt(filter, filterAt).join('▏') : filter}  `, fg(P.yellow)])
   const button = newButton(' + New agent  ')
   right.push(...button.spans)
   hits.push({ x1: width_ - button.cells + 1, x2: width_, y1: 1, y2: 1, act: () => openDialog() })
@@ -770,7 +772,7 @@ const actions = {
     return m ? stopMonitor(m) : closeAgent()
   },
   new: () => openDialog(),
-  filter: () => ((filtering = true), (filter = '')),
+  filter: () => ((filtering = true), (filter = ''), (filterAt = undefined)),
   back: () => (peek ? closePeek() : outer('select-window', '-t', `layout-${WIN}:work`)),
   workspace: () => outer('select-window', '-t', `layout-${WIN}:work`),
 }
@@ -785,9 +787,10 @@ function onKey(key) {
     return
   }
   if (filtering) {
-    const f = filterKey(filter, key)
+    const f = filterKey(filter, key, filterAt)
     filter = f.filter
     filtering = f.filtering
+    filterAt = f.at
     return
   }
   void actions[keyAction(key)]?.()

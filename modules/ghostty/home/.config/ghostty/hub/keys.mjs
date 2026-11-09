@@ -2,6 +2,8 @@
 // key names, how a y/n question and the filter take keys, and which clicks
 // count. hub.mjs runs the actions; keys.test.mjs pins the bindings.
 
+import { editField } from './line.mjs'
+
 // What Alt+N (layout.conf) and the rail's + new send the hub to open New
 // agent, whatever it's in the middle of.
 export const NEW_AGENT_KEY = '\x1b[9100~'
@@ -51,14 +53,15 @@ export function answerConfirm(confirm, key) {
   return { yes: false, remember: null }
 }
 
-// A key while typing a filter: Enter keeps it, Esc clears it, Backspace
-// takes a character off, and other printable keys add to it.
-export function filterKey(filter, key) {
+// A key while typing a filter, with its caret `at` in (hub/line.mjs; none
+// is the end): Enter keeps it, Esc clears it, and the rest edit it as any
+// line does. The caret comes back as `at` only when it's off the end.
+export function filterKey(filter, key, at) {
   if (key === '\r') return { filter, filtering: false }
   if (key === '\x1b') return { filter: '', filtering: false }
-  if (key === '\x7f') return { filter: filter.slice(0, -1), filtering: true }
-  if (key >= ' ' && !key.startsWith('\x1b')) return { filter: filter + key, filtering: true }
-  return { filter, filtering: true }
+  const state = { filter, filtering: true, ...(at === undefined ? {} : { at }) }
+  editField(state, 'filter', key)
+  return state
 }
 
 // An SGR mouse report: the wheel moves the selection (down +1, up -1); a

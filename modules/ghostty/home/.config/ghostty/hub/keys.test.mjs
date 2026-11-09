@@ -65,11 +65,19 @@ test('the filter: typing adds, backspace takes off, enter keeps it, esc clears i
   assert.deepEqual(filterKey('', '\x7f'), { filter: '', filtering: true })
 })
 
-test('the filter ignores arrows, tab and control keys, and takes j and k as letters', () => {
-  for (const k of ['\x1b[A', '\x1b[D', '\t', '\x01', '\x15']) assert.deepEqual(filterKey('ab', k), { filter: 'ab', filtering: true }, JSON.stringify(k))
+test('the filter ignores ↑, ↓, tab and other control keys, and takes j and k as letters', () => {
+  for (const k of ['\x1b[A', '\x1b[B', '\t', '\x02']) assert.deepEqual(filterKey('ab', k), { filter: 'ab', filtering: true }, JSON.stringify(k))
   assert.equal(filterKey('', 'j').filter, 'j')
   assert.equal(filterKey('a', ' ').filter, 'a ')
   assert.equal(filterKey('', 'é').filter, 'é')
+})
+
+test('in the filter ← and → move the caret, and keys type and delete there', () => {
+  assert.deepEqual(filterKey('rai', '\x1b[D'), { filter: 'rai', filtering: true, at: 2 })
+  assert.deepEqual(filterKey('rai', 'n', 2), { filter: 'rani', filtering: true, at: 3 })
+  assert.deepEqual(filterKey('rani', '\x1b[C', 3), { filter: 'rani', filtering: true }, 'at the end the caret goes')
+  assert.deepEqual(filterKey('ab😀', '\x7f'), { filter: 'ab', filtering: true }, 'an emoji goes whole')
+  assert.deepEqual(filterKey('rai', '\x1b', 1), { filter: '', filtering: false })
 })
 
 test('the wheel moves the selection: down a step, up a step', () => {
