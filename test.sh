@@ -6,6 +6,10 @@
 set -uo pipefail
 
 cd "$(dirname "$0")" || exit 1
+# A git hook exports GIT_DIR and friends, which would point tests that run git
+# in a temp folder back at this repo.
+mapfile -t git_vars < <(git rev-parse --local-env-vars)
+unset "${git_vars[@]}"
 ROOT=$PWD
 GHOSTTY=modules/ghostty/home/.config/ghostty
 
