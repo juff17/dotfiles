@@ -226,8 +226,8 @@ export function parsePanes(text, hub) {
     if (mark?.trim()) map.marks.set(window, mark)
     const seen = map.get(pane)
     // A tab shows in up to three sessions: the workspace's (ghostty-N), the
-    // hub's tab session (hubtabs-N), which links in every workspace tab and
-    // keeps the tabs opened from the hub, and the peek session grouped with
+    // hub's tab session (hubtabs-N), which links in the workspace tabs
+    // running Claude and keeps the tabs opened from the hub, and the peek session grouped with
     // that. The pane belongs to the first of those it's in; a tab only the
     // hub has is `hub`.
     const rank = sessionRank(session)
@@ -275,6 +275,55 @@ export function tabMarkArgs(agents, marked = new Map()) {
     if (!want.has(win)) args.push('set', '-wu', '-t', win, '@agent', ';', 'set', '-wu', '-t', win, '@agent_fg', ';')
   }
   return args.slice(0, -1)
+}
+
+// The hub's tab session, hubtabs-N, holds the hub's own tabs and only those
+// workspace tabs (ghostty-N) that run Claude, so a plain shell, such as the
+// tab the window opened with, stays out of the hub, where closing it would
+// close the window. These are the tmux arguments that link a workspace tab in
+// once Claude runs there and unlink it once Claude has been gone for
+// HUB_UNLINK_MS, so a session file caught mid-write doesn't drop it for a
+// tick. A tab in front of an attached hub session (peek-N) stays until you
+// leave it, so the session you're in doesn't jump away when Claude exits. A
+// window with no hubtabs session yet is left to hub_tabs (ghostty-lib.sh).
+// Links come first: unlinking a session's last tab ends the session.
+// `text` is list-panes in PANE_FORMAT, `claude` the windows Claude runs in
+// now, and `seen` maps each window to when Claude last ran there; it's
+// updated in place.
+export const HUB_UNLINK_MS = 3000
+
+export function hubLinkArgs(text, claude, seen, now = Date.now()) {
+  // No pane list (tmux failed) says nothing about which tabs closed.
+  if (text == null) return []
+  const work = new Map() // N -> its workspace windows
+  const hub = new Map() // N -> the windows hubtabs-N has
+  const shown = new Set()
+  for (const line of (text ?? '').split('\n')) {
+    const [, session, window, , active, attached] = line.split('\t')
+    if (!window) continue
+    const [, kind, n] = /^(ghostty|hubtabs)-(\d+)$/.exec(session) ?? []
+    if (kind) {
+      const map = kind === 'ghostty' ? work : hub
+      if (!map.has(n)) map.set(n, new Set())
+      map.get(n).add(window)
+    } else if (/^peek-\d+$/.test(session) && active === '1' && Number(attached) > 0) shown.add(window)
+  }
+  for (const w of claude) seen.set(w, now)
+  const links = []
+  const unlinks = []
+  for (const [n, tabs] of work) {
+    const own = hub.get(n)
+    if (!own) continue
+    for (const w of tabs) {
+      if (claude.has(w)) {
+        if (!own.has(w)) links.push('link-window', '-d', '-s', w, '-t', `=hubtabs-${n}:`, ';')
+      } else if (own.has(w) && !shown.has(w) && now - (seen.get(w) ?? -Infinity) > HUB_UNLINK_MS)
+        unlinks.push('unlink-window', '-t', `=hubtabs-${n}:${w}`, ';')
+    }
+  }
+  const open = new Set([...work.values()].flatMap(tabs => [...tabs]))
+  for (const w of seen.keys()) if (!open.has(w)) seen.delete(w)
+  return [...links, ...unlinks].slice(0, -1)
 }
 
 // Pane ids repeat across tmux servers, so a session's pane only counts when

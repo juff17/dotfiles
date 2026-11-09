@@ -3,7 +3,7 @@
 #   ghostty-hub hub <window>              the hub, in the window's hub window
 #   ghostty-hub rail <window> <work|hub>  the rail down the left of either
 #   ghostty-hub peek <win> <window>       one tab's live session, beside the hub
-#   ghostty-hub tabs <win>                makes the hub's tab session, hubtabs-<win>
+#   ghostty-hub tab <win> <dir>           opens a hub tab, in hubtabs-<win>
 #   ghostty-hub attach <id>               a background agent's live session
 #   ghostty-hub tray <snapshot|seen>      the tray widget's items (hub/tray.mjs)
 #   ghostty-hub setup [window]            adds the rail and the hub to a window
@@ -49,15 +49,16 @@ case ${1:-} in
     ;;
   peek)
     # A session grouped with the hub's tab session (hub_tabs in
-    # ghostty-lib.sh) shares its tabs, the workspace's and the hub's own, but
-    # has its own current tab, so showing one here leaves the workspace's tab
-    # alone, and a tab opened here goes to the hub only. It's named after this
+    # ghostty-lib.sh) shares its tabs (the hub's own, and the workspace's that
+    # run Claude, the one asked for here among them) but has its own current
+    # tab, so showing one here leaves the workspace's tab alone, and a tab
+    # opened here goes to the hub only. It's named after this
     # pane, peek-<pane number>, so the hub can follow which tab it shows and
     # the tab keys can switch it (layout.conf). It ends with this pane; one
     # left from a pane that was just respawned goes first.
     name="peek-${TMUX_PANE#%}"
     unset TMUX TMUX_PANE
-    group=$(hub_tabs "$2") || {
+    group=$(hub_tabs "$2" "$3") || {
       printf 'Window %s has no tab session to show.\nPress any key to close.' "$2"
       read -rsn1
       exit 1
@@ -66,8 +67,8 @@ case ${1:-} in
     exec tmux -L "$TABS_SOCKET" -f "$GHOSTTY_CONF/tmux.conf" \
       new-session -t "$group" -s "$name" \; set destroy-unattached on \; select-window -t "$name:$3"
     ;;
-  tabs)
-    hub_tabs "$2"
+  tab)
+    hub_tab_new "$2" "$3"
     ;;
   attach)
     # Not exec: when attaching fails, the pane stays to say why rather than

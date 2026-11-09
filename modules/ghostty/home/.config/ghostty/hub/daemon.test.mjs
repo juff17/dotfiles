@@ -9,6 +9,8 @@ import {
   clientsAlive,
   coreOf,
   findTranscript,
+  HUB_UNLINK_MS,
+  hubLinkArgs,
   paneOf,
   parentPid,
   parseHubShown,
@@ -327,6 +329,51 @@ test('tabMarkArgs leaves marks that are already right, clears where the agent le
   // A mark something else changed is put back.
   assert.equal(tabMarkArgs(agents, new Map([['@1', mark(STATE.done)]]))[5], STATE.working.glyph)
   assert.deepEqual(tabMarkArgs([], new Map()), [])
+})
+
+// Window 1's workspace has a shell (@1) and a Claude tab (@2); its hub has a
+// tab of its own (@3) and, from earlier, both workspace tabs linked in.
+const linked = (...extra) =>
+  [
+    paneLine('%1', 'ghostty-1', '@1'),
+    paneLine('%2', 'ghostty-1', '@2', { active: 0 }),
+    paneLine('%3', 'hubtabs-1', '@3', { attached: 0 }),
+    paneLine('%1', 'hubtabs-1', '@1', { active: 0, attached: 0 }),
+    ...extra,
+  ].join('\n')
+
+test("hubLinkArgs links a workspace tab into the hub once Claude runs there", () => {
+  const text = [paneLine('%1', 'ghostty-1', '@1'), paneLine('%2', 'ghostty-1', '@2'), paneLine('%3', 'hubtabs-1', '@3')].join('\n')
+  assert.deepEqual(hubLinkArgs(text, new Set(['@2']), new Map(), 10_000), ['link-window', '-d', '-s', '@2', '-t', '=hubtabs-1:'])
+})
+
+test('hubLinkArgs unlinks a workspace tab without Claude, after the grace period, links first', () => {
+  const seen = new Map([['@1', 10_000]])
+  assert.deepEqual(hubLinkArgs(linked(), new Set(['@2']), seen, 10_000 + HUB_UNLINK_MS), [
+    ...['link-window', '-d', '-s', '@2', '-t', '=hubtabs-1:'],
+  ])
+  assert.deepEqual(hubLinkArgs(linked(), new Set(['@2']), seen, 10_001 + HUB_UNLINK_MS), [
+    ...['link-window', '-d', '-s', '@2', '-t', '=hubtabs-1:', ';'],
+    ...['unlink-window', '-t', '=hubtabs-1:@1'],
+  ])
+  // A shell that never ran Claude goes at once.
+  assert.deepEqual(hubLinkArgs(linked(), new Set(['@2']), new Map(), 0).slice(-3), ['unlink-window', '-t', '=hubtabs-1:@1'])
+})
+
+test("hubLinkArgs keeps the tab an attached hub session is showing, and leaves the hub's own tabs", () => {
+  const peek = paneLine('%1', 'peek-7', '@1')
+  assert.deepEqual(hubLinkArgs(linked(peek), new Set(['@2']), new Map(), 0), ['link-window', '-d', '-s', '@2', '-t', '=hubtabs-1:'])
+  const detached = paneLine('%1', 'peek-7', '@1', { attached: 0 })
+  assert.equal(hubLinkArgs(linked(detached), new Set(), new Map(), 0).includes('unlink-window'), true)
+  assert.equal(hubLinkArgs(linked(), new Set(), new Map(), 0).includes('=hubtabs-1:@3'), false)
+})
+
+test('hubLinkArgs leaves a window with no hub tab session alone, and forgets closed tabs', () => {
+  const seen = new Map([['@9', 1]])
+  assert.deepEqual(hubLinkArgs(paneLine('%1', 'ghostty-1', '@1'), new Set(['@1']), seen, 5), [])
+  assert.deepEqual([...seen], [['@1', 5]])
+  assert.deepEqual(hubLinkArgs(null, new Set(), seen), [])
+  assert.deepEqual([...seen], [['@1', 5]], 'a failed pane list forgets nothing')
 })
 
 test("paneOf matches a session's tmux to this server's pane only when Claude runs under the pane's process", () => {

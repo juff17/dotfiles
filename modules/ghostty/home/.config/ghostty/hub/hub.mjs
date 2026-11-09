@@ -489,14 +489,11 @@ async function start(spec) {
     return
   }
   // The tab goes to the hub's tab session, so it shows in the hub and not
-  // in the workspace (hub_tabs in ghostty-lib.sh).
+  // in the workspace (hub_tab_new in ghostty-lib.sh).
   if (!WIN) return say('Not in a Ghostty layout window, so there is no tab session to open a tab in', P.red)
-  const own = await run([join(CONF, 'bin', 'ghostty-hub'), 'tabs', String(WIN)])
-  const session = own.out.trim()
-  if (!own.ok || !session) return say(`Couldn't make the hub's tab session: ${clean(own.err).slice(0, 120) || 'no workspace tabs'}`, P.red)
-  const made = await tabs('new-window', '-d', '-t', `${session}:`, '-c', spec.cwd, '-P', '-F', '#{window_id} #{pane_id}')
-  if (!made.ok) return say(`Couldn't open a tab: ${made.err}`, P.red)
-  const [window, pane] = made.out.trim().split(' ')
+  const made = await run([join(CONF, 'bin', 'ghostty-hub'), 'tab', String(WIN), spec.cwd])
+  const [session, window, pane] = made.out.trim().split(' ')
+  if (!made.ok || !pane) return say(`Couldn't open a tab: ${clean(made.err).slice(0, 120) || 'no workspace tabs'}`, P.red)
   // The shell reads this once its prompt is up; typing it rather than running
   // claude as the tab's command keeps the shell when Claude exits.
   await tabs('send-keys', '-t', pane, '-l', plan.line)
