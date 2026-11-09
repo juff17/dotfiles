@@ -9,7 +9,7 @@ import { existsSync } from 'node:fs'
 import { homedir } from 'node:os'
 
 import { width as cells } from '../hub/term.mjs'
-import { caretParts, caretShown, editLine, head, length, tail, withCaret } from '../hub/line.mjs'
+import { caretParts, caretShown, editField, editLine, head, tail, withCaret } from '../hub/line.mjs'
 import { load as settings } from '../hub/settings.mjs'
 import { CATEGORIES, DEFAULT_CATEGORY, HANDOFF_MODELS, TYPES, filingState, handoffPlace, inGit } from './todo.mjs'
 
@@ -185,15 +185,6 @@ export const FIELD_NAMES = { title: 'title', cat: 'category', type: 'type', repo
 // editLine for a line with the caret at its end.
 export const editText = (text, key) => editLine(text, undefined, key).text
 
-// Runs a key on a prompt's text field, keeping its caret in `at`. The caret
-// at the end leaves `at` off, so a prompt that never moved it has none.
-function typeInto(prompt, field, key) {
-  const { text, at } = editLine(prompt[field], prompt.at, key)
-  prompt[field] = text
-  if (at < length(text)) prompt.at = at
-  else delete prompt.at
-}
-
 // On a filing that failed, starts from its message and replaces it.
 export const manualPrompt = item =>
   filingState(item ?? {}) === 'failed' ? { kind: 'title', text: item.title, replaces: item.id } : { kind: 'title', text: '' }
@@ -254,7 +245,7 @@ export function editKey(prompt, key) {
       const first = prompt.find && repoMatches(prompt)[0]
       if (first) prompt.repo = first
     }
-  } else typeInto(prompt, prompt.field, key)
+  } else editField(prompt, prompt.field, key)
   return prompt
 }
 
@@ -313,7 +304,7 @@ export function promptKey(prompt, key, current) {
     if (prompt.kind === 'claude') return { prompt: null, run: 'file', text }
     return { prompt: { kind: 'cat', title: text, replaces: prompt.replaces, cat: (!current?.filing && current?.cat) || DEFAULT_CATEGORY } }
   }
-  typeInto(prompt, 'text', key)
+  editField(prompt, 'text', key)
   return { prompt }
 }
 

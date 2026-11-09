@@ -1,9 +1,11 @@
 // Alt+H's overlay state and what keys and clicks do to it, apart from the
 // terminal so it can be tested; help-view.mjs draws it. The state is
-// { sel, query, typing, scroll, maxScroll }: the selected section, the filter
-// and whether it's being typed, and the body's scroll, at most maxScroll
-// (which drawing sets from the body's length).
+// { sel, query, at, typing, scroll, maxScroll }: the selected section, the
+// filter, its caret (hub/line.mjs; none is the end) and whether it's being
+// typed, and the body's scroll, at most maxScroll (which drawing sets from
+// the body's length).
 
+import { editField, insertAt, length } from '../hub/line.mjs'
 import { width } from '../hub/term.mjs'
 import { SECTIONS, filter, startAt } from './help.mjs'
 
@@ -34,6 +36,7 @@ export function fitScroll(s, lines, rows) {
 export function pick(s, i) {
   s.sel = Math.max(0, Math.min(SECTIONS.length - 1, i))
   s.query = ''
+  delete s.at
   s.typing = false
   s.scroll = 0
 }
@@ -42,20 +45,18 @@ export const scrollBy = (s, n) => {
   s.scroll = Math.max(0, Math.min(s.maxScroll, s.scroll + n))
 }
 
-// A key while the filter is being typed. Editing it scrolls back to the top.
+// A key while the filter is being typed. Changing it scrolls back to the
+// top; moving the caret doesn't. ↑ and ↓ scroll instead of moving it.
 export function onTyping(s, key) {
   if (key === '\x1b') {
     s.query = ''
+    delete s.at
     s.typing = false
   } else if (key === '\r') s.typing = false
-  else if (key === '\x7f' || key === '\b') s.query = [...s.query].slice(0, -1).join('')
-  else if (key === '\x15') s.query = ''
-  else if (key === '\x17') s.query = s.query.replace(/\S*\s*$/, '')
-  else if (key === '\x1b[A') scrollBy(s, -1)
-  else if (key === '\x1b[B') scrollBy(s, 1)
-  else if (!key.startsWith('\x1b') && key >= ' ') s.query += key
-  else return
-  if (key !== '\x1b[A' && key !== '\x1b[B') s.scroll = 0
+  else if (key === '\x1b[A') return scrollBy(s, -1)
+  else if (key === '\x1b[B') return scrollBy(s, 1)
+  else if (editField(s, 'query', key) !== 'text') return
+  s.scroll = 0
 }
 
 // A key; true when it closes the overlay. `page` is half the body.
@@ -69,6 +70,7 @@ export function onKey(s, key, page) {
     '\x1b': () => (on ? pick(s, s.sel) : true),
     '/': () => {
       s.typing = true
+      delete s.at
     },
     j: () => move(1),
     k: () => move(-1),
@@ -97,12 +99,19 @@ export function onMouse(s, { button, x, y, up }) {
   if ((button & 3) !== 0 || button & 96) return
   const i = y - TOP - 1
   if (x < NAV && i >= 0 && i < SECTIONS.length) pick(s, i)
-  else if (y === FILTER_ROW) s.typing = true
+  else if (y === FILTER_ROW) {
+    s.typing = true
+    delete s.at
+  }
 }
 
 // Pasted text goes into the filter only while it's being typed, on one line.
 export const onPaste = (s, text) => {
-  if (s.typing) s.query += text.replace(/\s+/g, ' ')
+  if (!s.typing) return
+  const { text: query, at } = insertAt(s.query, s.at, text.replace(/\s+/g, ' '))
+  s.query = query
+  if (at < length(query)) s.at = at
+  else delete s.at
 }
 
 // The footer's keys for the state it's in.

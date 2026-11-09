@@ -176,8 +176,20 @@ test('editing the filter scrolls back to the top; arrows scroll without editing'
 
 test('while typing, other escape sequences and controls are ignored', () => {
   const s = at({ typing: true, query: 'a', scroll: 5 })
-  press(s, '\x1b[C', '\x1b[6~', '\x01', '\t')
+  press(s, '\x1b[6~', '\t')
   assert.deepEqual([s.query, s.scroll, s.typing], ['a', 5, true])
+})
+
+test('while typing, ← and → move the caret, and typing goes in there', () => {
+  const s = at({ typing: true, query: 'clse', scroll: 5 })
+  press(s, '\x1b[D', '\x1b[D')
+  assert.deepEqual([s.query, s.at, s.scroll], ['clse', 2, 5], 'moving keeps the scroll')
+  press(s, 'o')
+  assert.deepEqual([s.query, s.at, s.scroll], ['close', 3, 0])
+  onPaste(s, ' x')
+  assert.deepEqual([s.query, s.at], ['clo xse', 5])
+  press(s, '\x1b')
+  assert.equal(s.at, undefined, 'esc clears the caret with the filter')
 })
 
 test('the wheel scrolls three rows', () => {

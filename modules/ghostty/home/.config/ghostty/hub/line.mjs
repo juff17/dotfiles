@@ -93,6 +93,19 @@ export function editLine(text, at, key) {
   return done(chars, i)
 }
 
+// editLine on `state[field]`, with the caret kept in `state.at`. The caret
+// at the end leaves `at` off, so a state that never moved it has none. Says
+// what changed: 'text', 'caret', or '' when the key did nothing.
+export function editField(state, field, key) {
+  const was = state[field]
+  const wasAt = state.at ?? length(was)
+  const { text, at } = editLine(was, state.at, key)
+  state[field] = text
+  if (at < length(text)) state.at = at
+  else delete state.at
+  return text !== was ? 'text' : at !== wasAt ? 'caret' : ''
+}
+
 // The text either side of the caret, for a field that draws its caret as a
 // bar between characters.
 export function splitAt(text, at) {

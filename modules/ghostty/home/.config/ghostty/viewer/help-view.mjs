@@ -7,6 +7,7 @@
 //   help-view.mjs [place]   the tmux window Alt+H was pressed in (work, hub,
 //                           diagrams), which picks the section it opens on
 
+import { splitAt } from '../hub/line.mjs'
 import { BOLD, P, bg, enter, fg, leave, paint, render, split, tokens, width } from '../hub/term.mjs'
 import { SECTIONS } from './help.mjs'
 import { BOTTOM, NAV, TOP, filtering, fitScroll, footerHints, keyWidth, onKey, onMouse, onPaste, shown, start } from './help-nav.mjs'
@@ -75,7 +76,9 @@ function draw() {
       [
         [' / ', BOLD + fg(P.blue)],
         ...(s.query || s.typing
-          ? [[s.query, fg(P.text)], ...(s.typing ? [['▏', fg(P.blue)]] : [])]
+          ? s.typing
+            ? [[splitAt(s.query, s.at)[0], fg(P.text)], ['▏', fg(P.blue)], [splitAt(s.query, s.at)[1], fg(P.text)]]
+            : [[s.query, fg(P.text)]]
           : [['filter every key: try close, tab, todo', fg(P.overlay1)]]),
       ],
       w,
