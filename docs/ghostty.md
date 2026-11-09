@@ -141,7 +141,7 @@ New windows are told apart from splits you open yourself by their D-Bus window n
 
 Settings you can change through the environment:
 - `GHOSTTY_TOP_ROWS` (default: Settings › Layout › btop height, 10): rows for btop; set, it wins over Settings.
-- `GHOSTTY_VIEWER_SHARE` (default: Settings › Layout › Viewer pane width, 60): the viewer's percent of the bottom row; set, it wins over Settings.
+- `GHOSTTY_VIEWER_SHARE` (default: Settings › Layout › Viewer pane width, 30): the viewer's percent of the bottom row; set, it wins over Settings.
 - `GHOSTTY_RAIL` (default 1): `0` leaves out the rail and the hub.
 - `GHOSTTY_RAIL_COLS` (default: Settings › Layout › Rail width, 6): the rail's width; set, it wins over Settings.
 
