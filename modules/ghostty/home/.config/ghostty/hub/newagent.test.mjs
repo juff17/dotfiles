@@ -10,6 +10,7 @@ import { launch } from './model.mjs'
 const HOME = realpathSync(mkdtempSync(join(tmpdir(), 'hub-newagent-')))
 process.env.HOME = HOME
 process.env.AGENT_HUB_PROMPTS = join(HOME, 'prompts')
+process.env.AGENT_HUB_SETTINGS = join(HOME, 'settings.json')
 after(() => rmSync(HOME, { recursive: true, force: true }))
 const P = join(HOME, 'projects')
 for (const d of ['alpha', 'alphabet', 'Beta', '.hidden', 'alpha/.claude/worktrees/fix-x']) mkdirSync(join(P, d), { recursive: true })
@@ -58,6 +59,16 @@ test('the folder is the repo when given a worktree, else the newest recent, else
   // Outside home the path stays as it is.
   assert.equal(form({ folder: '/srv/app' }).folder.text, '/srv/app')
   assert.equal(form({ folder: '/srv/app', recents: ['/x'] }).recent, -1)
+})
+
+test('with Default folder at ~/projects, the form starts there whatever is selected', async () => {
+  const { set } = await import('./settings.mjs')
+  set('newAgent.defaultFolder', 'projects')
+  try {
+    assert.equal(form({ folder: join(P, 'alpha'), recents: [join(P, 'Beta')] }).folder.text, '~/projects')
+  } finally {
+    set('newAgent.defaultFolder', 'tab')
+  }
 })
 
 test('Esc and Ctrl+C cancel without a spec', () => {

@@ -355,8 +355,9 @@ function finish(spec) {
 export function form({ folder = '', recents: given = [] } = {}) {
   recents = given
   menu = null
-  const root = (folder || recents[0] || join(HOME, 'projects')).replace(/\/\.claude\/worktrees\/.*$/, '')
   const s = settings()
+  const start = s['newAgent.defaultFolder'] === 'projects' ? '' : folder || recents[0]
+  const root = (start || join(HOME, 'projects')).replace(/\/\.claude\/worktrees\/.*$/, '')
   d = {
     kind: 0,
     runAs: Math.max(0, RUN_AS.findIndex(r => r.id === s['newAgent.task.runAs'])),

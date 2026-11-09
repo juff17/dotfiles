@@ -63,7 +63,7 @@ export const SECTIONS = [
         'frecency from ~/.z, merged with folders agents ran in; without ~/.z, last used',
       ),
       bool('newAgent.gitOnly', 'Only git repos', true, 'a subfolder counts as its repo; folders outside git are left out'),
-      choice('newAgent.defaultFolder', 'Default folder', [['tab', 'active tab'], ['projects', '~/projects']], 'tab', 'where Folder starts; the active tab’s repo, else the newest recent'),
+      choice('newAgent.defaultFolder', 'Default folder', [['tab', 'active tab'], ['projects', '~/projects']], 'tab', 'where Folder starts: the selected agent’s repo, else the newest recent; or always ~/projects'),
     ],
   },
   {

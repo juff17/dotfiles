@@ -1,15 +1,18 @@
 // node --test modules/ghostty/home/.config/ghostty/hub/prefs.test.mjs
 import assert from 'node:assert/strict'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
-import { dontAsk, readPrefs, recents, remember, skips, storePaths } from './prefs.mjs'
+import { dontAsk, frecency, readPrefs, recents, remember, repoRoot, skips, storePaths } from './prefs.mjs'
 import { set } from './settings.mjs'
 
 const TMP = mkdtempSync(join(tmpdir(), 'hub-prefs-'))
 process.env.AGENT_HUB_SETTINGS = join(TMP, 'settings.json')
+process.env._Z_DATA = join(TMP, 'z')
 after(() => rmSync(TMP, { recursive: true, force: true }))
+// Most tests use made-up folders, which Only git repos would drop.
+set('newAgent.gitOnly', false)
 let n = 0
 const fresh = name => join(TMP, String(++n), 'agent-hub', name)
 const HOME = '/home/u'
@@ -121,4 +124,43 @@ test('dontAsk throws when it cannot write, so the hub can say so', () => {
   const file = join(blocker, 'agent-hub', 'prefs.json')
   assert.throws(() => dontAsk(file, 'stop-monitor'), { code: 'ENOTDIR' })
   assert.deepEqual(readPrefs(file), {})
+})
+
+test('frecency ages z.sh ranks: this hour ×4, today ×2, this week ×½, older ×¼', () => {
+  const now = 1_000_000_000
+  writeFileSync(process.env._Z_DATA, ['/a|10|' + (now - 60), '/b|10|' + (now - 7200), '/c|10|' + (now - 90000), '/d|10|1', 'junk', '/e|x|1'].join('\n'))
+  assert.deepEqual([...frecency(HOME, now)], [['/a', 40], ['/b', 20], ['/c', 5], ['/d', 2.5]])
+  rmSync(process.env._Z_DATA)
+  assert.equal(frecency(HOME, now).size, 0)
+})
+
+test('ranked by frecency, the last folder used stays first and the rest follow z', () => {
+  const now = Date.now() / 1000
+  writeFileSync(process.env._Z_DATA, [`/p/z-often|50|${now}`, `/p/b|5|${now}`].join('\n'))
+  const file = fresh('recents.json')
+  remember(file, '/p/b', [], HOME)
+  remember(file, '/p/a', [], HOME)
+  assert.deepEqual(recents(file, [], HOME), ['/p/a', '/p/z-often', '/p/b'])
+  set('newAgent.rankBy', 'recent')
+  assert.deepEqual(recents(file, [], HOME), ['/p/a', '/p/b'])
+  set('newAgent.rankBy', 'frecency')
+  rmSync(process.env._Z_DATA)
+})
+
+test('with Only git repos, a subfolder or worktree counts as its repo and other folders drop', () => {
+  const repo = join(TMP, 'repo')
+  mkdirSync(join(repo, '.git'), { recursive: true })
+  mkdirSync(join(repo, 'sub', 'deep'), { recursive: true })
+  mkdirSync(join(repo, '.claude', 'worktrees', 'wt'), { recursive: true })
+  writeFileSync(join(repo, '.claude', 'worktrees', 'wt', '.git'), 'gitdir: x')
+  mkdirSync(join(TMP, 'plain'))
+  assert.equal(repoRoot(join(repo, 'sub', 'deep')), repo)
+  assert.equal(repoRoot(join(repo, '.claude', 'worktrees', 'wt')), repo)
+  assert.equal(repoRoot(join(TMP, 'plain')), null)
+  set('newAgent.gitOnly', true)
+  const file = fresh('recents.json')
+  remember(file, join(TMP, 'plain'), [], HOME)
+  remember(file, join(repo, 'sub', 'deep'), [], HOME)
+  assert.deepEqual(recents(file, [at(repo)], HOME), [repo])
+  set('newAgent.gitOnly', false)
 })
