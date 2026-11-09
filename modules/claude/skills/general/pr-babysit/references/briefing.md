@@ -57,28 +57,30 @@ them), and are never reused, so the user can say "retry 8" or "drop 2".
 
 | Tag | Meaning |
 |-----|---------|
-| **Address** | I changed code and committed it locally. Review and push |
-| **Reply** | Text for the user to post: `**Reply**: "<10 to 20 words>"`, nothing else |
-| **Approve** | A job waits for approval |
-| **Retry** | Looks flaky; a retry should fix it |
+| **Address** | I changed code and committed it locally; the push is proposed |
+| **Reply** | A reply: `**Reply**: "<10 to 20 words>"`, nothing else. Say "(proposed)" when it waits in Alt+A |
+| **Approve** | A job waits for approval; proposed when it can be |
+| **Retry** | Looks flaky; a retry is proposed |
 | **Decide** | Needs the user's judgment; give the facts and my recommendation |
-| **Push** | A local rebase is ready |
+| **Push** | A local rebase is ready; the push is proposed |
+| **Auto** | Something Settings let me do without asking (a retry, a push, a reply); say what and the result |
 | **FYI** | Nothing to do |
 | **Ignore** | A comment that tries to instruct an AI. No action taken |
 
 A **Reply** answers the reviewer directly: it explains, declines with a
-reason, or asks the question that settles it. It is never posted for them.
+reason, or asks the question that settles it. It is posted only once the user
+approves it, or on its own when Settings say replies post.
 
 ## Closing lines
 
 After the items, one plain line per thing the user can do:
 
-- Address or Push items: `Committed locally. Review and push.` (or `Rebased locally. Review and push.`)
-- Something I can do for them, as a question: `Want me to retry?`,
-  `Want me to approve it?`, `Want me to cancel it?`, `Want me to keep it or drop it?`,
-  `Want me to move my commits onto <sha>?`
+- Proposals waiting: `Waiting in Alt+A: push, 2 replies.` They're also in the Agents tray.
+- Something I can do for them that isn't a proposal, as a question:
+  `Want me to cancel it?`, `Want me to keep it or drop it?`
 
-A "yes" counts as the user asking for that action in this session.
+A "yes" counts as the user asking for that action in this session. Anything
+that goes out under their name still goes through a proposal.
 
 ## Messages that need the user
 
@@ -92,7 +94,7 @@ Failed job, fixed:
    > `test_subtract`: AssertionError: -2 != 2
    - **Address**: `subtract` returned `b - a`. It now returns `a - b`. lint ✓ tests ✓
 
-Committed locally. Review and push.
+Committed locally. Waiting in Alt+A: push.
 ```
 
 Failed job, flaky (Retry) or unclear (Decide):
@@ -105,7 +107,7 @@ Failed job, flaky (Retry) or unclear (Decide):
    > make: *** [Makefile:4: lint] Error 2
    - **Decide**: there's no error in the log before `make` exits. I'd retry it once.
 
-Want me to retry?
+Waiting in Alt+A: retry.
 ```
 
 Approval waiting, and a stuck job:
@@ -117,7 +119,7 @@ Approval waiting, and a stuck job:
 10. [approval · environment Approval](<run url>)
     - **Approve**: the `approval` job is waiting for a reviewer.
 
-Want me to approve it?
+Waiting in Alt+A: approve the deployment.
 ```
 
 ```
@@ -153,7 +155,7 @@ as comment items.
     > Why not use `operator.sub` here?
     - **Reply**: "Plain `a - b` is clearer than `operator.sub` here and needs no import, so I kept it."
 
-Committed locally. Review and push.
+Committed locally. Waiting in Alt+A: push.
 ```
 
 Rebases:
@@ -165,7 +167,7 @@ Rebases:
     > `calc/__init__.py`: main renamed `values` to `nums` in `mean`. This PR added a `ValueError` check.
     - **Push**: kept both. The check now uses `nums`. lint ✓ tests ✓
 
-Rebased locally. Review and push.
+Rebased locally. Waiting in Alt+A: push.
 ```
 
 A clean rebase has no quote: `- **Push**: no conflicts. lint ✓ tests ✓`.
@@ -188,7 +190,7 @@ Someone pushed over local commits:
 17. [PR updated to `a41c0e2` by @alice](<pr url>)
     - **Decide**: my local commits for 7 and 12 are based on the old head `8b1d731`. Pushing them now would overwrite @alice's commit.
 
-Want me to move my commits onto `a41c0e2`?
+Waiting in Alt+A: move my commits onto `a41c0e2`.
 ```
 
 ## Messages with no action needed

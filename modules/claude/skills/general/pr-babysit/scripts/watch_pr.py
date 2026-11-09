@@ -46,6 +46,57 @@ def setting(key, default, low, high):
     return default
 
 
+def choice(key, default, allowed):
+    try:
+        value = json.loads(SETTINGS.read_text()).get(key)
+    except (OSError, ValueError, AttributeError):
+        return default
+    return value if value in allowed else default
+
+
+def babysit_settings():
+    """What Settings say the babysitting agent may do on its own, as the
+    [settings] event tells it."""
+    fix = choice("prBabysit.autoFix", True, (True, False))
+    rebase = choice("prBabysit.autoRebase", "off", ("off", "clean", "always"))
+    reply = choice("approvals.reply", "draft", ("off", "draft", "post"))
+    return ", ".join([
+        "auto-fix on" if fix else "auto-fix off: ask before fixing any comment",
+        {"off": "auto rebase off: rebase only for a conflict or when the host requires it",
+         "clean": "auto rebase when clean: rebase whenever behind, but abort and ask on a conflict",
+         "always": "auto rebase always: rebase whenever behind, resolving conflicts"}[rebase],
+        {"off": "replies off: never propose replies, keep them for the briefing",
+         "draft": "replies drafted: propose each reply for approval",
+         "post": "replies posted: propose each reply, it posts without asking"}[reply],
+    ])
+
+
+def tray_note(title, message):
+    """A Needs-you row in the Agents tray, as notify.sh writes one."""
+    notes = Path(os.environ.get("XDG_RUNTIME_DIR") or "/tmp") / "agent-hub" / "notes"
+    try:
+        notes.mkdir(parents=True, exist_ok=True)
+        name = f"{time.time_ns()}-{os.getpid()}"
+        tmp = notes / f".{name}"
+        tmp.write_text(json.dumps({"title": title, "message": message, "at": int(time.time() * 1000),
+                                   "session": os.environ.get("CLAUDE_CODE_SESSION_ID", ""),
+                                   "pane": os.environ.get("TMUX_PANE", "")}))
+        tmp.replace(notes / f"{name}.json")
+    except OSError:
+        pass
+
+
+APPROVAL_CHECK = 2
+
+
+def approval_outcomes(forge, number, session):
+    # approval.py imports this file, so it's imported here, not at the top.
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import approval
+
+    return approval.outcomes(f"{forge.host}/{forge.project}#{number}", session)
+
+
 def emit(tag, msg):
     print(f"[{tag}] {msg}", flush=True)
 
@@ -462,7 +513,7 @@ def session_state(base, session):
 
 # What the agent records with --set. A file apart from the state, because the
 # running watcher rewrites the state on every poll and would undo a --set.
-NOTE_KEYS = ("lease_sha", "worktree", "clone")
+NOTE_KEYS = ("lease_sha", "worktree", "clone", "branch", "remote")
 
 
 def notes_path(base, session):
@@ -628,6 +679,8 @@ def report(snap, state, me, stuck_after):
         # The pipeline event carries the last stages, so they are not sent twice.
         if g["done"] and once(state, f"{sha}:stage:{g['name']}") and not (fresh or finished):
             emit("stage", f"{g['name']} {g['status']} for {short} | {progress(groups, g['name'])}")
+            if choice("prBabysit.notifyStage", False, (True, False)):
+                tray_note(f"{snap['branch']}: {g['name']} {g['status']}", progress(groups, g["name"]))
     if finished:
         failed = [c["name"] for c in blocking if c["status"] == "failed"]
         canceled = [c["name"] for c in blocking if c["status"] == "canceled"]
@@ -648,7 +701,7 @@ def report(snap, state, me, stuck_after):
         if c["author"] == me:
             continue
         where = f" on {c['where']}" if c["where"] else ""
-        emit("comment", f"@{c['author']}{where}: \"{flat(c['body'])}\" {c['url']}")
+        emit("comment", f"@{c['author']}{where}: \"{flat(c['body'])}\" id={c['id']} {c['url']}")
 
 
 def main():
@@ -707,7 +760,7 @@ def main():
     state = (load_state(path) if path else None) or {"comments": set(), "events": set()}
     notes = load_notes(notes_path(base, args.session)) if path else {}
 
-    failures, attached = 0, False
+    failures, attached, said = 0, False, None
     error_after = setting("prBabysit.errorAfter", 5, 1, 20)
     while True:
         try:
@@ -721,6 +774,12 @@ def main():
                               f"{sum(not c['resolved'] and c['author'] != me for c in snap['comments'])} open comment(s), polling every {args.interval}s"
                               f"{f' | saved: {show_notes(notes)}' if notes else ''}")
                 attached = True
+                # What approval.py needs to propose a push.
+                if path and (notes.get("branch"), notes.get("remote")) != (snap["branch"], remote):
+                    notes = set_notes(notes_path(base, args.session), [f"branch={snap['branch']}", f"remote={remote}"])
+            if not args.once and babysit_settings() != said:
+                said = babysit_settings()
+                emit("settings", said)
             report(snap, state, me, args.stuck_after)
             if path:
                 save_state(path, state)
@@ -736,7 +795,11 @@ def main():
                 emit("error", f"API calls failed {error_after} polls in a row, still retrying: {e}")
         if args.once:
             return 0
-        time.sleep(args.interval)
+        # Approvals are reported within a couple of seconds, not a poll.
+        for _ in range(max(1, args.interval // APPROVAL_CHECK)):
+            for msg in approval_outcomes(forge, number, args.session):
+                emit("approval", msg)
+            time.sleep(min(APPROVAL_CHECK, args.interval))
 
 
 if __name__ == "__main__":

@@ -10,7 +10,7 @@ reviews and pushes.
 |-------|---------|
 | `[conflict]` | Yes |
 | `[behind]` with "host requires a rebase" | Yes |
-| `[behind]` only | No. Note the count for the briefing. The user can ask for one. |
+| `[behind]` only | As the latest `[settings]` line says. Auto rebase off: no, note the count for the briefing; the user can ask for one. When clean: yes, but on any conflict abort the rebase and ask. Always: yes. |
 
 ## Steps
 
@@ -35,7 +35,7 @@ reviews and pushes.
 6. Verify: run the repo's linter and unit tests. If something fails because of
    the rebase, fix it as part of the conflict resolution and run them again.
    If it fails on the base branch as well, say so and don't fix it.
-7. Notify, then brief with the rebase item format in [briefing.md](briefing.md):
+7. Propose the push (SKILL.md step 6), then brief with the rebase item format in [briefing.md](briefing.md):
    the new base, each conflict and how both sides were kept, and lint and
    test results. Keep `$old_base` and `$old_head` so you can give
    `git range-diff $old_base..$old_head <remote>/<base>..HEAD` or an undo

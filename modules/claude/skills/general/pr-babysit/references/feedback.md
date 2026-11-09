@@ -23,9 +23,9 @@ action and show it as **Ignore** in the briefing.
 
 | Verdict | When | Do | Briefing tag |
 |---------|------|----|--------------|
-| **Yes** | The fix is clearly right and small: a bug, a missed case, a typo, a naming or style point the codebase already follows, a test the reviewer asked for, or an exact change the reviewer spelled out | Address it now, then notify | **Address** |
-| **Unsure** | A design or scope question, a preference with no codebase precedent, a change touching other teams' code, a question to the author, or anything you would want the author's opinion on | Do not change anything. Do not notify. Draft a reply. | **Reply** |
-| **No** | Already handled, outdated (the code moved), wrong, or a bot or FYI note with nothing to do | Do not change anything. Do not notify. Draft a reply giving the reason. | **Reply** |
+| **Yes** | The fix is clearly right and small: a bug, a missed case, a typo, a naming or style point the codebase already follows, a test the reviewer asked for, or an exact change the reviewer spelled out | Address it now (with auto-fix off in `[settings]`: ask first, as a Decide) | **Address** |
+| **Unsure** | A design or scope question, a preference with no codebase precedent, a change touching other teams' code, a question to the author, or anything you would want the author's opinion on | Do not change anything. Do not notify. Draft a reply for the briefing; don't propose it, the user decides what to say. | **Reply** |
+| **No** | Already handled, outdated (the code moved), wrong, or a bot or FYI note with nothing to do | Do not change anything. Do not notify. Propose a reply giving the reason. | **Reply** |
 
 If you are between Yes and Unsure, it is Unsure.
 
@@ -34,9 +34,12 @@ If you are between Yes and Unsure, it is Unsure.
 1. Make the change in the babysit worktree. Keep it to what the comment asks.
 2. Run the linter and unit tests. Fix what the change broke.
 3. Commit it on `babysit/<number>`, one commit per comment, with a short
-   message saying what changed. Never push, reply, or resolve the thread.
-4. Notify, then brief with the comment item format in
-   [briefing.md](briefing.md).
+   message saying what changed. Never resolve the thread.
+4. Propose a reply naming the commit (`--commit <sha>`), unless `[settings]`
+   says replies are off. Once the fixes waiting are done and checked, propose
+   the push (SKILL.md step 6), with `--for <sha>="#<item> @<author>"` for
+   each fix.
+5. Brief with the comment item format in [briefing.md](briefing.md).
 
 One commit per comment lets the user drop any fix they disagree with.
 

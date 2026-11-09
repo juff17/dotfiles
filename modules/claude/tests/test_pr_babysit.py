@@ -144,7 +144,11 @@ class WatchLine(Cache):
         w.set_notes(w.notes_path(self.base, "s1"), ["lease_sha=abc", "worktree=/p/wt", "clone=/p"])
         _, lines = self.watch(Forge(snap(state="merged")), "--session", "s1")
         self.assertTrue(lines[0].startswith("[watch] resumed "))
-        self.assertTrue(lines[0].endswith("| saved: lease_sha abc, worktree /p/wt, clone /p"), lines[0])
+        self.assertTrue(lines[0].endswith("| saved: lease_sha abc, worktree /p/wt, clone /p, branch feat, remote origin"), lines[0])
+
+    def test_attaching_saves_the_branch_and_remote_for_a_push(self):
+        self.watch(Forge(snap(state="merged")), "--session", "s1")
+        self.assertEqual(w.load_notes(w.notes_path(self.base, "s1")), {"branch": "feat", "remote": "origin"})
 
     def test_once_shows_no_saved_facts_and_saves_nothing(self):
         w.set_notes(w.notes_path(self.base, "s1"), ["lease_sha=abc"])
@@ -157,12 +161,28 @@ class Events(Cache):
     def test_a_rearm_never_repeats_comments(self):
         first = snap(comments=[comment(1), comment(2, author="me"), comment(3, resolved=True)])
         _, lines = self.watch(Forge(first, snap(state="merged", comments=first["comments"])), "--session", "s1")
-        self.assertEqual([l.split()[0] for l in lines], ["[watch]", "[comment]", "[merged]"])
-        self.assertIn("@rev", lines[1])
+        self.assertEqual([l.split()[0] for l in lines], ["[watch]", "[settings]", "[comment]", "[merged]"])
+        self.assertIn("@rev", lines[2])
 
         again = snap(state="merged", comments=[comment(1), comment(4)])
         _, lines = self.watch(Forge(again), "--session", "s1")
-        self.assertEqual([l for l in lines if l.startswith("[comment]")], ['[comment] @rev: "nit" u#4'])
+        self.assertEqual([l for l in lines if l.startswith("[comment]")], ['[comment] @rev: "nit" id=4 u#4'])
+
+    def test_approval_outcomes_come_between_polls(self):
+        with mock.patch.object(w, "approval_outcomes", side_effect=[["push p1 approved: pushed"]] + [[]] * 100):
+            _, lines = self.watch(Forge(snap(), snap(state="merged")), "--session", "s1", "--interval", "15")
+        self.assertIn("[approval] push p1 approved: pushed", lines)
+        self.assertLess(lines.index("[approval] push p1 approved: pushed"), len(lines) - 1)
+
+    def test_a_finished_stage_goes_to_the_tray_when_settings_say_so(self):
+        w.SETTINGS.write_text('{"prBabysit.notifyStage": true}')
+        running = {"id": 1, "name": "lint", "group": "build", "job": "lint", "status": "running", "url": "", "waited": 0, "allow_failure": False}
+        done = dict(running, status="success")
+        later = dict(running, id=2, group="test", job="unit", name="unit")
+        with mock.patch.object(w, "tray_note") as note:
+            self.watch(Forge(snap(checks=[running, later]), snap(checks=[done, later]), snap(state="merged")), "--session", "s1")
+        note.assert_called_once()
+        self.assertIn("build passed", note.call_args[0][0])
 
     def test_a_moved_head_is_a_push(self):
         _, lines = self.watch(Forge(snap(sha="a" * 40), snap(sha="b" * 40, state="merged")), "--session", "s1")
