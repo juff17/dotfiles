@@ -248,6 +248,15 @@ test('text fields: arrows, home and end, backspace, ctrl+u and ctrl+w', () => {
   assert.deepEqual(d.prompt, { text: '', at: 0 })
 })
 
+test('text fields: an emoji or a wide character is one step, and never cut in half', () => {
+  const d = form({ folder: P })
+  type('ok 😀 漢字')
+  keys(LEFT, LEFT, LEFT, LEFT)
+  assert.equal(d.prompt.at, 3, 'four steps back from the end is before the emoji')
+  keys(RIGHT, '\x7f')
+  assert.deepEqual(d.prompt, { text: 'ok  漢字', at: 3 })
+})
+
 test('a paste joins its lines and drops control characters; outside a text field it does nothing', () => {
   const d = form({ folder: P })
   key('', 'first line\n   second\tline\r\n')

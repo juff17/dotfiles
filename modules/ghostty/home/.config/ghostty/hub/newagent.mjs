@@ -9,6 +9,7 @@ import { readdirSync, statSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { caretParts, editLine, insertAt, length } from './line.mjs'
 import { load as settings } from './settings.mjs'
 import { BOLD, ITALIC, P, bg, clean, enter, fg, leave, paint, render, tokens, width } from './term.mjs'
 
@@ -76,13 +77,13 @@ function input(field, w, on, ghost = '') {
   const { text, at } = d[field]
   const shown = clean(text)
   if (!on) return render([[shown || ' ', fg(P.text)]], w, BOX)
-  // Keep the cursor in view on a long line.
-  const start = Math.max(0, at - w + 2)
-  const before = shown.slice(start, at)
-  if (ghost && at === shown.length) return render([[before, fg(P.text)], [ghost[0], '\x1b[7m' + fg(P.overlay1)], [ghost.slice(1), fg(P.overlay1)]], w, BOX)
-  const cur = shown[at] ?? ' '
-  const after = shown.slice(at + 1)
-  return render([[before, fg(P.text)], [cur, '\x1b[7m'], [after, fg(P.text)]], w, BOX)
+  // Cut around the cursor on a long line, so it stays in view.
+  const { before, under, after } = caretParts(shown, at, w)
+  if (ghost && at === length(shown)) {
+    const [first, ...rest] = ghost
+    return render([[before, fg(P.text)], [first, '\x1b[7m' + fg(P.overlay1)], [rest.join(''), fg(P.overlay1)]], w, BOX)
+  }
+  return render([[before, fg(P.text)], [under, '\x1b[7m'], [after, fg(P.text)]], w, BOX)
 }
 
 // ------------------------------------------------------------ folders
@@ -116,13 +117,14 @@ function isDir(dir, e) {
   }
 }
 
-const setFolder = text => (d.folder = { text, at: text.length })
+// The cursor is in code points, as hub/line.mjs keeps it.
+const setFolder = text => (d.folder = { text, at: length(text) })
 const pathTo = (dir, name) => tilde(join(dir, name))
 
 // What's left of the first match, while the cursor is at the end of a part
 // it extends.
 export function suggestion() {
-  if (d.field !== 'folder' || menu || d.folder.at !== d.folder.text.length) return ''
+  if (d.field !== 'folder' || menu || d.folder.at !== length(d.folder.text)) return ''
   const { part, names } = matchesOf(d.folder.text)
   return part && names[0]?.startsWith(part) ? `${names[0].slice(part.length)}/` : ''
 }
@@ -283,7 +285,7 @@ export function key(k, paste) {
     d[prop] = d[prop] < 0 ? (k === '\x1b[D' ? n - 1 : 0) : (d[prop] + (k === '\x1b[D' ? n - 1 : 1)) % n
     if (prop === 'recent') {
       const p = tilde(recents[d.recent] ?? '')
-      d.folder = { text: p, at: p.length }
+      setFolder(p)
     }
     if (prop === 'kind') {
       startWith(KINDS[d.kind].id)
@@ -291,30 +293,11 @@ export function key(k, paste) {
     }
     return
   }
-  if (!text) return
-  if (k === '\x1b[D') text.at = Math.max(0, text.at - 1)
-  else if (k === '\x1b[C') text.at = Math.min(text.text.length, text.at + 1)
-  else if (k === '\x1b[H' || k === '\x01') text.at = 0
-  else if (k === '\x1b[F' || k === '\x05') text.at = text.text.length
-  else if (k === '\x7f' || k === '\b') {
-    if (text.at > 0) {
-      text.text = text.text.slice(0, text.at - 1) + text.text.slice(text.at)
-      text.at--
-    }
-  } else if (k === '\x15') {
-    text.text = text.text.slice(text.at)
-    text.at = 0
-  } else if (k === '\x17') {
-    const head = text.text.slice(0, text.at).replace(/\S+\s*$/, '')
-    text.text = head + text.text.slice(text.at)
-    text.at = head.length
-  } else if (k.length >= 1 && !k.startsWith('\x1b') && k >= ' ') insert(text, k)
+  if (text) Object.assign(text, editLine(text.text, text.at, k))
 }
 
 function insert(text, s) {
-  const c = clean(s)
-  text.text = text.text.slice(0, text.at) + c + text.text.slice(text.at)
-  text.at += c.length
+  Object.assign(text, insertAt(text.text, text.at, clean(s)))
 }
 
 // The spec for the hub, or nothing with an error beside Start and the
@@ -384,7 +367,7 @@ export function form({ folder = '', recents: given = [] } = {}) {
     // Which recent Folder is, -1 for none, so none shows as chosen.
     recent: recents.indexOf(root),
     field: 'prompt',
-    folder: { text: tilde(root), at: tilde(root).length },
+    folder: { text: tilde(root), at: length(tilde(root)) },
     prompt: { text: '', at: 0 },
     target: { text: '', at: 0 },
     error: null,
