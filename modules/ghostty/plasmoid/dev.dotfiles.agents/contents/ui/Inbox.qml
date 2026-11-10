@@ -1,9 +1,9 @@
 // The inbox: every item from the tray command in sections, needs-you first,
-// each with its buttons. A button that answers or approves is filled in its
-// section's colour, one that opens something is blue, one that turns it down
-// is grey; ↵ presses the first, 1 2 3 the first three, x dismisses, j and k
-// move. A babysitter's reply shows the text it would post. Done items fold
-// into one line until shown.
+// each with how long it has been so and its buttons. A button that answers
+// or approves is filled in its section's colour, one that opens something is
+// blue, one that turns it down is grey; ↵ presses the first, 1 2 3 the first
+// three, x dismisses, j and k move. A babysitter's reply shows the text it
+// would post. Done items fold into one line until shown.
 import QtQuick
 import QtQuick.Layouts
 import "mocha.js" as M
@@ -206,6 +206,14 @@ Rectangle {
                     font.pixelSize: 12
                     elide: Text.ElideRight
                 }
+            }
+            Text {
+                Layout.alignment: Qt.AlignTop
+                text: r.item.age || ""
+                visible: text !== ""
+                color: M.subtext0
+                font.family: M.mono
+                font.pixelSize: 11
             }
             Buttons {
                 item: r.item

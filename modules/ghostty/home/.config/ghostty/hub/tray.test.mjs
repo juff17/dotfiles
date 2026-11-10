@@ -52,6 +52,18 @@ test('needs-you agents become ▲ rows, with allow and deny only for a permissio
   assert.equal(t.counts.you, 2)
 })
 
+test('each row says how long it has been so, and nothing when that isn’t known', () => {
+  const t = trayItems(
+    [agent('a', 'needs', { need: 'question', cmd: 'Which?', since: 1000 }), agent('b', 'needs', { need: 'question', cmd: 'Why?', since: 0 })],
+    new Set(),
+    new Set(),
+    [],
+    [],
+    1000 + 2 * 60_000,
+  )
+  assert.deepEqual(Object.fromEntries(t.items.map(i => [i.title, i.age])), { 'Which?': '2m', 'Why?': '' })
+})
+
 test('a subagent\'s permission prompt names the subagent asking', () => {
   const t = trayItems([agent('a', 'needs', { need: 'permission', cmd: 'Allow Bash(ls)?', via: 'Test hub.mjs key handling' })])
   assert.deepEqual(t.items[0].actions, ['allow', 'deny', 'go'])

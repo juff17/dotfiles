@@ -32,6 +32,7 @@ import { fileURLToPath } from 'node:url'
 import { RUN, alivePid, follow, markReviewed, readState } from './client.mjs'
 import { brokeTags, lanes, monitorsOf } from './model.mjs'
 import { load as settings } from './settings.mjs'
+import { ago } from './term.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const SEEN = join(RUN, 'tray-seen.json')
@@ -141,7 +142,7 @@ export function approvalRow(p, agents, buttons = true) {
   }
 }
 
-export function trayItems(agents, seen = new Set(), dismissed = new Set(), notes = [], approvals = []) {
+export function trayItems(agents, seen = new Set(), dismissed = new Set(), notes = [], approvals = [], now = Date.now()) {
   const l = lanes(agents)
   const brokeSet = brokeTags()
   const buttons = settings()['approvals.trayButtons']
@@ -176,7 +177,11 @@ export function trayItems(agents, seen = new Set(), dismissed = new Set(), notes
   const shown = items.filter(it => !dismissed.has(it.id))
   items.length = 0
   items.push(...shown)
-  for (const it of items) it.new = it.section !== 'work' && !seen.has(it.id)
+  for (const it of items) {
+    it.new = it.section !== 'work' && !seen.has(it.id)
+    // How long it's been so, as the widget shows it beside the title.
+    it.age = ago(it.since, now)
+  }
   const count = s => items.filter(it => it.section === s).length
   return {
     counts: { you: count('you'), broke: count('broke'), work: count('work'), watch: count('watch'), done: count('done') },
