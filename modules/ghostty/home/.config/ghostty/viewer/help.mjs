@@ -149,6 +149,22 @@ export const SECTIONS = [
   },
 ].map(s => ({ ...s, keys: s.keys.map(([key, what, rare = false]) => ({ key, what, rare })) }))
 
+// Settings › Keybinds' rebinds put in place of the defaults written above,
+// in place, as the view starts; a key unbound there is left out. The
+// defaults stay what's written here, so the tests and the docs see those.
+export function rebind(values, rows) {
+  const moved = rows.filter(r => values[r.key] !== r.default).map(r => [r.default, values[r.key]])
+  if (!moved.length) return
+  for (const s of SECTIONS)
+    s.keys = s.keys.flatMap(k => {
+      const hit = moved.find(([from]) => k.key === from)
+      if (hit) return hit[1] ? [{ ...k, key: hit[1] }] : []
+      let key = k.key
+      for (const [from, to] of moved) key = key.replace(new RegExp(`(^|\\s)${from.replace(/\+/g, '\\+')}(?=\\s|$)`), `$1${to || ''}`)
+      return [{ ...k, key: key.trim() }]
+    })
+}
+
 // The section Alt+H opens on: the one for the tmux window it was pressed in.
 const PLACES = { hub: 'hub', diagrams: 'dv' }
 export const startAt = place => Math.max(0, SECTIONS.findIndex(s => s.id === (PLACES[place] ?? 'any')))

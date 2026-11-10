@@ -21,6 +21,10 @@ const choice = (key, label, choices, def, sub = '') => ({ key, label, sub, type:
 const number = (key, label, def, { min, max, step = 1, unit = '' }, sub = '') => ({ key, label, sub, type: 'number', min, max, step, unit, default: def })
 const bool = (key, label, def, sub = '') => ({ key, label, sub, type: 'bool', default: def })
 const flags = (key, label, choices, def, sub = '') => ({ key, label, sub, type: 'flags', choices: opts(choices), default: def })
+// A key that does something anywhere in the window: an alt key layout.conf
+// binds, or a ctrl+shift key Ghostty sends for `run` (config.ghostty).
+// hub/keybinds.mjs applies them; '' is unbound.
+const keybind = (key, label, kind, def, run, sub = '') => ({ key, label, sub, type: 'key', kind, default: def, run })
 // Where an agent's instructions are (hub/prompts.mjs): not a setting, but a
 // line the panel shows beside the agent's settings.
 const prompt = id => ({ prompt: id })
@@ -185,17 +189,41 @@ export const SECTIONS = [
       number('viewer.scrollLines', 'Lines per scroll', 3, { min: 1, max: 20 }, 'a wheel notch, or J / K'),
     ],
   },
+  {
+    id: 'keys',
+    name: 'Keybinds',
+    where: 'keys that work anywhere in the window; ↵ then press the new key',
+    rows: [
+      head('Anywhere · layout.conf'),
+      keybind('keys.help', 'Help', 'alt', 'alt+h'),
+      keybind('keys.todo', 'Todo popup', 'alt', 'alt+t'),
+      keybind('keys.settings', 'Settings', 'alt', 'alt+s', undefined, 'this panel'),
+      keybind('keys.diagrams', 'Diagrams', 'alt', 'alt+d'),
+      keybind('keys.viewer', 'Show or hide the viewer', 'alt', 'alt+v'),
+      keybind('keys.newAgent', 'New agent', 'alt', 'alt+n'),
+      keybind('keys.editor', 'Open in your editor', 'alt', 'alt+e'),
+      head('Ghostty · config.ghostty'),
+      keybind('keys.hub', 'Workspace ↔ hub', 'ghostty', 'ctrl+shift+a', 'csi:9007~'),
+      keybind('keys.board', 'Back to the board', 'ghostty', 'ctrl+shift+b', 'csi:9008~'),
+      keybind('keys.newTab', 'New tab', 'ghostty', 'ctrl+shift+t', 'csi:9001~'),
+      keybind('keys.closeTab', 'Close tab', 'ghostty', 'ctrl+shift+w', 'csi:9002~'),
+      keybind('keys.newWindow', 'New window', 'ghostty', 'ctrl+shift+n', 'new_window'),
+    ],
+  },
 ]
 
 export const ROWS = SECTIONS.flatMap(s => s.rows.filter(r => r.key))
 const BY_KEY = new Map(ROWS.map(r => [r.key, r]))
 export const row = key => BY_KEY.get(key)
 
+export const KEY_PATTERN = { alt: /^alt\+[a-z0-9]$/, ghostty: /^ctrl\+shift\+[a-z0-9]$/ }
+
 export function valid(r, v) {
   if (r.type === 'choice') return r.choices.some(c => c.value === v)
   if (r.type === 'bool') return typeof v === 'boolean'
   if (r.type === 'number') return Number.isFinite(v) && v >= r.min && v <= r.max
   if (r.type === 'flags') return Array.isArray(v) && v.every(x => r.choices.some(c => c.value === x))
+  if (r.type === 'key') return v === '' || (typeof v === 'string' && KEY_PATTERN[r.kind].test(v))
   return false
 }
 
@@ -274,4 +302,6 @@ export function step(r, value, dir) {
 export const toggleFlag = (r, value, flag) => r.choices.map(c => c.value).filter(v => (v === flag ? !value.includes(v) : value.includes(v)))
 
 export const show = (r, v) =>
-  r.type === 'number' ? `${v}${r.unit}` : r.type === 'bool' ? (v ? 'on' : 'off') : r.type === 'choice' ? (r.choices.find(c => c.value === v)?.label ?? String(v)) : v.join(', ')
+  r.type === 'key'
+    ? v || 'unbound'
+    : r.type === 'number' ? `${v}${r.unit}` : r.type === 'bool' ? (v ? 'on' : 'off') : r.type === 'choice' ? (r.choices.find(c => c.value === v)?.label ?? String(v)) : v.join(', ')

@@ -140,3 +140,35 @@ test('Task, the hand-off and filing say where their instructions are, and ↑↓
   for (const x of SECTIONS) assert.ok(!items(start(x.id)).some(r => r.prompt), x.id)
   assert.ok(!SECTIONS.some(x => x.rows.some(r => r.type === 'skill')), 'no skills to pick')
 })
+
+test('↵ on a keybind waits for a key, which is saved and applied', () => {
+  let applied = 0
+  nav.effects.applyKeys = () => applied++
+  const s = on('keys.help')
+  press(s, '\r')
+  assert.equal(s.capture, true)
+  press(s, '\x1bx')
+  assert.deepEqual([s.capture, get('keys.help'), applied], [false, 'alt+x', 1])
+  press(s, '\x7f')
+  assert.equal(get('keys.help'), '')
+  press(s, 'r')
+  assert.equal(get('keys.help'), 'alt+h')
+})
+
+test('a keybind another row has is refused, and esc cancels the wait', () => {
+  nav.effects.applyKeys = () => {}
+  const s = on('keys.help')
+  press(s, '\r', '\x1bt')
+  assert.match(s.note.text, /taken by Todo popup/)
+  assert.equal(get('keys.help'), 'alt+h')
+  assert.equal(press(s, '\r', '\x1b')[1], undefined)
+  assert.equal(s.capture, false)
+  press(s, LEFT, RIGHT)
+  assert.equal(get('keys.help'), 'alt+h')
+})
+
+test('the key Settings is moved to closes it', () => {
+  nav.effects.applyKeys = () => {}
+  set('keys.settings', 'alt+z')
+  assert.equal(onKey(start(), '\x1bz'), 'quit')
+})
