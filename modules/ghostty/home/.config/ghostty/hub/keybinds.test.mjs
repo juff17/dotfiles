@@ -59,6 +59,7 @@ test('a keypress names an alt key with or without alt, and a Ghostty key with or
 test('a key another row or something else has clashes', () => {
   const v = defaults()
   assert.match(clash(row('keys.help'), 'alt+t', v), /Todo popup/)
+  assert.match(clash(row('keys.help'), 'alt+a', v), /Approvals popup/)
   assert.match(clash(row('keys.help'), 'alt+p', v), /Claude Code/)
   assert.match(clash(row('keys.newTab'), 'ctrl+shift+c', v), /copy/)
   assert.equal(clash(row('keys.help'), 'alt+h', v), null)

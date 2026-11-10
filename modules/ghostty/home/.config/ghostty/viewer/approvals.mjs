@@ -146,7 +146,9 @@ function editKey(s, p, key) {
 export function onKey(s, key, env = process.env) {
   const p = current(s)
   if (s.editing && p) return editKey(s, p, key)
-  if (key === 'q' || key === '\x1b' || key === '\x03' || key === '\x1ba') return 'quit'
+  // Alt+A opened it, or the key Settings › Keybinds moved it to.
+  const own = settings()['keys.approvals']
+  if (key === 'q' || key === '\x1b' || key === '\x03' || key === '\x1ba' || (own && key === `\x1b${own.slice(-1)}`)) return 'quit'
   if (!p) return undefined
   const commits = p.commits ?? []
   const pending = p.status === 'pending'

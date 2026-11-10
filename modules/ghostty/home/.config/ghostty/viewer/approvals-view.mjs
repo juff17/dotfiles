@@ -15,7 +15,7 @@ import { join } from 'node:path'
 
 import { readState } from '../hub/client.mjs'
 import { insertAt } from '../hub/line.mjs'
-import { set as setSetting } from '../hub/settings.mjs'
+import { load as loadSettings, set as setSetting } from '../hub/settings.mjs'
 import { BOLD, P, ago, bg, clean, enter, fg, leave, paint, render, split, tokens } from '../hub/term.mjs'
 import { go, readApprovals, runApproval } from '../hub/tray.mjs'
 import * as A from './approvals.mjs'
@@ -228,7 +228,7 @@ function draw() {
         [' ▲ APPROVALS ', BOLD + fg(P.peach)],
         [` ${count}`, fg(P.sub)],
       ],
-      [['alt+a close ', fg(P.sub)]],
+      [[`${loadSettings()['keys.approvals'] || 'esc'} close `, fg(P.sub)]],
       w,
       BASE,
     ),

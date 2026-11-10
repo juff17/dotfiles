@@ -38,6 +38,15 @@ test('a approves as proposed; esc, q and alt+a close', () => {
   for (const k of ['q', '\x1b', '\x1ba']) assert.equal(onKey(s, k), 'quit')
 })
 
+test('the key Settings › Keybinds moved the popup to closes it too', () => {
+  set('keys.approvals', 'alt+y')
+  try {
+    assert.equal(onKey(start([reply()]), '\x1by'), 'quit')
+  } finally {
+    set('keys.approvals', 'alt+a')
+  }
+})
+
 test('A approves and asks for always, but never for a deployment or a failed one', () => {
   assert.equal(onKey(start([reply()]), 'A').always, true)
   const deploy = start([{ id: 'd', kind: 'deploy', status: 'pending' }])

@@ -111,8 +111,15 @@ test('an alias row is its setting under another name, in another section', () =>
 
 test('fixed rows show a value but are not settings', () => {
   const fixed = SECTIONS.flatMap(s => s.rows).filter(r => r.fixed)
-  assert.ok(fixed.some(r => r.label === 'Popup key' && r.fixed === 'alt+a'))
+  assert.ok(fixed.some(r => r.label === 'Shortcut' && r.fixed === 'Meta+A'))
   for (const r of fixed) assert.equal(r.key, undefined)
+})
+
+test('Approvals’ popup key is the Keybinds row, so moving it in either place moves both', () => {
+  const popup = SECTIONS.find(s => s.id === 'approvals').rows.find(r => r.label === 'Popup key')
+  assert.equal(popup.key, 'keys.approvals')
+  assert.equal(popup.type, 'key')
+  assert.equal(popup.default, 'alt+a')
 })
 
 test('a list of viewer modes needs each mode once, added ones named with a command, and one on', () => {
