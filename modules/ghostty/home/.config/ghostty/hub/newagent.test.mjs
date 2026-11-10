@@ -36,7 +36,7 @@ test('a new form is a task, in its own worktree, on the prompt, with opus, auto 
   assert.equal(d.folder.text, '~/projects/alpha')
   assert.equal(d.folder.at, d.folder.text.length)
   assert.equal(d.recent, 1)
-  assert.deepEqual(fields(), ['kind', 'folder', 'recent', 'prompt', 'runAs', 'branch', 'model', 'mode', 'effort', 'start'])
+  assert.deepEqual(fields(), ['prompt', 'kind', 'folder', 'recent', 'runAs', 'branch', 'model', 'mode', 'effort', 'start'])
   type('go')
   const { done } = key(CTRL_S)
   assert.deepEqual(done, {
@@ -116,20 +116,21 @@ test('Enter moves to the next field, and starts on Start', () => {
   const d = form({ folder: P })
   type('go')
   key('\r')
-  assert.equal(d.field, 'runAs')
+  assert.equal(d.field, 'kind')
   at(d, 'start')
   assert.equal(key('\r').done.prompt, 'go')
 })
 
 test('up, down, tab and shift+tab move between fields, held at the ends', () => {
   const d = form({ folder: P })
-  keys(UP, UP, UP)
-  assert.equal(d.field, 'kind')
+  // The prompt is the top field.
   keys(UP)
-  assert.equal(d.field, 'kind')
-  keys(DOWN, DOWN, '\t')
   assert.equal(d.field, 'prompt')
+  keys(DOWN, '\t', DOWN)
+  assert.equal(d.field, 'recent')
   keys(SHIFT_TAB, SHIFT_TAB)
+  assert.equal(d.field, 'kind')
+  keys(DOWN)
   assert.equal(d.field, 'folder')
   // On Folder, tab completes rather than moving on.
   d.folder = { text: '~/projects/zz', at: 13 }
@@ -143,7 +144,7 @@ test('up, down, tab and shift+tab move between fields, held at the ends', () => 
 test('PR and log monitors ask for a target instead of a prompt, and no run-as or branch', () => {
   const d = at(form({ folder: P }), 'kind')
   keys(RIGHT)
-  assert.deepEqual(fields(), ['kind', 'folder', 'recent', 'target', 'model', 'mode', 'effort', 'start'])
+  assert.deepEqual(fields(), ['target', 'kind', 'folder', 'recent', 'model', 'mode', 'effort', 'start'])
   assert.equal(key(CTRL_S), undefined)
   assert.equal(d.field, 'target')
   assert.equal(d.error, 'Paste the PR or MR link')
