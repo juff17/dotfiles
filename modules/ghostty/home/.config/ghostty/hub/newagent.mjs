@@ -29,7 +29,7 @@ const BRANCH = [
   { id: 'worktree', label: 'Worktree', sub: 'its own worktree and branch' },
 ]
 const CHOICES = {
-  model: ['default', 'opus', 'sonnet', 'haiku'],
+  model: ['default', 'fable', 'opus', 'sonnet', 'haiku'],
   mode: ['default', 'auto', 'acceptEdits', 'plan'],
   effort: ['default', 'low', 'medium', 'high', 'xhigh'],
 }

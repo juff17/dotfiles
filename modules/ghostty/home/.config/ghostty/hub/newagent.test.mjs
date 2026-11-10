@@ -161,19 +161,19 @@ test('PR and log monitors ask for a target instead of a prompt, and no run-as or
 test('changing kind resets model, mode and effort to what it starts with', () => {
   const d = at(form({ folder: P }), 'model')
   keys(RIGHT)
-  assert.equal(d.model, 2)
+  assert.equal(d.model, 3)
   at(d, 'kind')
   keys(RIGHT)
   // A monitor mostly waits, so sonnet.
-  assert.deepEqual([d.model, d.mode, d.effort], [2, 1, 2])
+  assert.deepEqual([d.model, d.mode, d.effort], [3, 1, 2])
   keys(LEFT)
-  assert.deepEqual([d.model, d.mode, d.effort], [1, 1, 2])
+  assert.deepEqual([d.model, d.mode, d.effort], [2, 1, 2])
   assert.equal(d.field, 'kind')
 })
 
 test('choices step with → and space, back with ←, and wrap both ways', () => {
   const d = at(form({ folder: P }), 'model')
-  const model = () => ['default', 'opus', 'sonnet', 'haiku'][d.model]
+  const model = () => ['default', 'fable', 'opus', 'sonnet', 'haiku'][d.model]
   assert.equal(model(), 'opus')
   keys(RIGHT, ' ', ' ')
   assert.equal(model(), 'default')
@@ -276,7 +276,7 @@ test('a paste joins its lines and drops control characters; outside a text field
   at(d, 'model')
   key('', 'ignored')
   assert.equal(d.prompt.text, 'first line second line ')
-  assert.equal(d.model, 1)
+  assert.equal(d.model, 2)
 })
 
 test('folder matches: those that start with it, then any case; dirs and their links only', () => {

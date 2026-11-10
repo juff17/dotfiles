@@ -100,7 +100,7 @@ Diagrams come from the claude module's diagram-pane mod (`modules/claude/mods/ge
 | `shift+a` in Todo | Add by hand: title, category (`1`–`6`), then a note (`enter` on an empty note skips it). On a filing that failed, starts from its message |
 | `r` in Todo | Retry a filing that failed |
 | `m` / `shift+m` in Todo | Mark a todo for hand-off (the cursor moves on) / clear the marks |
-| `w` in Todo | Hand the marked todos, or the selected one, to agents, one each: `t` tab or background, `b` worktree or the branch it was added on, `m` opus, sonnet or haiku, `enter` starts them, `esc` cancels |
+| `w` in Todo | Hand the marked todos, or the selected one, to agents, one each: `t` tab or background, `b` worktree or the branch it was added on, `m` fable, opus, sonnet or haiku, `enter` starts them, `esc` cancels |
 | `e` in Todo | Edit: the card shows the title, category, type, directory and note as a form. `tab` / `shift+tab` move between them, `1`–`6` or `←` / `→` pick the category, `1`–`5` (`0` for none) or `←` / `→` the type, `←` / `→` the directory (the repos `ghostty-todo repos` lists, then none) or type to filter them, `enter` saves, `esc` cancels. A new directory moves the item to that repo's main checkout, dropping its branch, worktree and Claude session |
 | `c` / `t` / `x` in Todo | Next category, next type (research, decide, action, review, chore, none), delete (`x` twice; on a filing, drops it and stops Claude) |
 | `f` / `d` in Todo | This repo only or every repo / show what's done today |
