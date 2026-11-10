@@ -187,7 +187,7 @@ export const SECTIONS = [
         'off hides a mode from the header and the tab cycle; its data stays',
       ),
       head('Startup'),
-      choice('workspace.viewerShown', 'Viewer pane in new windows', [['hidden', 'hidden'], ['shown', 'shown']], 'hidden', 'hidden: Alt+V or the rail’s view button opens it'),
+      choice('workspace.viewerShown', 'Viewer pane in new windows', [['hidden', 'hidden'], ['shown', 'shown']], 'hidden', 'hidden: Alt+V opens it'),
       choice(
         'workspace.startMode',
         'Viewer opens in',

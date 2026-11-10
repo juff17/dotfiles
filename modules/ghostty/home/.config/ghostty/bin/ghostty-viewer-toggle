@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # Shows or hides window <win>'s viewer pane (Files, Diagrams, Diff, Todo),
-# for Alt+V (layout.conf) and the rail's view button. A window opens without
-# it.
+# for Alt+V (layout.conf). A window opens without it.
 #   ghostty-viewer-toggle <win>
 # Hiding moves the pane to a window of its own, viewer, which is never shown,
 # so yazi and dv keep running where they were; showing moves it back left of

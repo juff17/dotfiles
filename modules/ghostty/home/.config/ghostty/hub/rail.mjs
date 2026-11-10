@@ -2,9 +2,7 @@
 // The rail: a few columns down the left of a Ghostty window, as the S3.1
 // design draws it. work and hub switch the window between the workspace and
 // the agent hub; under them, counts of the agents that need you, are
-// working, are done and are idle; view shows or hides the workspace's viewer
-// pane, as Alt+V does; in the hub it does nothing, as Alt+V doesn't there;
-// + new opens the hub's New agent dialog,
+// working, are done and are idle; + new opens the hub's New agent dialog,
 // ? help the keys overlay (Alt+H), and ⚙ set the settings panel.
 // The hub button carries an orange dot while anything needs you.
 //   rail.mjs <work|hub>     which of the two windows this rail sits in
@@ -51,9 +49,6 @@ function popup(cmd, ...args) {
 }
 const help = () => popup('ghostty-help', VIEW)
 
-function viewer() {
-  if (VIEW === 'work') execFile(join(BIN, 'ghostty-viewer-toggle'), [String(WIN)], () => {})
-}
 const openSettings = () => popup('ghostty-settings')
 
 const cols = () => process.stdout.columns || 6
@@ -61,7 +56,7 @@ const rows = () => process.stdout.rows || 24
 let buttons = []
 
 function draw() {
-  const f = frame(cols(), rows(), VIEW, c, { work: () => show('work'), hub: () => show('hub'), viewer, newAgent, help, settings: openSettings })
+  const f = frame(cols(), rows(), VIEW, c, { work: () => show('work'), hub: () => show('hub'), newAgent, help, settings: openSettings })
   buttons = f.buttons
   paint(f.lines)
 }

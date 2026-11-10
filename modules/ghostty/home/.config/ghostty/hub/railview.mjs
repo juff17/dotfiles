@@ -15,8 +15,8 @@ function button(icon, label, on, w, dot = false) {
 }
 
 // The rail `w` columns by `h` rows, in `view` (work or hub), with the counts
-// `c`: work, hub and view (the viewer pane) at the top, the counts under them,
-// and + new, ? help and ⚙ set kept to the bottom. `acts` are what the buttons do, by name; each button
+// `c`: work and hub at the top, the counts under them, and + new, ? help
+// and ⚙ set kept to the bottom. `acts` are what the buttons do, by name; each button
 // is the rows it covers, counted from 1, and its act.
 export function frame(w, h, view, c, acts) {
   const lines = [render([], w, BG)]
@@ -27,7 +27,6 @@ export function frame(w, h, view, c, acts) {
   }
   add(acts.work, button('▣', 'work', view === 'work', w))
   add(acts.hub, button('◫', 'hub', view === 'hub', w, c.needs > 0))
-  add(acts.viewer, button('◧', 'view', false, w))
   lines.push(render([[` ${'─'.repeat(Math.max(1, w - 2))}`, fg(P.surface1)]], w, BG))
   const count = (glyph, n, color, bold = false) => render([[` ${glyph} ${n}`, (bold ? BOLD : '') + fg(color)]], w, BG)
   lines.push(count('▲', c.needs, c.needs ? P.peach : P.overlay1, c.needs > 0))
