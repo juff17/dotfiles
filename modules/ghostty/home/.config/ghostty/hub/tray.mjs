@@ -121,7 +121,12 @@ export function proposalLink(p) {
 // manual and stuck lines carry the job's), else the PR its command watches.
 export function monitorLink(m) {
   const named = web(m.event?.line?.match(/https?:\/\/[^\s"'<>]+/)?.[0])
-  if (named) return { url: named, label: /\/jobs?\/\d+/.test(named) ? 'Job' : /\/runs\/\d+/.test(named) ? 'Run' : prLabel(named) }
+  if (named) {
+    const label = /#(discussion_r|note_|issuecomment-|pullrequestreview-)/.test(named)
+      ? 'Comment'
+      : /\/jobs?\/\d+/.test(named) ? 'Job' : /\/runs\/\d+/.test(named) ? 'Run' : prLabel(named)
+    return { url: named, label }
+  }
   const watched = web(String(m.command ?? '').match(/https?:\/\/[^\s"'<>]+\/(?:pull|-\/merge_requests)\/\d+/)?.[0])
   return watched ? { url: watched, label: prLabel(watched) } : null
 }

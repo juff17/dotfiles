@@ -316,6 +316,8 @@ test('↗ on a monitor opens what its latest event names, else the PR it watches
   const m = (line, command = 'python3 watch_pr.py https://github.com/o/r/pull/2 --session s') => monitorLink({ event: line && { line }, command })
   assert.deepEqual(m('[failed] flaky id=55 https://github.com/o/r/actions/runs/44/job/55'), { url: 'https://github.com/o/r/actions/runs/44/job/55', label: 'Job' })
   assert.deepEqual(m('[pipeline] passed'), { url: 'https://github.com/o/r/pull/2', label: 'PR' })
+  assert.equal(m('[comment] @a on x.py:3 https://github.com/o/r/pull/2#discussion_r9').label, 'Comment')
+  assert.equal(m('[comment] @a https://gitlab.com/g/r/-/merge_requests/7#note_5').label, 'Comment')
   assert.equal(m(null, 'tail -f app.log'), null)
 })
 
