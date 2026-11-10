@@ -14,7 +14,6 @@ export const SECTIONS = [
       ['alt+t', 'Todo list in a popup'],
       ['alt+s', 'Settings'],
       ['alt+d', 'Diagrams of the active tab, open session or selected card'],
-      ['alt+v', 'Show or hide the viewer pane (Files, Diagrams, Diff, Todo)'],
       ['alt+n', 'New agent'],
       ['alt+e', "Open the current tab's repo or worktree in your editor (Settings › Editor)"],
       ['ctrl+shift+a', 'Switch between the workspace and the hub'],

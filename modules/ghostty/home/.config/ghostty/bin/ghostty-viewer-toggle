@@ -2,7 +2,7 @@
 # Shows or hides window <win>'s viewer pane (Files, Diagrams, Diff, Todo),
 # for Alt+V (layout.conf) and the rail's view button. A window opens without
 # it.
-#   ghostty-viewer-toggle <win> [toggle|show]
+#   ghostty-viewer-toggle <win>
 # Hiding moves the pane to a window of its own, viewer, which is never shown,
 # so yazi and dv keep running where they were; showing moves it back left of
 # the tab session and focuses it. The first show opens one (open_viewer), in
@@ -10,7 +10,7 @@
 
 source "$(dirname "$(readlink -f "$0")")/ghostty-lib.sh"
 
-win=$1 want=${2:-toggle} session="layout-$1"
+win=$1 session="layout-$1"
 tabs=$(layout show -t "$session" -v @tabs 2>/dev/null) || exit 0
 
 # -s: every window of the session, the hidden one included.
@@ -32,7 +32,7 @@ elif [[ $where == viewer ]]; then
     layout set -p -t "$viewer" allow-passthrough "$passthrough"
   fi
   layout select-pane -t "$viewer"
-elif [[ $want == toggle ]]; then
+else
   # Passthrough off while hidden, so an image yazi or dv draws then can't
   # land on whatever window is showing.
   passthrough=$(layout show -p -t "$viewer" -v allow-passthrough 2>/dev/null)
