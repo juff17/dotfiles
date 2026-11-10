@@ -63,6 +63,15 @@
     ],
     "PreToolUse": [
       {
+        "matcher": "EnterWorktree|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/fetch-before-worktree.sh"
+          }
+        ]
+      },
+      {
         "matcher": "Bash",
         "hooks": [
           {

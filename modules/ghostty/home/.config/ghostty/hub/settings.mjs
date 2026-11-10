@@ -73,6 +73,7 @@ export const SECTIONS = [
       ...agent('newAgent.task', 'opus'),
       choice('newAgent.task.runAs', 'Run as', [['tab', 'new tab'], ['bg', 'background']], 'tab'),
       choice('newAgent.task.branch', 'Branch', [['worktree', 'worktree'], ['current', 'current branch']], 'worktree'),
+      bool('worktree.fetch', 'Fetch before a worktree', true, 'git fetch before any Claude session makes a worktree, so it starts from the remote’s latest'),
       prompt('task'),
       head('Folders'),
       number('newAgent.recent', 'Recent folders shown', 8, { min: 1, max: 8 }, 'under Folder; 8 is all the form has room for'),
