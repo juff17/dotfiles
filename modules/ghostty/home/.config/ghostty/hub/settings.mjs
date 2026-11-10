@@ -211,7 +211,7 @@ export const SECTIONS = [
       bool('tray.desktop', 'Desktop pop-up too', false, 'a KDE notification for a new ▲ or ✗'),
       number('tray.messageSecs', 'Results show for', 6, { min: 2, max: 30, unit: 's' }, 'what the inbox says after a button'),
       number('tray.inboxWidth', 'Width', 600, { min: 400, max: 1200, step: 50, unit: ' px' }),
-      number('tray.inboxHeight', 'Most height', 720, { min: 300, max: 1400, step: 60, unit: ' px' }, 'it grows with its items up to this'),
+      number('tray.inboxHeight', 'Most height', 1440, { min: 300, max: 2400, step: 60, unit: ' px' }, 'it grows with its items up to this'),
       head('Sounds'),
       bool('tray.soundYou', 'Sound when something needs you', false, 'a new ▲ in the tray'),
       bool('tray.soundBroke', 'Sound when something breaks', false, 'a new ✗ in the tray'),

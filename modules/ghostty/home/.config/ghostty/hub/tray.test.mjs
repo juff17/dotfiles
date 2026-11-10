@@ -171,7 +171,7 @@ test('the widget gets its chip, sounds, flash and inbox from Settings', () => {
     messageMs: 6000,
     pollMs: 2000,
     inboxWidth: 600,
-    inboxHeight: 720,
+    inboxHeight: 1440,
   })
 })
 

@@ -219,10 +219,14 @@ PlasmoidItem {
         id: inbox
         Layout.preferredWidth: root.setting("inboxWidth", 600)
         Layout.minimumWidth: root.setting("inboxWidth", 600)
-        maxHeight: root.setting("inboxHeight", 720)
+        maxHeight: root.setting("inboxHeight", 1440)
         boxWidth: root.setting("inboxWidth", 600)
+        // Its content's height, up to the most Settings allow: as a minimum
+        // too, since Plasma keeps an open popup at its size until its
+        // minimum outgrows it, so rows that came later scrolled out of view.
         Layout.preferredHeight: implicitHeight
-        Layout.minimumHeight: Math.min(implicitHeight, 200)
+        Layout.minimumHeight: implicitHeight
+        Layout.maximumHeight: maxHeight
         snap: root.snap
         message: root.message
         messageOk: root.messageOk

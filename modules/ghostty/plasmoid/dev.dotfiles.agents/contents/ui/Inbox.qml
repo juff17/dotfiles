@@ -16,7 +16,7 @@ Rectangle {
     property bool messageOk: true
     property bool showDone: false
     property int sel: 0
-    property int maxHeight: 720
+    property int maxHeight: 1440
     property int boxWidth: 600
 
     signal act(string action, string id)
