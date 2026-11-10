@@ -140,7 +140,7 @@ export const SECTIONS = [
     color: '#fab387',
     where: 'alt+a, or Edit and Review in the tray',
     keys: [
-      ['j / k', 'Next / previous proposal'],
+      ['← / →', 'Previous / next proposal (j / k too)'],
       ['a', 'Approve: post, push, retry or run it as shown'],
       ['shift+a', 'Approve, and always do this kind on its own (Settings › Approvals)', true],
       ['e', 'Edit the reply, inline or in $EDITOR (Settings › Approvals)'],

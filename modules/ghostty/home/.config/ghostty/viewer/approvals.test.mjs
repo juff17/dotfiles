@@ -199,3 +199,12 @@ test('o opens the proposal on the host; a proposal with no link takes no o', () 
   assert.deepEqual(onKey(start([reply({ pr, thread })]), 'o'), { do: 'open', p: reply({ pr, thread }), url: thread.url })
   assert.equal(onKey(start([reply({ pr: {} })]), 'o'), undefined)
 })
+
+test('← and → step between proposals, as j and k do', () => {
+  const s = start([reply(), push(), retry()])
+  onKey(s, '\x1b[C')
+  assert.equal(current(s).id, 'p1')
+  onKey(s, '\x1b[D')
+  onKey(s, '\x1b[D')
+  assert.equal(current(s).id, 't1', 'wraps round')
+})

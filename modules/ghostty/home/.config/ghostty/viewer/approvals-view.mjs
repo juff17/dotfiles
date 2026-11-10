@@ -241,9 +241,9 @@ function footerKeys(p) {
   if (s.diff) return 'j k file · enter open/close · J K scroll · esc back'
   if (s.editing) return 'enter done · esc drop the edit · ←→ move · ctrl+u ctrl+w delete'
   if (!p) return 'esc close'
-  if (p.kind === 'push') return 'j k next · ↑ ↓ commits · enter its diff · d all · space keep/drop · A approve + always'
-  if (p.kind === 'reply') return 'j k next · e edit · A approve + always for replies'
-  return p.kind === 'deploy' ? 'j k next · r reject · g go to the session' : `j k next · A approve + always for ${p.kind === 'retry' ? 'retries' : 'this kind'}`
+  if (p.kind === 'push') return '← → next · ↑ ↓ commits · enter its diff · d all · space keep/drop · A approve + always'
+  if (p.kind === 'reply') return '← → next · e edit · A approve + always for replies'
+  return p.kind === 'deploy' ? '← → next · r reject · g go to the session' : `← → next · A approve + always for ${p.kind === 'retry' ? 'retries' : 'this kind'}`
 }
 
 function draw() {

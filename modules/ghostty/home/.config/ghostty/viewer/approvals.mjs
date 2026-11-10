@@ -214,6 +214,10 @@ export function onKey(s, key, env = process.env) {
   const commits = p.commits ?? []
   const pending = p.status === 'pending'
   const keys = {
+    // The proposals side by side, like the dots under them: ← and → step
+    // between them; j and k too.
+    '\x1b[D': () => move(s, -1),
+    '\x1b[C': () => move(s, 1),
     j: () => move(s, 1),
     k: () => move(s, -1),
     '\x1b[B': () => (p.kind === 'push' ? (s.commit = Math.min(commits.length - 1, s.commit + 1)) : move(s, 1)),
