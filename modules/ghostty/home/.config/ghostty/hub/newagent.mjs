@@ -33,7 +33,9 @@ const CHOICES = {
   model: ['default', 'fable', 'opus', 'sonnet', 'haiku'],
   mode: ['default', 'auto', 'acceptEdits', 'plan'],
   effort: ['default', 'low', 'medium', 'high', 'xhigh'],
+  chrome: ['off', 'on'],
 }
+const STARTS_WITH = ['model', 'mode', 'effort', 'chrome']
 // What each kind starts with comes from Settings (newAgent.<kind>.*); 'default'
 // is still a choice, for Claude's own.
 const BOX = bg(P.base)
@@ -43,8 +45,8 @@ const MARGIN_Y = 1
 const HINTS = '↑/↓ field   ←/→ choose   tab complete folder   ctrl+s start   esc cancel'
 // The tallest form is a task's: the prompt, a gap, kind and its note, a gap,
 // folder, recent, a gap, run as, branch and their note, a gap, model, mode,
-// effort, a gap, Start. Below it a gap, then the keys.
-const BODY_ROWS = 17
+// effort, chrome, a gap, Start. Below it a gap, then the keys.
+const BODY_ROWS = 18
 const LABEL_COLS = 10
 
 // The popup's size, border included, which the hub opens it at: just room
@@ -67,7 +69,7 @@ let menu = null
 
 export function fields() {
   const k = KINDS[d.kind].id
-  return [k === 'task' ? 'prompt' : 'target', 'kind', 'folder', 'recent', ...(k === 'task' ? ['runAs', 'branch'] : []), 'model', 'mode', 'effort', 'start']
+  return [k === 'task' ? 'prompt' : 'target', 'kind', 'folder', 'recent', ...(k === 'task' ? ['runAs', 'branch'] : []), 'model', 'mode', 'effort', 'chrome', 'start']
 }
 
 // `ghost` is the rest of a suggestion, drawn dim after the text with the
@@ -177,7 +179,7 @@ function draw() {
     note(`${RUN_AS[d.runAs].sub} · ${BRANCH[d.branch].sub}`)
   }
   row(null, [])
-  for (const f of ['model', 'mode', 'effort'])
+  for (const f of STARTS_WITH)
     row(f, [...label(f[0].toUpperCase() + f.slice(1), f), [`‹ ${CHOICES[f][d[f]]} ›`, d.field === f ? fg(P.text) + bg(P.surface0) : fg(P.text)]])
   row(null, [])
   const lands =
@@ -293,14 +295,15 @@ function submit() {
       model: CHOICES.model[d.model],
       mode: CHOICES.mode[d.mode],
       effort: CHOICES.effort[d.effort],
+      chrome: CHOICES.chrome[d.chrome] === 'on',
     },
   }
 }
 
-// Model, mode and effort go back to what the kind starts with.
+// Model, mode, effort and Chrome go back to what the kind starts with.
 function startWith(kind) {
   const s = settings()
-  for (const f of ['model', 'mode', 'effort']) d[f] = Math.max(0, CHOICES[f].indexOf(s[`newAgent.${kind}.${f}`]))
+  for (const f of STARTS_WITH) d[f] = Math.max(0, CHOICES[f].indexOf(s[`newAgent.${kind}.${f}`]))
 }
 
 function finish(spec) {
@@ -325,6 +328,7 @@ export function form({ folder = '', recents: given = [] } = {}) {
     model: 0,
     mode: 0,
     effort: 0,
+    chrome: 0,
     // Which recent Folder is, -1 for none, so none shows as chosen.
     recent: recents.indexOf(root),
     field: 'prompt',

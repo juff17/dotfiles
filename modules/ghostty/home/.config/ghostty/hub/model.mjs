@@ -513,6 +513,7 @@ export function launch(spec) {
   if (spec.model && spec.model !== 'default') opts.push('--model', spec.model)
   if (spec.mode && spec.mode !== 'default') opts.push('--permission-mode', spec.mode)
   if (spec.effort && spec.effort !== 'default') opts.push('--effort', spec.effort)
+  if (spec.chrome) opts.push('--chrome')
   let prompt = spec.prompt?.trim() ?? ''
   let name = ''
   let where = spec.runAs ?? 'tab'

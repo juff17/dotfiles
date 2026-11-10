@@ -61,6 +61,7 @@ const agent = (prefix, model, sub = '') => [
   choice(`${prefix}.model`, 'Model', MODEL, model, sub),
   choice(`${prefix}.mode`, 'Permission mode', MODE, 'auto'),
   choice(`${prefix}.effort`, 'Effort', EFFORT, 'medium'),
+  choice(`${prefix}.chrome`, 'Chrome', [['off', 'off'], ['on', 'on']], 'off', 'claude --chrome: Claude in Chrome browser tools'),
 ]
 
 export const SECTIONS = [

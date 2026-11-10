@@ -36,7 +36,7 @@ test('a new form is a task, in its own worktree, on the prompt, with opus, auto 
   assert.equal(d.folder.text, '~/projects/alpha')
   assert.equal(d.folder.at, d.folder.text.length)
   assert.equal(d.recent, 1)
-  assert.deepEqual(fields(), ['prompt', 'kind', 'folder', 'recent', 'runAs', 'branch', 'model', 'mode', 'effort', 'start'])
+  assert.deepEqual(fields(), ['prompt', 'kind', 'folder', 'recent', 'runAs', 'branch', 'model', 'mode', 'effort', 'chrome', 'start'])
   type('go')
   const { done } = key(CTRL_S)
   assert.deepEqual(done, {
@@ -49,7 +49,19 @@ test('a new form is a task, in its own worktree, on the prompt, with opus, auto 
     model: 'opus',
     mode: 'auto',
     effort: 'medium',
+    chrome: false,
   })
+})
+
+test('Chrome on launches with --chrome; off leaves it out', () => {
+  const d = form({ folder: P })
+  type('browse')
+  at(d, 'chrome')
+  keys(RIGHT)
+  const { done } = key(CTRL_S)
+  assert.equal(done.chrome, true)
+  assert.match(launch(done).line, /^claude --model opus --permission-mode auto --effort medium --chrome '/)
+  assert.doesNotMatch(launch({ ...done, chrome: false }).line, /--chrome/)
 })
 
 test('the folder is the repo when given a worktree, else the newest recent, else ~/projects', () => {
@@ -144,7 +156,7 @@ test('up, down, tab and shift+tab move between fields, held at the ends', () => 
 test('PR and log monitors ask for a target instead of a prompt, and no run-as or branch', () => {
   const d = at(form({ folder: P }), 'kind')
   keys(RIGHT)
-  assert.deepEqual(fields(), ['target', 'kind', 'folder', 'recent', 'model', 'mode', 'effort', 'start'])
+  assert.deepEqual(fields(), ['target', 'kind', 'folder', 'recent', 'model', 'mode', 'effort', 'chrome', 'start'])
   assert.equal(key(CTRL_S), undefined)
   assert.equal(d.field, 'target')
   assert.equal(d.error, 'Paste the PR or MR link')
@@ -365,5 +377,5 @@ test('no suggestion mid-line, off the folder, for a different case or a trailing
 })
 
 test('the popup is the form\'s size, border included', () => {
-  assert.deepEqual(POPUP, { w: 80, h: 23 })
+  assert.deepEqual(POPUP, { w: 80, h: 24 })
 })
