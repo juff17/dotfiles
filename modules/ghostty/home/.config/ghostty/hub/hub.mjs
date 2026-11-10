@@ -6,7 +6,7 @@
 //   - Enter opens an agent's live session beside a list of the rest (a tmux
 //     pane attached to its tab, or `claude attach` for a background one).
 //   - n starts a new agent: a task in a new tab, a worktree or the
-//     background, a PR babysitter or a log watcher.
+//     background, or a monitor (a skill such as pr-babysit or logger).
 //   - Alt+D shows the diagrams of the open session's tab, or of the selected
 //     agent's tab, in a window of their own (bin/ghostty-diagrams).
 // It runs in the hub window of the window's outer tmux (layout.conf), next to
@@ -294,7 +294,7 @@ function monitorRows(w, h, y0) {
   const { i: sel } = current('monitors')
   const look = { glyph: '◉', color: P.teal, name: 'Monitors' }
   const out = [header(look, list.length, w, [['   stay put, raise a card in Needs you when needed', fg(P.sub)]]), render([], w, LANE_BG)]
-  if (!list.length) out.push(empty(`${EMPTY.monitors} · n → Babysit a PR or Watch logs`, w))
+  if (!list.length) out.push(empty(`${EMPTY.monitors} · n → Monitor a PR or logs`, w))
   // Like the lanes, a full tray says how many it hides.
   const { top, room } = trayWindow(list.length, h - out.length, sel)
   list.slice(top, top + room).forEach((m, k) => {

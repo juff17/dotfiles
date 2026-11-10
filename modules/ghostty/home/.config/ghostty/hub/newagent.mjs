@@ -11,6 +11,7 @@ import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { caretParts, editLine, insertAt, length } from './line.mjs'
 import { complete, expand, matchesOf, suggestion as pathSuggestion, tilde } from './paths.mjs'
+import { MONITORS } from './model.mjs'
 import { load as settings } from './settings.mjs'
 import { BOLD, ITALIC, P, bg, clean, enter, fg, leave, paint, render, tokens, width } from './term.mjs'
 
@@ -18,8 +19,7 @@ const HOME = homedir()
 
 const KINDS = [
   { id: 'task', glyph: '✻', color: P.blue, label: 'Task', sub: 'a worker with a prompt' },
-  { id: 'pr', glyph: '◉', color: P.teal, label: 'Babysit a PR', sub: 'monitor until it merges' },
-  { id: 'logs', glyph: '◉', color: P.teal, label: 'Watch logs', sub: 'monitor a service' },
+  { id: 'monitor', glyph: '◉', color: P.teal, label: 'Monitor', sub: 'a skill that watches something in the background' },
 ]
 const RUN_AS = [
   { id: 'tab', label: 'New tab', sub: 'a tab in this window' },
@@ -36,8 +36,9 @@ const CHOICES = {
   chrome: ['off', 'on'],
 }
 const STARTS_WITH = ['model', 'mode', 'effort', 'chrome']
-// What each kind starts with comes from Settings (newAgent.<kind>.*); 'default'
-// is still a choice, for Claude's own.
+// What each kind starts with comes from Settings (newAgent.<kind>.*, or for a
+// monitor its skill's newAgent.<id>.*); 'default' is still a choice, for
+// Claude's own.
 const BOX = bg(P.base)
 // Space between the popup's border and the form.
 const MARGIN_X = 3
@@ -69,7 +70,19 @@ let menu = null
 
 export function fields() {
   const k = KINDS[d.kind].id
-  return [k === 'task' ? 'prompt' : 'target', 'kind', 'folder', 'recent', ...(k === 'task' ? ['runAs', 'branch'] : []), 'model', 'mode', 'effort', 'chrome', 'start']
+  return [
+    k === 'task' ? 'prompt' : 'target',
+    'kind',
+    ...(k === 'task' ? [] : ['skill']),
+    'folder',
+    'recent',
+    ...(k === 'task' ? ['runAs', 'branch'] : []),
+    'model',
+    'mode',
+    'effort',
+    'chrome',
+    'start',
+  ]
 }
 
 // `ghost` is the rest of a suggestion, drawn dim after the text with the
@@ -145,9 +158,10 @@ function draw() {
   const note = text => row(null, [[`${' '.repeat(LABEL_COLS)}${text}`, fg(P.overlay1)]])
   // What to do comes first, where the cursor starts; the choices follow.
   if (kind === 'task') row('prompt', [...label('Task', 'prompt'), { input: 'prompt' }])
-  else row('target', [...label(kind === 'pr' ? 'PR link' : 'Watch', 'target'), { input: 'target' }])
-  if (kind === 'pr') note('starts /pr-babysit in the background; it lands in Monitors')
-  if (kind === 'logs') note('a command or service, e.g. docker compose logs api; runs /logger')
+  else {
+    row('target', [...label(MONITORS[d.skill].target, 'target'), { input: 'target' }])
+    note(`${MONITORS[d.skill].hint}; runs /${MONITORS[d.skill].skill}`)
+  }
   row(null, [])
   row('kind', [
     ...label('Kind', 'kind'),
@@ -157,6 +171,11 @@ function draw() {
       ['   ', ''],
     ]),
   ])
+  if (kind === 'monitor')
+    row('skill', [
+      ...label('Skill', 'skill'),
+      ...MONITORS.flatMap((x, i) => [[`${i === d.skill ? '●' : '○'} `, fg(P.teal)], [x.skill, i === d.skill ? BOLD + fg(P.text) : fg(P.sub)], ['   ', '']]),
+    ])
   note(KINDS[d.kind].sub)
   row(null, [])
   row('folder', [...label('Folder', 'folder'), { input: 'folder', ghost: suggestion() }])
@@ -226,7 +245,7 @@ export function key(k, paste) {
     return
   }
   const text = ['folder', 'prompt', 'target'].includes(d.field) ? d[d.field] : null
-  const choice = { kind: [KINDS.length, 'kind'], runAs: [RUN_AS.length, 'runAs'], branch: [BRANCH.length, 'branch'], recent: [recents.length, 'recent'] }[d.field] ??
+  const choice = { kind: [KINDS.length, 'kind'], skill: [MONITORS.length, 'skill'], runAs: [RUN_AS.length, 'runAs'], branch: [BRANCH.length, 'branch'], recent: [recents.length, 'recent'] }[d.field] ??
     (CHOICES[d.field] ? [CHOICES[d.field].length, d.field] : null)
   if (k === '\x1b' || k === '\x03') return { done: null }
   if (k === '\x13') return submit()
@@ -249,8 +268,9 @@ export function key(k, paste) {
       const p = tilde(recents[d.recent] ?? '')
       setFolder(p)
     }
+    if (prop === 'skill') startWith(agentKind())
     if (prop === 'kind') {
-      startWith(KINDS[d.kind].id)
+      startWith(agentKind())
       if (!fields().includes(d.field)) d.field = 'kind'
     }
     return
@@ -281,7 +301,7 @@ function submit() {
   }
   if (kind !== 'task' && !d.target.text.trim()) {
     d.field = 'target'
-    d.error = kind === 'pr' ? 'Paste the PR or MR link' : 'Say what to watch'
+    d.error = MONITORS[d.skill].missing
     return
   }
   return {
@@ -289,6 +309,7 @@ function submit() {
       kind,
       cwd,
       prompt: d.prompt.text,
+      ...(kind === 'monitor' && { skill: MONITORS[d.skill].id }),
       target: d.target.text,
       runAs: RUN_AS[d.runAs].id,
       worktree: BRANCH[d.branch].id === 'worktree',
@@ -299,6 +320,10 @@ function submit() {
     },
   }
 }
+
+// Whose Settings model, mode, effort and Chrome start from: the kind's, or
+// for a monitor its skill's.
+const agentKind = () => (KINDS[d.kind].id === 'monitor' ? MONITORS[d.skill].id : KINDS[d.kind].id)
 
 // Model, mode, effort and Chrome go back to what the kind starts with.
 function startWith(kind) {
@@ -323,6 +348,7 @@ export function form({ folder = '', recents: given = [] } = {}) {
   const root = (start || join(HOME, 'projects')).replace(/\/\.claude\/worktrees\/.*$/, '')
   d = {
     kind: 0,
+    skill: 0,
     runAs: Math.max(0, RUN_AS.findIndex(r => r.id === s['newAgent.task.runAs'])),
     branch: Math.max(0, BRANCH.findIndex(b => b.id === s['newAgent.task.branch'])),
     model: 0,
@@ -337,7 +363,7 @@ export function form({ folder = '', recents: given = [] } = {}) {
     target: { text: '', at: 0 },
     error: null,
   }
-  startWith(KINDS[d.kind].id)
+  startWith(agentKind())
   return d
 }
 

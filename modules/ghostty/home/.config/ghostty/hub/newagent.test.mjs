@@ -153,21 +153,32 @@ test('up, down, tab and shift+tab move between fields, held at the ends', () => 
   assert.equal(d.field, 'start')
 })
 
-test('PR and log monitors ask for a target instead of a prompt, and no run-as or branch', () => {
+test('a monitor picks a skill and asks for a target instead of a prompt, and no run-as or branch', () => {
   const d = at(form({ folder: P }), 'kind')
   keys(RIGHT)
-  assert.deepEqual(fields(), ['target', 'kind', 'folder', 'recent', 'model', 'mode', 'effort', 'chrome', 'start'])
+  assert.deepEqual(fields(), ['target', 'kind', 'skill', 'folder', 'recent', 'model', 'mode', 'effort', 'chrome', 'start'])
   assert.equal(key(CTRL_S), undefined)
   assert.equal(d.field, 'target')
   assert.equal(d.error, 'Paste the PR or MR link')
-  at(d, 'kind')
+  at(d, 'skill')
   keys(RIGHT)
   assert.equal(key(CTRL_S), undefined)
   assert.equal(d.error, 'Say what to watch')
   type('docker compose logs api')
   const { done } = key(CTRL_S)
-  assert.equal(done.kind, 'logs')
+  assert.equal(done.kind, 'monitor')
+  assert.equal(done.skill, 'logs')
   assert.equal(done.target, 'docker compose logs api')
+  assert.equal(launch(done).argv.at(-1), '/logger watch docker compose logs api')
+  at(d, 'skill')
+  keys(RIGHT)
+  assert.equal(d.skill, 0, 'the skill list wraps')
+})
+
+test('a task has no skill in its spec', () => {
+  form({ folder: P })
+  type('go')
+  assert.equal(key(CTRL_S).done.skill, undefined)
 })
 
 test('changing kind resets model, mode and effort to what it starts with', () => {
@@ -193,7 +204,7 @@ test('choices step with → and space, back with ←, and wrap both ways', () =>
   assert.equal(model(), 'haiku')
   at(d, 'kind')
   keys(LEFT)
-  assert.equal(d.kind, 2)
+  assert.equal(d.kind, 1)
   keys(RIGHT)
   assert.equal(d.kind, 0)
 })

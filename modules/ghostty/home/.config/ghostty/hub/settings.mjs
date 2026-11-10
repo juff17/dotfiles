@@ -92,10 +92,10 @@ export const SECTIONS = [
   {
     id: 'prBabysit',
     name: 'PR babysit',
-    where: 'babysitters started from New agent, and the watcher every babysit runs',
+    where: 'pr-babysit monitors started from New agent, and the watcher every babysit runs',
     rows: [
       head('Agent'),
-      ...agent('newAgent.pr', 'sonnet', 'when started from New agent'),
+      ...agent('newAgent.pr', 'sonnet', 'when New agent starts it as a Monitor'),
       head('Watcher'),
       number('prBabysit.interval', 'Check the PR every', 60, { min: 15, max: 600, step: 15, unit: 's' }, 'watch_pr.py --interval'),
       number('prBabysit.stuckAfter', 'A job is stuck after', 30, { min: 5, max: 240, step: 5, unit: 'm' }, 'waiting for a runner; watch_pr.py --stuck-after'),
@@ -136,10 +136,10 @@ export const SECTIONS = [
   {
     id: 'logger',
     name: 'Log watcher',
-    where: 'log watchers started from New agent, and what every watch_logs.py passes on',
+    where: 'logger monitors started from New agent, and what every watch_logs.py passes on',
     rows: [
       head('Agent'),
-      ...agent('newAgent.logs', 'sonnet', 'when started from New agent'),
+      ...agent('newAgent.logs', 'sonnet', 'when New agent starts it as a Monitor'),
       head('Watcher'),
       number('logger.dedup', 'Hide repeats for', 120, { min: 0, max: 3600, step: 30, unit: 's' }, 'the same line again within this is dropped; 0 keeps every one; --dedup'),
       number('logger.floodLimit', 'Most lines per 10 s', 25, { min: 5, max: 200, step: 5 }, 'past this, lines are dropped and counted'),

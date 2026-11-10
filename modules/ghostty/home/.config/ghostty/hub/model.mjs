@@ -508,6 +508,34 @@ export const slug = s =>
 const OWN_WORKTREE =
   'Before anything else, make your own worktree with the EnterWorktree tool and do all the work in it. Name it for the task in a few kebab-case words, starting with the ticket key (like ENG-123) when the task gives a ticket. If a skill you run makes its own worktree, let it do so instead.'
 
+// The skills New agent can start as a Monitor, in the order its Skill row
+// lists them. Each takes a target (a PR link, what to watch) and runs in the
+// background; `id` is also its Settings prefix (newAgent.<id>.model …).
+export const MONITORS = [
+  {
+    id: 'pr',
+    skill: 'pr-babysit',
+    target: 'PR link',
+    hint: 'a PR or MR link; watched until it merges',
+    missing: 'Paste the PR or MR link',
+    args: t => t,
+    name: t => {
+      const num = t.match(/(?:pull|merge_requests)\/(\d+)/)?.[1]
+      return num ? `#${num}` : basename(t)
+    },
+  },
+  {
+    id: 'logs',
+    skill: 'logger',
+    target: 'Watch',
+    hint: 'a command or service, e.g. docker compose logs api',
+    missing: 'Say what to watch',
+    args: t => `watch ${t}`,
+    name: t => short(t, 30),
+  },
+]
+export const monitor = id => MONITORS.find(m => m.id === id)
+
 export function launch(spec) {
   const opts = []
   if (spec.model && spec.model !== 'default') opts.push('--model', spec.model)
@@ -517,14 +545,11 @@ export function launch(spec) {
   let prompt = spec.prompt?.trim() ?? ''
   let name = ''
   let where = spec.runAs ?? 'tab'
-  if (spec.kind === 'pr') {
-    prompt = `/pr-babysit ${spec.target.trim()}`
-    const num = spec.target.match(/(?:pull|merge_requests)\/(\d+)/)?.[1]
-    name = `babysit ${num ? `#${num}` : basename(spec.target.trim())}`
-    where = 'bg'
-  } else if (spec.kind === 'logs') {
-    prompt = `/logger watch ${spec.target.trim()}`
-    name = `logs ${short(spec.target.trim(), 30)}`
+  const mon = spec.kind === 'monitor' && monitor(spec.skill)
+  if (mon) {
+    const target = spec.target.trim()
+    prompt = `/${mon.skill} ${mon.args(target)}`
+    name = `monitor ${mon.name(target)}`
     where = 'bg'
   } else {
     // A name given is a slug already: the todo list's hand-off sends one.

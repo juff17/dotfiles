@@ -42,8 +42,8 @@ test('launch adds a task’s or a hand-off’s instructions, and nothing to a mo
   const handoff = launch(handoffSpec(item, { runAs: 'bg' }, () => true))
   assert.match(handoff.argv.at(-1), /^Before anything else, make your own worktree .* Work on this item .* HANDOFF RULES$/)
   assert.doesNotMatch(handoff.argv.at(-1), /TASK RULES/, 'a hand-off isn’t a task from New agent')
-  assert.equal(launch({ kind: 'pr', cwd: '/p', target: 'https://x/pull/1' }).argv.at(-1), '/pr-babysit https://x/pull/1')
-  assert.equal(launch({ kind: 'logs', cwd: '/p', target: 'docker logs api' }).argv.at(-1), '/logger watch docker logs api')
+  assert.equal(launch({ kind: 'monitor', skill: 'pr', cwd: '/p', target: 'https://x/pull/1' }).argv.at(-1), '/pr-babysit https://x/pull/1')
+  assert.equal(launch({ kind: 'monitor', skill: 'logs', cwd: '/p', target: 'docker logs api' }).argv.at(-1), '/logger watch docker logs api')
 })
 
 const REPO_PROMPTS = fileURLToPath(new URL('../prompts', import.meta.url))
