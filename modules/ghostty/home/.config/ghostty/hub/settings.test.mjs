@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
-import { ROWS, SECTIONS, load, reset, row, set, show, step, toggleFlag, valid } from './settings.mjs'
+import { ROWS, SECTIONS, addedId, load, reset, row, set, show, step, toggleFlag, valid } from './settings.mjs'
 
 const fresh = () => join(mkdtempSync(join(tmpdir(), 'settings-')), 'settings.json')
 
@@ -113,4 +113,31 @@ test('fixed rows show a value but are not settings', () => {
   const fixed = SECTIONS.flatMap(s => s.rows).filter(r => r.fixed)
   assert.ok(fixed.some(r => r.label === 'Popup key' && r.fixed === 'alt+a'))
   for (const r of fixed) assert.equal(r.key, undefined)
+})
+
+test('a list of viewer modes needs each mode once, added ones named with a command, and one on', () => {
+  const r = row('workspace.modes')
+  const four = r.default
+  assert.ok(valid(r, [{ id: 'diff', on: true }, { id: 'x-lazygit', name: 'lazygit', cmd: 'lazygit', on: false }]))
+  assert.ok(!valid(r, four.map(m => ({ ...m, on: false }))), 'none on')
+  assert.ok(!valid(r, [...four, { id: 'diff', on: true }]), 'twice')
+  assert.ok(!valid(r, [...four, { id: 'lazygit', name: 'lazygit', cmd: 'lazygit', on: true }]), 'added without x-')
+  assert.ok(!valid(r, [...four, { id: 'x-a', name: 'a', cmd: '  ', on: true }]), 'no command')
+  assert.ok(!valid(r, [...four, { id: 'x-a', name: 'a\tb', cmd: 'a', on: true }]), 'a tab in the name')
+})
+
+test('a saved list of modes missing a built-in one gets it back at the end, on', () => {
+  const file = fresh()
+  writeFileSync(file, JSON.stringify({ 'workspace.modes': [{ id: 'todo', on: true }, { id: 'files', on: false }] }))
+  assert.deepEqual(
+    load(file)['workspace.modes'].map(m => [m.id, m.on]),
+    [['todo', true], ['files', false], ['diff', true], ['diagrams', true]],
+  )
+  assert.equal(show(row('workspace.modes'), load(file)['workspace.modes']), 'Todo, Diff, Diagrams')
+})
+
+test('an added mode’s id comes from its name and is never one the list has', () => {
+  assert.equal(addedId('Lazy Git!', []), 'x-lazy-git')
+  assert.equal(addedId('lazy git', [{ id: 'x-lazy-git' }]), 'x-lazy-git-2')
+  assert.equal(addedId('日本', []), 'x-mode')
 })

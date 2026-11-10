@@ -444,7 +444,7 @@ test('what the hand-off row chose becomes the agent’s command', () => {
   const { runAs, worktree, model } = p
   const plan = launch(handoffSpec(handoffPlace(repo, p.here, all), { runAs, worktree, model }, all))
   assert.equal(plan.where, 'tab')
-  assert.match(ui.tabLine('/opt/my claude/bin/claude', plan), /^\/opt\/my\\ claude\/bin\/claude -w make-todo-edit-show-k2x --model sonnet /)
+  assert.match(ui.tabLine('/opt/my claude/bin/claude', plan), /^\/opt\/my\\ claude\/bin\/claude --model sonnet /)
   assert.equal(ui.tabLine('claude', plan), plan.line, 'a plain claude leaves the line as launch built it')
 })
 

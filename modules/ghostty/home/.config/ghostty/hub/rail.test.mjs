@@ -14,6 +14,7 @@ test('work and hub sit at the top, + new, ? help and ⚙ set at the bottom', () 
   assert.equal(lines.length, 30)
   assert.deepEqual(by(buttons), { work: [2, 3], hub: [5, 6], new: [22, 23], help: [25, 26], set: [28, 29] })
   assert.equal(text(lines[1]).trim(), '▣')
+  assert.equal(text(lines[5]).trim(), 'hub')
   assert.equal(text(lines[2]).trim(), 'work')
   assert.equal(text(lines[21]).trim(), '+')
   assert.equal(text(lines[22]).trim(), 'new')
@@ -41,22 +42,24 @@ test('the window the rail sits in is the highlighted button', () => {
   assert.equal(work[1], hub[4].replace('◫', '▣'))
 })
 
-test('the bottom buttons fit exactly at 21 rows', () => {
-  const { lines, buttons } = frame(6, 21, 'work', none, ACTS)
-  assert.deepEqual(by(buttons), { work: [2, 3], hub: [5, 6], new: [13, 14], help: [16, 17], set: [19, 20] })
-  assert.equal(text(lines[19]).trim(), 'set')
+test('the bottom buttons fit exactly at 24 rows', () => {
+  const { lines, buttons } = frame(6, 24, 'work', none, ACTS)
+  assert.deepEqual(by(buttons), { work: [2, 3], hub: [5, 6], new: [16, 17], help: [19, 20], set: [22, 23] })
+  assert.equal(text(lines[22]).trim(), 'set')
 })
 
 test('a short rail drops ⚙ set, then ? help, then + new, rather than drawing past its edge', () => {
-  for (const h of [6, 10, 14, 15, 17, 20]) {
+  for (const h of [6, 9, 13, 14, 15, 17, 18, 20, 21]) {
     const { lines, buttons } = frame(6, h, 'work', none, ACTS)
     assert.equal(lines.length, h)
     for (const b of buttons) assert.ok(b.y2 <= h, `${b.act} ends at ${b.y2} of ${h}`)
   }
-  assert.deepEqual(by(frame(6, 20, 'work', none, ACTS).buttons), { work: [2, 3], hub: [5, 6], new: [15, 16], help: [18, 19] })
-  assert.deepEqual(by(frame(6, 17, 'work', none, ACTS).buttons), { work: [2, 3], hub: [5, 6], new: [15, 16] })
-  assert.deepEqual(by(frame(6, 15, 'work', none, ACTS).buttons), { work: [2, 3], hub: [5, 6], new: [13, 14] })
-  assert.deepEqual(by(frame(6, 14, 'work', none, ACTS).buttons), { work: [2, 3], hub: [5, 6] })
+  const top = { work: [2, 3], hub: [5, 6] }
+  assert.deepEqual(by(frame(6, 20, 'work', none, ACTS).buttons), { ...top, new: [15, 16], help: [18, 19] })
+  assert.deepEqual(by(frame(6, 18, 'work', none, ACTS).buttons), { ...top, new: [13, 14], help: [16, 17] })
+  assert.deepEqual(by(frame(6, 17, 'work', none, ACTS).buttons), { ...top, new: [15, 16] })
+  assert.deepEqual(by(frame(6, 15, 'work', none, ACTS).buttons), { ...top, new: [13, 14] })
+  assert.deepEqual(by(frame(6, 14, 'work', none, ACTS).buttons), top)
   // Too short even for hub: only what's drawn whole is clickable.
   assert.deepEqual(by(frame(6, 5, 'work', none, ACTS).buttons), { work: [2, 3] })
   assert.equal(pressed(frame(6, 14, 'work', none, ACTS).buttons, { button: 0, x: 1, y: 13 }), null)
@@ -71,7 +74,7 @@ test('a left press on a button\'s rows presses it, wherever the column', () => {
   assert.equal(pressed(buttons, { button: 0, x: 3, y: 25 }).act, 'help')
   assert.equal(pressed(buttons, { button: 0, x: 3, y: 29 }).act, 'set')
   // The gaps between buttons and the counts press nothing.
-  for (const y of [1, 4, 7, 9, 24, 27, 30]) assert.equal(pressed(buttons, { button: 0, x: 3, y }), null, `row ${y}`)
+  for (const y of [1, 4, 7, 8, 10, 24, 27, 30]) assert.equal(pressed(buttons, { button: 0, x: 3, y }), null, `row ${y}`)
 })
 
 test('releases, other buttons, the wheel and drags press nothing', () => {

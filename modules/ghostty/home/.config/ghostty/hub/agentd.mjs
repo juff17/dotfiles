@@ -4,7 +4,8 @@
 // it reads Claude's session files, the new lines of their transcripts and the
 // tab server's panes, and writes what it found to state.json, which the hub
 // and the rails read (client.mjs). It also marks each agent's tmux tab with
-// its state's glyph (tmux.conf draws it).
+// its state's glyph (tmux.conf draws it), and keeps each window's hub tab
+// session to the workspace tabs that run Claude (hubLinkArgs).
 // It runs while a hub, a rail or the tray widget does: they register in
 // clients/, and it exits once none is left. A second copy exits at once, so starting it is safe.
 //   agentd.mjs [--once]   --once prints one state to stdout and exits
@@ -21,6 +22,7 @@ import {
   aliveIn,
   claim,
   clientsAlive,
+  hubLinkArgs,
   paneOf,
   parseHubShown,
   parsePanes,
@@ -56,16 +58,27 @@ const exec = (cmd, args) =>
 
 const transcripts = transcriptReader(PROJECTS)
 
+let paneText = null
+
 async function panes() {
   const [text, hub] = await Promise.all([
     exec('tmux', ['-L', TABS_SOCKET, 'list-panes', '-a', '-F', PANE_FORMAT]),
     exec('tmux', ['-L', LAYOUT_SOCKET, 'list-windows', '-a', '-F', HUB_SHOWN_FORMAT]),
   ])
+  paneText = text
   return parsePanes(text, parseHubShown(hub))
 }
 
 async function markTabs(agents, marked) {
   const args = tabMarkArgs(agents, marked)
+  if (args.length) await exec('tmux', ['-L', TABS_SOCKET, ...args])
+}
+
+const claudeSeen = new Map()
+
+async function linkHubTabs(agents) {
+  const claude = new Set(agents.filter(a => a.pane).map(a => a.pane.window))
+  const args = hubLinkArgs(paneText, claude, claudeSeen)
   if (args.length) await exec('tmux', ['-L', TABS_SOCKET, ...args])
 }
 
@@ -133,6 +146,7 @@ async function main() {
       const agents = await tick()
       write(agents)
       await markTabs(agents, lastPanes.marks)
+      await linkHubTabs(agents)
     } catch (err) {
       process.stderr.write(`agentd: ${err?.stack ?? err}\n`)
     }

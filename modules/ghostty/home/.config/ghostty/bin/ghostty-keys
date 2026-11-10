@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Applies Settings › Keybinds (hub/keybinds.mjs): the alt keys to the layout's
+# tmux, and the ctrl+shift keys to Ghostty, which reloads its config.
+# layout.conf runs it with --tmux as the server starts.
+#   ghostty-keys           both
+#   ghostty-keys --tmux    tmux only
+
+source "$(dirname "$(readlink -f "$0")")/ghostty-lib.sh"
+
+node=$(command -v node || cat "${XDG_CACHE_HOME:-$HOME/.cache}/ghostty-layout/node" 2>/dev/null) || exit 0
+[[ -n $node ]] || exit 0
+exec "$node" --input-type=module -e \
+  "(await import(process.argv[1])).apply(undefined, { ghostty: process.argv[2] !== '--tmux' })" \
+  "$GHOSTTY_CONF/hub/keybinds.mjs" "${1:-}"

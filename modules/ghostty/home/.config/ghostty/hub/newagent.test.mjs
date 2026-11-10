@@ -206,7 +206,7 @@ test('run as background and the current branch end up in the spec and launch', (
 test('a tab task in a worktree launches as a quoted line', () => {
   form({ folder: P })
   type('go')
-  assert.equal(launch(key(CTRL_S).done).line, "claude -w go --model opus --permission-mode auto --effort medium 'go'")
+  assert.match(launch(key(CTRL_S).done).line, /^claude --model opus --permission-mode auto --effort medium 'Before anything else, make your own worktree .* go'$/)
 })
 
 test('Recent steps through the recents and fills Folder; with none it does nothing', () => {

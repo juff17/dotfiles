@@ -6,7 +6,8 @@
 #   - Anything else, like a split or tab you open yourself, gets your shell.
 # The outer tmux runs it again for its panes: `ghostty-surface top` for btop
 # and `ghostty-surface tabs <window> <dir>` for the tab session. A new window
-# also runs `ghostty-surface viewer <window> <dir>` to open its viewer.
+# opens without the viewer unless Settings › Workspace shows it; Alt+V shows
+# and hides it (bin/ghostty-viewer-toggle).
 # Any failure falls through to your shell, so a terminal always opens.
 
 source "$(dirname "$(readlink -f "$0")")/ghostty-lib.sh"
@@ -36,7 +37,8 @@ run_layout() {
   # The rail and the hub window; this replaces the hook above with one that
   # also keeps the rails' width.
   add_hub "$win"
-  setsid -f "$SELF" viewer "$win" "$PWD" >/dev/null 2>&1
+  [[ $(setting workspace.viewerShown '' hidden) == shown ]] &&
+    setsid -f "$SELF" viewer "$win" "$PWD" >/dev/null 2>&1
   exec tmux -L "$LAYOUT_SOCKET" attach-session -t "$session"
 }
 

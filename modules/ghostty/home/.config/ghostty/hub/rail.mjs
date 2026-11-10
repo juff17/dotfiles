@@ -48,6 +48,7 @@ function popup(cmd, ...args) {
   })
 }
 const help = () => popup('ghostty-help', VIEW)
+
 const openSettings = () => popup('ghostty-settings')
 
 const cols = () => process.stdout.columns || 6

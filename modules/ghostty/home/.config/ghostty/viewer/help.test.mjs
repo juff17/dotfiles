@@ -27,7 +27,7 @@ test('filter matches keys, what they do and section names, every word', () => {
     filter('todo delete').flatMap(s => s.keys.map(k => k.key)),
     ['x x'],
   )
-  assert.deepEqual(filter('alt+w').flatMap(s => s.keys.map(k => k.key)), ['alt+w'])
+  assert.deepEqual(filter('alt+←').flatMap(s => s.keys.map(k => k.key)), ['alt+← / →'])
   assert.deepEqual(filter('nothing like this'), [])
 })
 
@@ -35,4 +35,16 @@ test('filter is case-insensitive and leaves the table alone', () => {
   const before = SECTIONS[0].keys.length
   assert.ok(filter('TODO').length)
   assert.equal(SECTIONS[0].keys.length, before)
+})
+
+test('rebind shows a moved key in its place and drops an unbound one', async () => {
+  const { rebind } = await import('./help.mjs')
+  const rows = [
+    { key: 'keys.diagrams', default: 'alt+d' },
+    { key: 'keys.todo', default: 'alt+t' },
+  ]
+  const keys = () => SECTIONS.flatMap(s => s.keys.map(k => k.key))
+  rebind({ 'keys.diagrams': 'alt+g', 'keys.todo': '' }, rows)
+  assert.ok(keys().includes('esc  alt+g'))
+  assert.ok(!keys().includes('alt+t') && !keys().includes('alt+d'))
 })

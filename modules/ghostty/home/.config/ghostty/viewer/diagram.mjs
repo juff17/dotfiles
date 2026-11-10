@@ -121,7 +121,7 @@ export const pointer = (x, y, { left, top, cell, pixelMouse }) =>
 export const cellAt = (x, y, { cell, pixelMouse }) =>
   pixelMouse ? { col: Math.floor((x - 1) / cell.cw) + 1, row: Math.floor((y - 1) / cell.ch) + 1 } : { col: x, row: y }
 
-// What a key does, as [action, ...args]: `quit`, `tab` (DV_TAB_EXIT's mode),
+// What a key does, as [action, ...args]: `quit`, `tab` (the viewer pane's next mode),
 // `pan` by a share of the region each way, `zoom` in (1) or out (-1), `home`
 // to fit, `step` to the previous or next diagram, `jump` to one, `close` it.
 // In the diagrams window (frame), Esc and Alt+D close it, as they close the

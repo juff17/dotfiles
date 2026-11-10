@@ -19,8 +19,8 @@ own back, and `/clear` starts over. The store keeps the 20 sessions used last.
 `/diagram-pane` opens the in-chat pane in either mode.
 
 dv lives in the dotfiles repo (`modules/ghostty/home/.config/ghostty/viewer/`), not here. The Ghostty pane is
-started by `~/.config/ghostty/bin/ghostty-claude-start` (a `SessionStart`
-hook) through `ghostty-viewer`, and shows the window's active tab. Outside that
+the viewer's Diagrams mode (`~/.config/ghostty/bin/ghostty-viewer`), which
+`Alt+V` shows or hides, and shows the window's active tab. Outside that
 layout, with `'ghostty'` set, nothing shows a diagram until you run
 `/diagram-pane` or start dv yourself; it then shows the tabs written last:
 

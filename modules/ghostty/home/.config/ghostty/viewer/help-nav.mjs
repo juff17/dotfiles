@@ -8,6 +8,7 @@
 import { editField, insertAt, length } from '../hub/line.mjs'
 import { width } from '../hub/term.mjs'
 import { SECTIONS, filter, startAt } from './help.mjs'
+import { load } from '../hub/settings.mjs'
 
 export const NAV = 24
 // Title, gap, filter, gap above the body; footer below it.
@@ -61,7 +62,9 @@ export function onTyping(s, key) {
 
 // A key; true when it closes the overlay. `page` is half the body.
 export function onKey(s, key, page) {
-  if (key === '\x1bh' || key === '\x03') return true
+  // Alt+H opened it, or the key Settings › Keybinds moved it to.
+  const own = load()['keys.help']
+  if (key === '\x1bh' || key === '\x03' || (own && key === `\x1b${own.slice(-1)}`)) return true
   if (s.typing) return void onTyping(s, key)
   const on = filtering(s)
   const move = n => (on ? scrollBy(s, n) : pick(s, s.sel + n))

@@ -15,8 +15,8 @@ function button(icon, label, on, w, dot = false) {
 }
 
 // The rail `w` columns by `h` rows, in `view` (work or hub), with the counts
-// `c`: work and hub at the top, the counts under them, and + new, ? help and
-// ⚙ set kept to the bottom. `acts` are what the buttons do, by name; each button
+// `c`: work and hub at the top, the counts under them, and + new, ? help
+// and ⚙ set kept to the bottom. `acts` are what the buttons do, by name; each button
 // is the rows it covers, counted from 1, and its act.
 export function frame(w, h, view, c, acts) {
   const lines = [render([], w, BG)]
@@ -48,8 +48,8 @@ export function frame(w, h, view, c, acts) {
     buttons.push({ y1: lines.length + 1, y2: lines.length + ls.length, act })
     lines.push(...ls, render([], w, BG))
   }
-  // Only buttons drawn whole can be clicked: on a very short rail work and
-  // hub can be cut off too.
+  // Only buttons drawn whole can be clicked: on a very short rail the top
+  // buttons can be cut off too.
   return { lines: lines.slice(0, h), buttons: buttons.filter(b => b.y2 <= h) }
 }
 

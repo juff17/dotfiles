@@ -45,6 +45,7 @@ export const SECTIONS = [
     color: '#94e2d5',
     where: 'the left pane: Diagrams, Files, Diff, Todo',
     keys: [
+      ['alt+v', 'Show or hide it (or view on the rail); new windows open without it'],
       ['tab', 'Next mode (click the viewer first to focus it)'],
       ['click a mode', 'Switch to that mode'],
       ['q in Files', 'Go to Diagrams', true],
@@ -110,12 +111,12 @@ export const SECTIONS = [
       ['h / l  j / k', 'Move between lanes and agents'],
       ['tab', 'The monitors strip', true],
       ['↵', 'Open the agent’s live session beside the list'],
-      ['alt+w', 'Swap focus between the list and the session', true],
+      ['alt+← / →', 'Focus the list / the session beside it', true],
       ['ctrl+]', 'Close the session, back to the board', true],
       ['a / d', 'Allow / deny the permission prompt'],
       ['e / E', 'Mark the done agent seen / all of them', true],
       ['o', 'Go to the agent’s tab'],
-      ['x', 'Close its tab, or stop a monitor (asks first)'],
+      ['x  ctrl+x', 'Close its tab, or stop a monitor (asks first)'],
       ['/', 'Filter by name, repo or command'],
       ['n', 'New agent'],
     ],
@@ -163,10 +164,29 @@ export const SECTIONS = [
       ['← / →', 'Change a setting'],
       ['space', 'Turn on or off, or the next choice'],
       ['r', 'Put a setting back to its default', true],
+      ['J / K', 'Workspace: move a viewer mode down or up', true],
+      ['a', 'Workspace: add a viewer mode, a name then a command', true],
+      ['x', 'Workspace: remove a mode you added', true],
       ['esc or alt+s', 'Close'],
     ],
   },
 ].map(s => ({ ...s, keys: s.keys.map(([key, what, rare = false]) => ({ key, what, rare })) }))
+
+// Settings › Keybinds' rebinds put in place of the defaults written above,
+// in place, as the view starts; a key unbound there is left out. The
+// defaults stay what's written here, so the tests and the docs see those.
+export function rebind(values, rows) {
+  const moved = rows.filter(r => values[r.key] !== r.default).map(r => [r.default, values[r.key]])
+  if (!moved.length) return
+  for (const s of SECTIONS)
+    s.keys = s.keys.flatMap(k => {
+      const hit = moved.find(([from]) => k.key === from)
+      if (hit) return hit[1] ? [{ ...k, key: hit[1] }] : []
+      let key = k.key
+      for (const [from, to] of moved) key = key.replace(new RegExp(`(^|\\s)${from.replace(/\+/g, '\\+')}(?=\\s|$)`), `$1${to || ''}`)
+      return [{ ...k, key: key.trim() }]
+    })
+}
 
 // The section Alt+H opens on: the one for the tmux window it was pressed in.
 const PLACES = { hub: 'hub', diagrams: 'dv' }

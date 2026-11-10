@@ -268,7 +268,7 @@ export function knownRepos(items, { exists = existsSync, list = dir => readdirSy
 // says worktree: false.
 export const HANDOFF_MODELS = ['opus', 'sonnet', 'haiku']
 
-// Whether the item's repo is a git repo still, which claude -w needs.
+// Whether the item's repo is a git repo still, which a worktree needs.
 export const inGit = (item, exists = existsSync) => item.repo !== 'none' && !!item.root && exists(join(item.root, '.git'))
 
 // Where an item's agent works: its own repo, or, for an item added outside
@@ -284,7 +284,6 @@ export function handoffSpec(item, { runAs = 'tab', worktree = true, model = 'opu
   const places = worktree ? [item.root, item.worktree, item.cwd] : [item.worktree, item.cwd, item.root]
   const cwd = places.find(d => d && exists(d))
   if (!cwd) return undefined
-  // The id keeps two agents on similar titles from sharing a worktree.
   const name = slug(`${slug(item.title).split('-').slice(0, 4).join(' ')} ${item.id}`)
   const about = [`todo ${item.id}`, `a ${item.cat} in ${item.repo}`, item.branch && `added on ${item.branch}`].filter(Boolean).join(', ')
   // One line: a tab agent's command is typed into a shell, where a newline
@@ -292,6 +291,8 @@ export function handoffSpec(item, { runAs = 'tab', worktree = true, model = 'opu
   const prompt = [
     `Work on this item from my todo list (${about}): ${item.title.replace(/[.!?]+$/, '')}.`,
     item.note && item.note.trim().replace(/([^.!?])$/, '$1.'),
+    // The id keeps two agents on similar titles from sharing a worktree.
+    worktree && `End the worktree's name with the todo's id, ${item.id}.`,
     // Merging is the user's call, and the worktree may still hold work the
     // user wants, so the agent asks before doing either.
     worktree &&
