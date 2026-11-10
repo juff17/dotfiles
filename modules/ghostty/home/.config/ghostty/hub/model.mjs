@@ -497,10 +497,17 @@ export const slug = s =>
 
 // What starting a new agent runs. A tab agent is a command line typed into a
 // new tmux tab's shell, so the shell stays when Claude exits; a background
-// agent is `claude --bg`, which prints its id and returns. Either can start in
-// its own worktree (`-w`); monitors always run in the background, in place.
-// A task's prompt gets your instructions after it (hub/prompts.mjs): a task's
-// from New agent, or `spec.agent`'s, which the todo list's hand-off sends.
+// agent is `claude --bg`, which prints its id and returns. A task can work in
+// its own worktree, which the agent makes and names itself, so the name says
+// what the task is rather than its prompt's first words; monitors always run
+// in the background, in place. A task's prompt gets your instructions after
+// it (hub/prompts.mjs): a task's from New agent, or `spec.agent`'s, which the
+// todo list's hand-off sends.
+// A skill like ticket-implement makes its own worktree, and EnterWorktree
+// can't nest one in another, so the agent leaves that to the skill.
+const OWN_WORKTREE =
+  'Before anything else, make your own worktree with the EnterWorktree tool and do all the work in it. Name it for the task in a few kebab-case words, starting with the ticket key (like ENG-123) when the task gives a ticket. If a skill you run makes its own worktree, let it do so instead.'
+
 export function launch(spec) {
   const opts = []
   if (spec.model && spec.model !== 'default') opts.push('--model', spec.model)
@@ -522,16 +529,14 @@ export function launch(spec) {
     // A name given is a slug already: the todo list's hand-off sends one.
     name = spec.name || slug(prompt)
   }
-  if (spec.kind === 'task') prompt = compose(spec.agent ?? 'task', prompt)
+  if (spec.kind === 'task') prompt = [spec.worktree && OWN_WORKTREE, compose(spec.agent ?? 'task', prompt)].filter(Boolean).join(' ')
   // A prompt that starts with - would read as an option.
   if (prompt.startsWith('-')) prompt = ` ${prompt}`
-  const wt = spec.kind === 'task' && spec.worktree ? ['-w', slug(name)] : []
-  if (where === 'bg') return { where, cwd: spec.cwd, argv: ['claude', '--bg', ...wt, '--name', name, ...opts, prompt], name }
-  const args = [...wt, ...opts]
+  if (where === 'bg') return { where, cwd: spec.cwd, argv: ['claude', '--bg', '--name', name, ...opts, prompt], name }
   return {
     where,
     cwd: spec.cwd,
     name,
-    line: ['claude', ...args.map(a => (/^[\w./=-]+$/.test(a) ? a : quote(a))), quote(prompt)].join(' '),
+    line: ['claude', ...opts.map(a => (/^[\w./=-]+$/.test(a) ? a : quote(a))), quote(prompt)].join(' '),
   }
 }

@@ -8,6 +8,10 @@ command = shell:exec ~/.config/ghostty/bin/ghostty-surface
 # so name the shell ghostty-surface ends up running.
 shell-integration = zsh
 
+# Every new window opens maximized, from the launcher, the taskbar or
+# Ctrl+Shift+N, so the layout gets the whole screen.
+maximize = true
+
 # Tab keys go to tmux instead of making Ghostty tabs, so new tabs open in the
 # tmux tab bar under btop. layout.conf binds these sequences.
 keybind = ctrl+shift+t=csi:9001~
