@@ -31,6 +31,20 @@ export function parseStatus(text) {
   return list.sort((a, b) => a.path.localeCompare(b.path))
 }
 
+// `git diff --name-status -z <from> <to>`: a status letter (R and C with a
+// score after it) then the path, or for a rename the old path then the new.
+export function parseNameStatus(text) {
+  const parts = text.split('\0')
+  const list = []
+  for (let i = 0; i < parts.length; i++) {
+    const status = parts[i][0]
+    if (!status) continue
+    const old = 'RC'.includes(status) ? parts[++i] : undefined
+    list.push({ path: parts[++i], old, status, untracked: false, add: 0, del: 0, binary: false })
+  }
+  return list.filter(f => f.path).sort((a, b) => a.path.localeCompare(b.path))
+}
+
 // `git diff --numstat -z`: `add\tdel\tpath`, or for a rename `add\tdel\t`
 // then `old` and `new`; a binary file counts `-`.
 export function parseNumstat(text) {

@@ -3,9 +3,10 @@
 // asks for. The popup steps through what babysitters proposed (pr-babysit's
 // approval.py, read through hub/tray.mjs), one at a time.
 //
-// The state is { list, i, commit, open, drop, editing, draft, at, edited,
+// The state is { list, i, commit, diff, drop, editing, draft, at, edited,
 // note, scroll, seenTo, hidden, changed }: the proposals, the one shown, the
-// push commit selected, the commits whose diff is open and those dropped,
+// push commit selected, the diff shown in place of the proposal (openDiff),
+// the commits dropped,
 // the inline reply editor, whether the reply was edited, the footer's note,
 // how far the body is scrolled and how much of it has been on screen
 // (the view sets hidden while some never was), and whether the proposal
@@ -18,7 +19,9 @@
 // onKey returns what the view has to do: nothing, 'quit', or an effect
 // { do, p, ... }: approve (with the edited body, the dropped commits, and
 // `always` for A), reject, dismiss, go, editor (edit the reply in $EDITOR),
-// diff (all of a push's changes), open (its comment, job, run or PR on the
+// diff (read the files from..to changed, then openDiff: a commit's, or all
+// of a push's), diffFile (read an open file's rows), open (its comment, job,
+// run or PR on the
 // host, from hub/tray.mjs's proposalLink), or settings (A's "always" for
 // this kind).
 
@@ -30,7 +33,7 @@ export const start = (list, focus = '') => ({
   list,
   i: Math.max(0, list.findIndex(p => p.id === focus)),
   commit: 0,
-  open: new Set(),
+  diff: null,
   drop: new Set(),
   editing: false,
   draft: '',
@@ -64,7 +67,7 @@ export function reload(s, list, settledHere = false) {
 
 function reset(s) {
   s.commit = 0
-  s.open = new Set()
+  s.diff = null
   s.drop = new Set()
   s.editing = false
   s.draft = ''
@@ -146,9 +149,64 @@ function editKey(s, p, key) {
   return undefined
 }
 
+// A push's diff, shown in the popup as the Diff mode shows uncommitted
+// changes: { title, from, to, files, cursor, open, rows, scroll, follow },
+// with the files git gave between `from` and `to` (diff.mjs's
+// parseNameStatus and parseNumstat). The first file opens with it; the view
+// reads each open file's rows.
+export function openDiff(s, { title, from, to, files }) {
+  s.diff = { title, from, to, files, cursor: 0, open: files[0]?.path ?? '', rows: [], scroll: 0, follow: true }
+}
+
+// Keys while the diff shows: j k pick a file, ↵ or space opens or closes
+// it, J K and PgDn PgUp scroll, esc, q or d go back to the proposal.
+function diffKey(s, key) {
+  const d = s.diff
+  const own = settings()['keys.approvals']
+  if (key === '\x1ba' || key === '\x03' || (own && key === `\x1b${own.slice(-1)}`)) return 'quit'
+  const pick = i => {
+    d.cursor = Math.max(0, Math.min(d.files.length - 1, i))
+    d.follow = true
+  }
+  const back = () => {
+    s.diff = null
+  }
+  const toggle = () => {
+    const f = d.files[d.cursor]
+    if (!f) return undefined
+    d.open = d.open === f.path ? '' : f.path
+    d.rows = []
+    d.follow = true
+    return d.open ? { do: 'diffFile', file: f } : undefined
+  }
+  const scroll = by => {
+    d.scroll = Math.max(0, d.scroll + by)
+    d.follow = false
+  }
+  const keys = {
+    '\x1b': back,
+    q: back,
+    d: back,
+    j: () => pick(d.cursor + 1),
+    k: () => pick(d.cursor - 1),
+    '\x1b[B': () => pick(d.cursor + 1),
+    '\x1b[A': () => pick(d.cursor - 1),
+    g: () => pick(0),
+    G: () => pick(d.files.length - 1),
+    '\r': toggle,
+    ' ': toggle,
+    J: () => scroll(5),
+    K: () => scroll(-5),
+    '\x1b[6~': () => scroll(10),
+    '\x1b[5~': () => scroll(-10),
+  }
+  return Object.hasOwn(keys, key) ? keys[key]() : undefined
+}
+
 export function onKey(s, key, env = process.env) {
   const p = current(s)
   if (s.editing && p) return editKey(s, p, key)
+  if (s.diff && p) return diffKey(s, key)
   // Alt+A opened it, or the key Settings › Keybinds moved it to.
   const own = settings()['keys.approvals']
   if (key === 'q' || key === '\x1b' || key === '\x03' || key === '\x1ba' || (own && key === `\x1b${own.slice(-1)}`)) return 'quit'
@@ -161,8 +219,9 @@ export function onKey(s, key, env = process.env) {
     '\x1b[B': () => (p.kind === 'push' ? (s.commit = Math.min(commits.length - 1, s.commit + 1)) : move(s, 1)),
     '\x1b[A': () => (p.kind === 'push' ? (s.commit = Math.max(0, s.commit - 1)) : move(s, -1)),
     '\r': () => {
-      const sha = commits[s.commit]?.sha
-      if (p.kind === 'push' && sha) s.open.has(sha) ? s.open.delete(sha) : s.open.add(sha)
+      const c = commits[s.commit]
+      if (p.kind !== 'push' || !c?.sha) return undefined
+      return { do: 'diff', p, from: `${c.sha}^`, to: c.sha, title: `${c.sha.slice(0, 7)} ${c.subject ?? ''}`.trim() }
     },
     ' ': () => {
       const sha = commits[s.commit]?.sha
@@ -195,7 +254,7 @@ export function onKey(s, key, env = process.env) {
     r: () => (pending ? { do: 'reject', p } : { do: 'dismiss', p }),
     x: () => (pending ? undefined : { do: 'dismiss', p }),
     g: () => ({ do: 'go', p }),
-    d: () => (p.kind === 'push' ? { do: 'diff', p } : undefined),
+    d: () => (p.kind === 'push' ? { do: 'diff', p, from: p.lease, to: p.head, title: `all ${commits.length} commit${commits.length === 1 ? '' : 's'}` } : undefined),
     o: () => {
       const link = proposalLink(p)
       return link ? { do: 'open', p, url: link.url } : undefined

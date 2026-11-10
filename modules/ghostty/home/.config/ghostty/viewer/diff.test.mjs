@@ -23,6 +23,7 @@ import {
   openAfter,
   parseDiff,
   parseInput,
+  parseNameStatus,
   parseNumstat,
   parseStatus,
 } from './diff.mjs'
@@ -402,4 +403,12 @@ test('J and K scroll Settings’ lines per scroll', () => {
   assert.deepEqual(keyAction('J', 5), ['scroll', 7])
   assert.deepEqual(keyAction('K', 5), ['scroll', -7])
   set('viewer.scrollLines', 3)
+})
+
+test('the files a range of commits changed, a rename with its old path', () => {
+  assert.deepEqual(parseNameStatus('M\0calc/b.py\0R087\0old.py\0new.py\0A\0a.py\0'), [
+    { path: 'a.py', old: undefined, status: 'A', untracked: false, add: 0, del: 0, binary: false },
+    { path: 'calc/b.py', old: undefined, status: 'M', untracked: false, add: 0, del: 0, binary: false },
+    { path: 'new.py', old: 'old.py', status: 'R', untracked: false, add: 0, del: 0, binary: false },
+  ])
 })

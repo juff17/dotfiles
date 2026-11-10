@@ -19,6 +19,8 @@ import { load as loadSettings, set as setSetting } from '../hub/settings.mjs'
 import { BOLD, P, ago, bg, clean, enter, fg, leave, paint, render, split, tokens } from '../hub/term.mjs'
 import { go, proposalLink, readApprovals, runApproval } from '../hub/tray.mjs'
 import * as A from './approvals.mjs'
+import { clampScroll, bodyRows as diffBodyRows, followCursor, parseDiff, parseNameStatus, parseNumstat } from './diff.mjs'
+import { diffRow, fileRow, scaleOf } from './diff-rows.mjs'
 import { caretShown, withCaret, wrap } from './todo-ui.mjs'
 
 const s = A.start(readApprovals(), process.argv[2] ?? '')
@@ -53,31 +55,57 @@ function box(text, w, most = Infinity, { caret } = {}) {
   ]
 }
 
-// The diff of one commit, cut to `most` lines, read once.
-const diffs = new Map()
-function diffOf(p, sha, most = 14) {
-  if (!diffs.has(sha)) {
-    let text = ''
-    try {
-      text = execFileSync('git', ['-C', p.worktree, 'show', '--format=', '--no-color', sha], { encoding: 'utf8', maxBuffer: 1 << 24 })
-    } catch (err) {
-      text = `Couldn't read the diff: ${err.message.split('\n')[0]}`
-    }
-    const lines = text
-      .replace(/\n+$/, '')
-      .split('\n')
-      .filter(l => !/^(index |--- |\+\+\+ |new file|deleted file|similarity|rename )/.test(l))
-      .map(l => (l.startsWith('diff --git') ? `▸ ${l.replace(/^diff --git a\/(.*) b\/.*$/, '$1')}` : l))
-    diffs.set(sha, lines)
+// ------------------------------------------------------------ the diff
+
+// git in the push's worktree; '' when it fails.
+const gitOut = (p, args) => {
+  try {
+    return execFileSync('git', ['-C', p.worktree, ...args], { encoding: 'utf8', maxBuffer: 1 << 26 })
+  } catch {
+    return ''
   }
-  const all = diffs.get(sha)
-  return all.length > most ? [...all.slice(0, most), `… ${all.length - most} more lines · d opens all`] : all
 }
 
-const diffLine = (l, w) => {
-  const color = l.startsWith('+') ? P.green : l.startsWith('-') ? P.red : l.startsWith('@@') ? P.mauve : l.startsWith('▸') ? P.blue : P.sub
-  const tint = l.startsWith('+') ? bg('#1f2b26') : l.startsWith('-') ? bg('#2b1f27') : bg(P.crust)
-  return render([], 6, BASE) + render([[clean(l), fg(color)]], w - 8, tint) + render([], 2, BASE)
+// The files from..to changed, with their counts, as the Diff mode lists them.
+function diffFiles(p, from, to) {
+  const counts = parseNumstat(gitOut(p, ['diff', '--numstat', '-M', '-z', from, to]))
+  return parseNameStatus(gitOut(p, ['diff', '--name-status', '-M', '-z', from, to])).map(f => ({ ...f, ...(counts.get(f.path) ?? {}) }))
+}
+
+// The open file's diff rows.
+function readOpen(p) {
+  const d = s.diff
+  const f = d?.files.find(x => x.path === d.open)
+  if (!f) return
+  d.rows = parseDiff(gitOut(p, ['diff', '-M', '--no-color', '--no-ext-diff', d.from, d.to, '--', f.path, ...(f.old ? [f.old] : [])]))
+}
+
+// The diff in place of the proposal: its title, then each file and the open
+// one's lines, scrolled to keep the selected file in view.
+function diffLines(w, height) {
+  const d = s.diff
+  const head = split(
+    [
+      [' DIFF ', BOLD + fg(P.crust) + bg(P.blue)],
+      [`  ${clean(d.title)}`, BOLD + fg(P.text)],
+    ],
+    [[`${d.files.length} file${d.files.length === 1 ? '' : 's'} `, fg(P.sub)]],
+    w,
+    BASE,
+  )
+  if (!d.files.length) return [head, blank(w), render([['  No changes in these commits.', fg(P.sub)]], w, BASE)]
+  const list = diffBodyRows(d.files, d.open, d.rows)
+  const room = height - 2
+  if (d.follow) d.scroll = followCursor(list, d.cursor, d.scroll, room)
+  d.scroll = clampScroll(d.scroll, list.length, room)
+  const most = scaleOf(d.files)
+  const out = [head, blank(w)]
+  for (const r of list.slice(d.scroll, d.scroll + room)) {
+    if (r.kind === 'file') out.push(fileRow(d.files[r.i], { open: d.files[r.i].path === d.open, selected: r.i === d.cursor, width: w, most }))
+    else if (r.kind === 'diff') out.push(diffRow(r.row, w))
+    else out.push(blank(w))
+  }
+  return out
 }
 
 // ------------------------------------------------------------ the body
@@ -134,10 +162,9 @@ function body(p, w) {
       const right = [
         [c.note ? `${clean(c.note)}  ` : '', fg(P.sub)],
         [`${stat(c)}  `, fg(P.sub)],
-        [s.open.has(c.sha) ? '▾ ' : '▸ ', fg(P.blue)],
+        ['▸ ', fg(P.blue)],
       ]
       out.push(render([], 1, BASE) + split(left, right, w - 2, fill) + render([], 1, BASE))
-      if (s.open.has(c.sha)) for (const l of diffOf(p, c.sha)) out.push(diffLine(l, w))
     })
     out.push(blank(w), label('CHECKS', w))
     const leaseOk = p.remote_head === p.lease
@@ -211,9 +238,10 @@ function buttons(p, w) {
 }
 
 function footerKeys(p) {
+  if (s.diff) return 'j k file · enter open/close · J K scroll · esc back'
   if (s.editing) return 'enter done · esc drop the edit · ←→ move · ctrl+u ctrl+w delete'
   if (!p) return 'esc close'
-  if (p.kind === 'push') return 'j k next · ↑ ↓ commits · enter diff · space keep/drop · A approve + always'
+  if (p.kind === 'push') return 'j k next · ↑ ↓ commits · enter its diff · d all · space keep/drop · A approve + always'
   if (p.kind === 'reply') return 'j k next · e edit · A approve + always for replies'
   return p.kind === 'deploy' ? 'j k next · r reject · g go to the session' : `j k next · A approve + always for ${p.kind === 'retry' ? 'retries' : 'this kind'}`
 }
@@ -236,6 +264,12 @@ function draw() {
     render([['─'.repeat(w)]], w, BASE + fg(P.surface0)),
   ]
   const room = h - lines.length - 4
+  if (s.diff && p) {
+    lines.push(...diffLines(w, h - lines.length - 1))
+    while (lines.length < h - 1) lines.push(blank(w))
+    lines.push(split([[` ${footerKeys(p)}`, fg(P.sub)]], [], w, BASE))
+    return paint(lines.slice(0, h))
+  }
   const main = p ? body(p, w) : [blank(w), render([['  Nothing is waiting for you.', fg(P.sub)]], w, BASE)]
   // What doesn't fit scrolls; a stays off until all of it has been shown.
   const fits = main.length <= room
@@ -358,8 +392,9 @@ async function run(e) {
     child.unref()
     s.note = { text: `Opened ${e.url}`, tone: 'green' }
   } else if (e.do === 'diff') {
-    outside('sh', ['-c', 'git -C "$1" -c color.ui=always log -p --reverse "$2..$3" | less -R', 'sh', p.worktree, p.lease, p.head])
-  }
+    A.openDiff(s, { title: e.title, from: e.from, to: e.to, files: diffFiles(p, e.from, e.to) })
+    readOpen(p)
+  } else if (e.do === 'diffFile') readOpen(A.current(s))
   draw()
 }
 

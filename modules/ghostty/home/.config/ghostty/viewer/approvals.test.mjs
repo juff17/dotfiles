@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 
 import { set } from '../hub/settings.mjs'
-import { alwaysSetting, bodyOf, canAlways, current, edited, inline, onKey, reload, start } from './approvals.mjs'
+import { alwaysSetting, bodyOf, canAlways, current, edited, inline, onKey, openDiff, reload, start } from './approvals.mjs'
 
 process.env.AGENT_HUB_SETTINGS = join(mkdtempSync(join(tmpdir(), 'approvals-')), 'settings.json')
 
@@ -65,23 +65,36 @@ test('r rejects a pending proposal and dismisses a failed one; g goes to its ses
   assert.equal(onKey(start([reply()]), 'g').do, 'go')
 })
 
-test('a push: arrows pick a commit, enter opens its diff, space drops it, and a sends the drops', () => {
+test('a push: arrows pick a commit, enter shows its diff, space drops it, and a sends the drops', () => {
   const s = start([push()])
   onKey(s, '\x1b[B')
   assert.equal(s.commit, 1)
   onKey(s, '\x1b[B')
   assert.equal(s.commit, 1, 'held at the last')
-  onKey(s, '\r')
-  assert.ok(s.open.has('bbb2222'))
-  onKey(s, '\r')
-  assert.ok(!s.open.has('bbb2222'))
+  assert.deepEqual(onKey(s, '\r'), { do: 'diff', p: push(), from: 'bbb2222^', to: 'bbb2222', title: 'bbb2222' })
   onKey(s, ' ')
   assert.deepEqual(onKey(s, 'a'), { do: 'approve', p: push(), always: false, drop: ['bbb2222'] })
   onKey(s, '\x1b[A')
   onKey(s, ' ')
   assert.equal(s.drop.size, 1, 'the last commit kept can’t be dropped')
   assert.match(s.note.text, /Keep at least one/)
-  assert.equal(onKey(s, 'd').do, 'diff')
+  assert.deepEqual(onKey(start([push({ lease: 'l', head: 'h' })]), 'd'), { do: 'diff', p: push({ lease: 'l', head: 'h' }), from: 'l', to: 'h', title: 'all 2 commits' })
+})
+
+test('the diff: j k pick a file, enter opens one at a time, esc goes back to the proposal', () => {
+  const s = start([push()])
+  const files = [{ path: 'a.py' }, { path: 'b.py' }]
+  openDiff(s, { title: 'all 2 commits', from: 'l', to: 'h', files })
+  assert.equal(s.diff.open, 'a.py', 'the first file opens with it')
+  onKey(s, 'j')
+  assert.deepEqual(onKey(s, '\r'), { do: 'diffFile', file: files[1] })
+  assert.equal(s.diff.open, 'b.py')
+  assert.equal(onKey(s, '\r'), undefined, 'enter again closes it')
+  assert.equal(s.diff.open, '')
+  assert.equal(onKey(s, 'a'), undefined, 'a doesn’t approve from the diff')
+  onKey(s, '\x1b')
+  assert.equal(s.diff, null)
+  assert.equal(onKey(s, '\x1ba'), 'quit')
 })
 
 test('moving to another proposal forgets drops, open diffs and edits', () => {
@@ -91,7 +104,7 @@ test('moving to another proposal forgets drops, open diffs and edits', () => {
   onKey(s, 'j')
   onKey(s, 'k')
   assert.equal(s.drop.size, 0)
-  assert.equal(s.open.size, 0)
+  assert.equal(s.diff, null)
 })
 
 test('e edits in $EDITOR, or inline when Settings say so or there is none', () => {

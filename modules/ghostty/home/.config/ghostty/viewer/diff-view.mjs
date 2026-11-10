@@ -20,12 +20,9 @@ import {
   addShare,
   bodyRows as listRows,
   cardSize,
-  changeCells,
   changeWords,
   clampScroll,
   countLines,
-  fit,
-  fitPath,
   followCursor,
   keepCursor,
   keyAction,
@@ -37,6 +34,7 @@ import {
   parseStatus,
   scrollLines,
 } from './diff.mjs'
+import { C, diffRow as drawDiff, fileRow as drawFile, scaleOf } from './diff-rows.mjs'
 import { paneModes, tabs as modeTabs } from './modes.mjs'
 
 const DIR = process.argv[2] || process.cwd()
@@ -52,34 +50,8 @@ const REFRESH_MS = 1000
 // card above, the status row below.
 const TOP = 7
 const CHROME_ROWS = 7
-const BAR = 10
 
 // Catppuccin Mocha, as in the design and yazi/theme.toml.
-const fg = hex => `\x1b[38;2;${rgb(hex)}m`
-const bg = hex => `\x1b[48;2;${rgb(hex)}m`
-const rgb = hex => [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16)).join(';')
-const C = {
-  text: fg('#cdd6f4'),
-  sub: fg('#a6adc8'),
-  overlay: fg('#6c7086'),
-  line: fg('#45475a'),
-  track: fg('#313244'),
-  blue: fg('#89b4fa'),
-  green: fg('#a6e3a1'),
-  red: fg('#f38ba8'),
-  yellow: fg('#f9e2af'),
-  mauve: fg('#cba6f7'),
-  crust: fg('#11111b'),
-  cursorBg: bg('#313244'),
-  addBg: bg('#292e37'),
-  delBg: bg('#2f2738'),
-  pillBg: bg('#89b4fa'),
-  tabBg: bg('#cdd6f4'),
-  bold: '\x1b[1m',
-  reset: '\x1b[0m',
-}
-const STATUS_COLORS = { M: C.yellow, T: C.yellow, A: C.green, '?': C.green, D: C.red, U: C.red, R: C.mauve, C: C.mauve }
-
 const out = s => process.stdout.write(s)
 
 let folder = ''
@@ -252,41 +224,11 @@ function card() {
   ]
 }
 
-function changeBar(file, most) {
-  const [green, red, track] = changeCells(file, most, BAR)
-  return `${C.green}${'━'.repeat(green)}${C.red}${'━'.repeat(red)}${C.track}${'━'.repeat(track)}${C.reset}`
-}
-
 function fileRow(file, i, most) {
-  const open = file.path === openPath
-  const back = i === cursor ? C.cursorBg : ''
-  const counts = file.binary ? 'binary' : `+${file.add} −${file.del}`
-  const countsText = file.binary ? `${C.sub}binary` : `${C.green}+${file.add} ${file.del ? C.red : C.line}−${file.del}`
-  const right = ` ${' '.repeat(Math.max(0, 11 - counts.length))}${countsText}${C.reset}${back} ${changeBar(file, most)}${back} `
-  const room = Math.max(4, width() - 5 - 11 - BAR - 3)
-  const { dir, name } = fitPath(file.path, room)
-  const nameColor = open ? C.blue : C.text
-  const pad = ' '.repeat(Math.max(0, room - dir.length - name.length))
-  const status = `${STATUS_COLORS[file.status] ?? C.text}${C.bold}${file.status}${C.reset}${back}`
-  return `${back} ${C.overlay}${open ? '▾' : '▸'}${C.reset}${back} ${status} ${C.overlay}${dir}${C.reset}${back}${nameColor}${C.bold}${name}${C.reset}${back}${pad}${right}${C.reset}`
+  return drawFile(file, { open: file.path === openPath, selected: i === cursor, width: width(), most })
 }
 
-function diffRow(row) {
-  const edge = `   ${C.blue}▎${C.reset}`
-  const room = Math.max(1, width() - 4 - 5 - 2)
-  switch (row.kind) {
-    case 'hunk':
-      return `${edge}     ${C.mauve}${fit(row.text, room + 2)}${C.reset}`
-    case 'note':
-      return `${edge}       ${C.overlay}${fit(row.text, room)}${C.reset}`
-    case 'add':
-      return `${edge}${C.addBg}${C.overlay}${String(row.num).padStart(4)} ${C.green}+ ${fit(row.text, room)}${C.reset}`
-    case 'del':
-      return `${edge}${C.delBg}${C.overlay}${String(row.num).padStart(4)} ${C.red}- ${fit(row.text, room)}${C.reset}`
-    default:
-      return `${edge}${C.overlay}${String(row.num).padStart(4)} ${C.text}  ${fit(row.text, room)}${C.reset}`
-  }
-}
+const diffRow = row => drawDiff(row, width())
 
 function statusRow() {
   const left = `${C.pillBg}${C.crust}${C.bold} DIFF ${C.reset}  ${hint([['enter', 'open'], ['j k', 'move']])}`
@@ -313,7 +255,7 @@ function draw() {
     }
   } else {
     lines.push(...card())
-    const most = Math.sqrt(Math.max(1, ...files.map(f => f.add + f.del)))
+    const most = scaleOf(files)
     for (let row = 0; row < height; row++) {
       const r = rows[scroll + row]
       if (!r || r.kind === 'gap') lines.push('')
