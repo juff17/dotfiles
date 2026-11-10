@@ -90,7 +90,7 @@ Monitor(
 - Only one babysitter runs per PR. The script holds a per-PR lock, and a
   second start exits with `[busy] ... already being babysat`. On `[busy]`,
   stop: create no worktree and do not re-arm. Run
-  `scripts/notify.sh "<repo> !<number>" "Already being babysat"` and tell the
+  `scripts/notify.sh "<repo> <ref>" "Already being babysat"` and tell the
   user in one line that another session is already babysitting this PR.
 - It checks that the clone has a remote for the URL's repo. If not, `[setup]`
   says so: ask the user for the right clone.
@@ -164,7 +164,7 @@ may need to add.
 | Event | Meaning | Do |
 |-------|---------|----|
 | `[failed]` | A job or check failed | [references/pipelines.md](references/pipelines.md) |
-| `[manual]` | A blocking manual job, environment approval, or workflow approval is waiting | Notify: human needed |
+| `[manual]` | A blocking manual job, environment approval, or workflow approval is waiting | Propose it (step 6); the proposal is the notification |
 | `[stuck]` | A job has waited for a runner longer than `--stuck-after` | Notify: human needed |
 | `[stage]` | Every job in one stage finished. On GitLab a stage; on GitHub the part of the check name before ` / ` | Chat line only, no desktop notification |
 | `[pipeline]` | All checks for the head commit finished: passed, failed, or canceled (none failed, at least one canceled) | Notify with the result |
@@ -189,9 +189,11 @@ conflicted jobs on its own, and every pending proposal with its buttons, so a
 proposal needs no notify.sh of its own. Notify only when the user has
 something to do that isn't a proposal: a failure that needs them, a stuck
 job, a finished pipeline, changes requested, or a rebase conflict you can't
-settle.
+settle. A note never sums up or repeats proposals: when everything new was
+proposed, don't notify at all.
 
-1. Run `scripts/notify.sh "<repo> !<number>" "<one line: what needs them>"`.
+1. Run `scripts/notify.sh "<repo> <ref>" "<one line: what needs them>"`,
+   where `<ref>` is `#<number>` on GitHub and `!<number>` on GitLab.
 2. In the chat, write the briefing for that event using
    [references/briefing.md](references/briefing.md).
 
@@ -218,6 +220,12 @@ Everything that goes out under the user's name is proposed, never run:
 - A push takes its commits, lease, branch and remote from the saved facts and
   the worktree; it needs a clean worktree. Pass a `--check` for each check you
   ran and its result. `--for` labels a commit with the comment it addresses.
+- A reply with `--commit` waits until that commit is on the PR's branch, so
+  it never points reviewers at a commit they can't see: the tray offers only
+  Edit and Skip until the push goes out, and approving it before then is
+  refused. Propose the push too. If Settings post replies on their own, it
+  answers `[proposed] ... posts once that push goes out` and posts when the
+  push is approved.
 - It answers `[proposed] <id> ...` when it waits for the user, `[auto] <id>
   ...` when Settings let it run at once (it has run; the briefing marks it
   auto), `[refused] ...` when Settings rule it out, or `[failed] <id> ...`.
