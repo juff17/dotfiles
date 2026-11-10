@@ -356,7 +356,7 @@ function footer(w) {
     )
   if (note && note.until > Date.now()) return wrapped([[note.text, fg(note.color)]], w)
   const keys = listMode()
-    ? [['j/k', 'move'], ['↵', 'open'], ...(peek ? [['alt+←', 'session'], ['ctrl+shift+b', 'board']] : [['esc', 'workspace']]), ['a/d', 'allow/deny'], ['ctrl+x', focusedMonitor() ? 'stop monitor' : 'close'], ['alt+d', 'diagrams'], ['n', 'new']]
+    ? [['j/k', 'move'], ['↵', 'open'], ...(peek ? [['alt+→', 'session'], ['ctrl+shift+b', 'board']] : [['esc', 'workspace']]), ['a/d', 'allow/deny'], ['ctrl+x', focusedMonitor() ? 'stop monitor' : 'close'], ['alt+d', 'diagrams'], ['n', 'new']]
     : [['h/l', 'lane'], ['j/k', 'agent'], ['tab', 'monitors'], ['↵', 'open'], ['a/d', 'allow/deny'], ['e', 'reviewed'], ['o', 'go to tab'], ['x', focus === 4 ? 'stop monitor' : 'close'], ['alt+d', 'diagrams'], ['n', 'new'], ['/', 'filter']]
   return wrapped(hint(keys), w)
 }
