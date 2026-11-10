@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# The left-hand viewer: four modes take turns in one pane, starting with
-# Files. Tab goes Diagrams → Files → Diff → Todo → Diagrams, and the header's
-# tabs jump straight to one.
+# The left-hand viewer: its modes take turns in one pane. Settings ›
+# Workspace (viewer/modes.mjs) says which are on, their order, which is the
+# order of the header's tabs and of Tab's cycle, and which one it opens in.
 #   - Files: the yazi file manager. q goes to Diagrams.
 #   - Diff: the uncommitted changes of the repository (viewer/diff-view.mjs).
 #     q goes to Files.
@@ -9,6 +9,10 @@
 #     q goes to Files.
 #   - Diagrams: Claude's diagrams (viewer/diagram-view.mjs, dv). q closes the
 #     pane.
+#   - A mode you added: your command, run in the folder Files was in. When it
+#     exits the pane goes to Files.
+# Where q would go to a mode that's off, it closes the pane instead (Files'
+# q), or goes to the next mode (the rest).
 #   ghostty-viewer [dir] [node]
 # node is the Node.js binary for Diff, Todo and Diagrams. Ghostty's own PATH usually
 # lacks it, so without one it uses the one ghostty-claude-start last saw.
@@ -20,69 +24,122 @@ conf="$(dirname "$(dirname "$(readlink -f "$0")")")"
 # Where ghostty-claude-start leaves Claude's folder for Files when yazi isn't
 # running to be sent there.
 dir_file=${VIEWER_ID:+${XDG_RUNTIME_DIR:-/tmp}/ghostty-layout/viewer-$VIEWER_ID.dir}
+modes_js="$conf/viewer/modes.mjs"
 dv="$conf/viewer/diagram-view.mjs"
 gv="$conf/viewer/diff-view.mjs"
 tv="$conf/viewer/todo-view.mjs"
 
-# Diff, Todo and Diagrams exit with the code of the mode to show next; any
-# other code closes the pane.
-FILES=3
-DIFF=4
-DIAGRAMS=5
-TODO=6
+# A mode exits with FIRST_EXIT + i to switch to mode i (viewer/modes.mjs);
+# any other code closes the pane.
+FIRST_EXIT=10
 # yazi can't pick an exit code, but it writes its folder to this file when it
-# quits plainly: Tab and the Diff and Todo tabs do that, q and the Diagrams
-# tab don't. The Todo tab also leaves GV_TODO_MARK (yazi/init.lua).
+# quits plainly: Tab and a click on another mode's tab do that, q doesn't. A
+# click also leaves that mode's number in GV_NEXT_MARK (yazi/init.lua).
 next="${XDG_RUNTIME_DIR:-/tmp}/ghostty-viewer-$$"
-todo_mark="$next.todo"
-trap 'rm -f "$next" "$todo_mark"' EXIT
+next_mark="$next.mode"
+trap 'rm -f "$next" "$next_mark"' EXIT
 
-mode=files
-command -v yazi >/dev/null || mode=diff
-[[ $mode == diff && -z $node ]] && {
+# ids, names and cmds: the modes that are on and can run here, in order.
+# Files needs yazi and the rest Node.js, which also reads the list; without
+# it there's only Files.
+load_modes() {
+  local id name cmd
+  ids=() names=() cmds=()
+  if [[ -n $node ]]; then
+    while IFS=$'\t' read -r id name cmd; do
+      [[ $id == files ]] && ! command -v yazi >/dev/null && continue
+      ids+=("$id") names+=("$name") cmds+=("$cmd")
+    done < <("$node" "$modes_js" list 2>/dev/null)
+  fi
+  if ((${#ids[@]} == 0)) && command -v yazi >/dev/null; then
+    ids=(files) names=(Files) cmds=('')
+  fi
+}
+
+# The number of mode <id> in the list, or nothing when it's off.
+index_of() {
+  local i
+  for i in "${!ids[@]}"; do
+    [[ ${ids[i]} == "$1" ]] && echo "$i" && return
+  done
+}
+
+# The code that switches to mode <id>, or nothing when it's off.
+code_of() {
+  local i
+  i=$(index_of "$1")
+  [[ -n $i ]] && echo $((FIRST_EXIT + i))
+}
+
+load_modes
+if ((${#ids[@]} == 0)); then
   echo "Neither yazi nor Node.js is installed."
   read -rsn1 -p "Press any key to close."
   exit 1
-}
+fi
+mode=$([[ -n $node ]] && "$node" "$modes_js" start 2>/dev/null)
 
 while :; do
+  # Read again each time, so a change in Settings shows at the next switch.
+  load_modes
+  ((${#ids[@]})) || exit 0
+  at=$(index_of "$mode")
+  at=${at:-0}
+  mode=${ids[at]}
+  count=${#ids[@]}
+  next_code=$((count > 1 ? FIRST_EXIT + (at + 1) % count : 0))
+  case $mode in
+    files) quit_code=$(code_of diagrams) quit_code=${quit_code:-0} ;;
+    diagrams) quit_code=0 ;;
+    *) quit_code=$(code_of files) quit_code=${quit_code:-$next_code} ;;
+  esac
+  GV_MODES=$(
+    IFS=$'\t'
+    echo "${names[*]}"
+  )
+  export GV_MODES GV_AT=$at GV_QUIT=$quit_code
+  [[ -n $dir_file && -s $dir_file ]] && dir=$(<"$dir_file")
+
   case $mode in
     files)
-      if ! command -v yazi >/dev/null; then
-        mode=diff
-        continue
-      fi
-      rm -f "$next" "$todo_mark"
-      [[ -n $dir_file && -s $dir_file ]] && dir=$(<"$dir_file")
-      YAZI_CONFIG_HOME="$conf/yazi" GV_TODO_MARK="$todo_mark" yazi ${VIEWER_ID:+--client-id "$VIEWER_ID"} \
+      rm -f "$next" "$next_mark"
+      YAZI_CONFIG_HOME="$conf/yazi" GV_NEXT_MARK="$next_mark" yazi ${VIEWER_ID:+--client-id "$VIEWER_ID"} \
         --cwd-file="$next" "$dir"
-      if [[ -s $next && -e $todo_mark && -n $node ]]; then
-        mode=todo
+      if [[ -s $next && -s $next_mark ]]; then
+        code=$((FIRST_EXIT + $(<"$next_mark")))
       elif [[ -s $next ]]; then
-        mode=diff
+        code=$next_code
       else
-        mode=diagrams
+        code=$quit_code
       fi
-      continue
       ;;
     diff)
-      [[ -n $node ]] || { mode=files; continue; }
-      GV_FILES_EXIT=$FILES GV_TODO_EXIT=$TODO GV_DIAGRAMS_EXIT=$DIAGRAMS "$node" "$gv" "$dir"
+      "$node" "$gv" "$dir"
+      code=$?
       ;;
     todo)
-      [[ -n $node ]] || { mode=files; continue; }
-      TD_FILES_EXIT=$FILES TD_DIFF_EXIT=$DIFF TD_DIAGRAMS_EXIT=$DIAGRAMS "$node" "$tv" "$dir"
+      "$node" "$tv" "$dir"
+      code=$?
       ;;
     diagrams)
-      [[ -n $node ]] || { mode=files; continue; }
-      DV_TAB_EXIT=$FILES DV_DIFF_EXIT=$DIFF DV_TODO_EXIT=$TODO "$node" "$dv"
+      "$node" "$dv"
+      code=$?
+      ;;
+    *)
+      (cd "$dir" 2>/dev/null || cd "$HOME" && exec bash -c "${cmds[at]}")
+      status=$?
+      # A command that fails straight away would otherwise come round again
+      # and again; this shows why, and waits.
+      if ((status != 0)); then
+        printf '\n%s exited with %d. Press any key to go on.' "${names[at]}" "$status"
+        read -rsn1
+      fi
+      code=$quit_code
       ;;
   esac
-  case $? in
-    "$FILES") mode=files ;;
-    "$DIFF") mode=diff ;;
-    "$DIAGRAMS") mode=diagrams ;;
-    "$TODO") mode=todo ;;
-    *) exit 0 ;;
-  esac
+  if ((code >= FIRST_EXIT && code - FIRST_EXIT < count)); then
+    mode=${ids[code - FIRST_EXIT]}
+  else
+    exit 0
+  fi
 done

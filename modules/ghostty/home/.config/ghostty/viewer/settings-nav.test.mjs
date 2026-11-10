@@ -140,3 +140,80 @@ test('Task, the hand-off and filing say where their instructions are, and ↑↓
   for (const x of SECTIONS) assert.ok(!items(start(x.id)).some(r => r.prompt), x.id)
   assert.ok(!SECTIONS.some(x => x.rows.some(r => r.type === 'skill')), 'no skills to pick')
 })
+
+// A state on the Workspace section's mode number `i`.
+function onMode(i) {
+  const s = start('workspace')
+  s.sel = items(s).findIndex(r => r.type === 'mode' && r.index === i)
+  return s
+}
+const modes = () => get('workspace.modes').map(m => `${m.id}${m.on ? '' : ' off'}`)
+
+test('Workspace lists a row per viewer mode, then one to add a mode', () => {
+  const s = start('workspace')
+  const rows = items(s).filter(r => r.key === 'workspace.modes')
+  assert.deepEqual(rows.map(r => r.label), ['Files', 'Diff', 'Todo', 'Diagrams', '+ Add a mode'])
+})
+
+test('space turns a mode off and on, but the last one on stays on', () => {
+  const s = onMode(1)
+  press(s, ' ')
+  assert.deepEqual(modes(), ['files', 'diff off', 'todo', 'diagrams'])
+  press(s, RIGHT)
+  assert.deepEqual(modes(), ['files', 'diff', 'todo', 'diagrams'])
+  set('workspace.modes', [{ id: 'files', on: true }, { id: 'diff', on: false }, { id: 'todo', on: false }, { id: 'diagrams', on: false }])
+  press(onMode(0), ' ')
+  assert.equal(get('workspace.modes')[0].on, true)
+})
+
+test('J and K move a mode down and up, and it stays selected', () => {
+  const s = onMode(0)
+  press(s, 'J', 'J')
+  assert.deepEqual(modes(), ['diff', 'todo', 'files', 'diagrams'])
+  assert.equal(current(s).mode.id, 'files')
+  press(s, 'K')
+  assert.deepEqual(modes(), ['diff', 'files', 'todo', 'diagrams'])
+  press(onMode(3), 'J')
+  assert.deepEqual(modes(), ['diff', 'files', 'todo', 'diagrams'], 'the last stays last')
+})
+
+test('a adds a mode from a name and a command; esc gives up', () => {
+  const s = onMode(0)
+  press(s, 'a', ...'lazygit', '\r', ...'lazygit', '\r')
+  assert.deepEqual(get('workspace.modes').at(-1), { id: 'x-lazygit', name: 'lazygit', cmd: 'lazygit', on: true })
+  assert.equal(current(s).mode.id, 'x-lazygit')
+  assert.equal(s.input, null)
+  press(s, 'a', ...'tig', '\x1b')
+  assert.equal(s.input, null)
+  assert.equal(get('workspace.modes').length, 5)
+})
+
+test('typing into a new mode takes q and esc as text, not as closing the panel', () => {
+  const s = onMode(0)
+  assert.deepEqual(press(s, 'a', 'q'), [undefined, undefined])
+  assert.equal(s.input.text, 'q')
+  press(s, '\x7f', '\r')
+  assert.equal(s.input.field, 'name', 'a name is needed first')
+  nav.typeText(s, 'two\nlines')
+  assert.equal(s.input.text, 'two lines')
+})
+
+test('x removes a mode you added, never a built-in one', () => {
+  set('workspace.modes', [...get('workspace.modes'), { id: 'x-tig', name: 'tig', cmd: 'tig', on: true }])
+  press(onMode(1), 'x')
+  assert.equal(get('workspace.modes').length, 5)
+  press(onMode(4), 'x')
+  assert.deepEqual(modes(), ['files', 'diff', 'todo', 'diagrams'])
+})
+
+test('r on a mode puts the built-in ones back in order and on, keeping added ones', () => {
+  set('workspace.modes', [{ id: 'x-tig', name: 'tig', cmd: 'tig', on: true }, { id: 'todo', on: false }, { id: 'files', on: true }])
+  press(onMode(0), 'r')
+  assert.deepEqual(modes(), ['files', 'diff', 'todo', 'diagrams', 'x-tig'])
+})
+
+test('J and K still change section outside the list of modes', () => {
+  const s = on('workspace.startMode')
+  press(s, 'J')
+  assert.equal(SECTIONS[s.sec].id, 'layout')
+})

@@ -8,9 +8,8 @@
 //   diff-view.mjs [dir]
 // DV_TABS names the window's tab session as `socket:session`
 // (bin/ghostty-claude-start); without it, dir is the folder.
-// GV_FILES_EXIT, GV_TODO_EXIT and GV_DIAGRAMS_EXIT are the exit codes that
-// switch the pane to Files, Todo or Diagrams (bin/ghostty-viewer); Tab goes
-// to Todo, q to Files.
+// In the viewer pane, its header has a tab per mode that's on, from
+// GV_MODES (viewer/modes.mjs); Tab goes to the next one, q where GV_QUIT says.
 
 import { execFile } from 'node:child_process'
 import { watch } from 'node:fs'
@@ -38,15 +37,14 @@ import {
   parseStatus,
   scrollLines,
 } from './diff.mjs'
+import { paneModes, tabs as modeTabs } from './modes.mjs'
 
 const DIR = process.argv[2] || process.cwd()
 const [TABS_SOCKET, TABS_SESSION] = (process.env.DV_TABS ?? '').split(':')
 // The tab session touches this file when the active tab changes (tmux.conf).
 const TAB_CHANGED = `${process.env.XDG_RUNTIME_DIR || '/tmp'}/ghostty-layout/tab-changed`
-const FILES_EXIT = Number(process.env.GV_FILES_EXIT) || 0
-const DIAGRAMS_EXIT = Number(process.env.GV_DIAGRAMS_EXIT) || 0
-const TODO_EXIT = Number(process.env.GV_TODO_EXIT) || 0
-const MODES = [' Diagrams ', ' Files ', ' Diff ', ...(TODO_EXIT ? [' Todo '] : [])]
+const PANE = paneModes('Diff')
+const MODES = modeTabs(PANE).map(t => t.label)
 // The empty tree, to diff against in a repository with no commits yet.
 const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904'
 const REFRESH_MS = 1000
@@ -227,8 +225,9 @@ const hint = pairs => pairs.map(([key, what]) => `${C.blue}${key}${C.sub} ${what
 
 function header() {
   const tabs = MODES.map((mode, i) =>
-    i === 2 ? `${C.tabBg}${C.crust}${C.bold}${mode}${C.reset}` : `${C.sub}${C.bold}${mode}${C.reset}`,
+    i === PANE.at ? `${C.tabBg}${C.crust}${C.bold}${mode}${C.reset}` : `${C.sub}${C.bold}${mode}${C.reset}`,
   ).join(' ')
+  if (!PANE.next) return tabs
   return `${tabs}\x1b[${Math.max(1, width() - 'tab switch'.length + 1)}G${hint([['tab', 'switch']])}`
 }
 
@@ -341,10 +340,8 @@ function onMouse(button, x, y, released) {
   if (button & 64) return scrollBy((button & 1) === 0 ? -scrollLines() : scrollLines())
   if (released || (button & 3) !== 0 || button & 32) return
   if (y === 1) {
-    const mode = modeAt(x)
-    if (mode === 0 && DIAGRAMS_EXIT) return quit(DIAGRAMS_EXIT)
-    if (mode === 1 && FILES_EXIT) return quit(FILES_EXIT)
-    if (mode === 3) return quit(TODO_EXIT)
+    const code = PANE.exitOf(modeAt(x))
+    if (code) quit(code)
     return
   }
   if (message || y < TOP || y >= TOP + bodyHeight()) return
@@ -354,8 +351,8 @@ function onMouse(button, x, y, released) {
 
 function onKey(key) {
   const [action, by] = keyAction(key, Math.max(1, Math.floor(bodyHeight() / 2))) ?? []
-  if (action === 'quit') quit(FILES_EXIT)
-  else if (action === 'next') (TODO_EXIT || DIAGRAMS_EXIT) && quit(TODO_EXIT || DIAGRAMS_EXIT)
+  if (action === 'quit') quit(PANE.quit)
+  else if (action === 'next') PANE.next && quit(PANE.next)
   else if (action === 'move') moveCursor(cursor + by)
   else if (action === 'toggle') toggleOpen()
   else if (action === 'scroll') scrollBy(by)

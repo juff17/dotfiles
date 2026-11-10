@@ -1,14 +1,17 @@
 -- The viewer pane's Files mode, laid out like the design: a header row with
--- the Diagrams / Files / Diff / Todo tabs above the path, names without icons
--- (folders end in /), and a status bar with only the mode, name, permissions
--- and position.
+-- a tab per mode that's on above the path, names without icons (folders end
+-- in /), and a status bar with only the mode, name, permissions and position.
 
-local TABS = {
-	{ " Diagrams ", ui.Style():fg("#a6adc8"):bold() },
-	{ " Files ", ui.Style():fg("#11111b"):bg("#cdd6f4"):bold() },
-	{ " Diff ", ui.Style():fg("#a6adc8"):bold() },
-	{ " Todo ", ui.Style():fg("#a6adc8"):bold() },
-}
+-- bin/ghostty-viewer names the modes that are on in GV_MODES, joined by tabs,
+-- and which of them this is in GV_AT, counted from 0 (viewer/modes.mjs).
+local TABS, AT = {}, tonumber(os.getenv("GV_AT") or "") or 0
+for name in string.gmatch(os.getenv("GV_MODES") or "Files", "[^\t]+") do
+	local here = #TABS == AT
+	TABS[#TABS + 1] = {
+		" " .. name .. " ",
+		here and ui.Style():fg("#11111b"):bg("#cdd6f4"):bold() or ui.Style():fg("#a6adc8"):bold(),
+	}
+end
 
 function Root:layout()
 	self._chunks = ui.Layout()
@@ -37,17 +40,17 @@ function Header:redraw()
 
 	local right = self:children_redraw(self.RIGHT)
 	self._right_width = right:width()
+	local switch = #TABS > 1 and { ui.Span("tab"):fg("#89b4fa"), ui.Span(" switch"):fg("#a6adc8") } or {}
 	return {
 		ui.Line(tabs):area(top),
-		ui.Line({ ui.Span("tab"):fg("#89b4fa"), ui.Span(" switch"):fg("#a6adc8") }):area(top):align(ui.Align.RIGHT),
+		ui.Line(switch):area(top):align(ui.Align.RIGHT),
 		ui.Line(self:children_redraw(self.LEFT)):area(path),
 		right:area(path):align(ui.Align.RIGHT),
 	}
 end
 
 -- bin/ghostty-viewer reads where to go from how yazi quit: plainly (writing
--- its cwd file) for Diff, without the cwd file for Diagrams, and plainly
--- after leaving the GV_TODO_MARK file for Todo.
+-- its cwd file) after leaving the mode's number in the GV_NEXT_MARK file.
 function Header:click(event, up)
 	if up or event.y ~= self._area.y then
 		return
@@ -56,17 +59,12 @@ function Header:click(event, up)
 	for i, t in ipairs(TABS) do
 		local w = ui.width(t[1])
 		if event.x >= x and event.x < x + w then
-			if i == 1 then
-				ya.emit("quit", { no_cwd_file = true })
-			elseif i == 3 then
+			local mark = i - 1 ~= AT and os.getenv("GV_NEXT_MARK")
+			local f = mark and io.open(mark, "w")
+			if f then
+				f:write(tostring(i - 1))
+				f:close()
 				ya.emit("quit", {})
-			elseif i == 4 then
-				local mark = os.getenv("GV_TODO_MARK")
-				local f = mark and io.open(mark, "w")
-				if f then
-					f:close()
-					ya.emit("quit", {})
-				end
 			end
 			return
 		end
