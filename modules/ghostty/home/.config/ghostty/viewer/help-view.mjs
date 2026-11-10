@@ -9,9 +9,12 @@
 
 import { splitAt } from '../hub/line.mjs'
 import { BOLD, P, bg, enter, fg, leave, paint, render, split, tokens, width } from '../hub/term.mjs'
-import { SECTIONS } from './help.mjs'
+import { SECTIONS, rebind } from './help.mjs'
+import { KEY_ROWS } from '../hub/keybinds.mjs'
+import { load } from '../hub/settings.mjs'
 import { BOTTOM, NAV, TOP, filtering, fitScroll, footerHints, keyWidth, onKey, onMouse, onPaste, shown, start } from './help-nav.mjs'
 
+rebind(load(), KEY_ROWS)
 const s = start(process.argv[2])
 
 const cols = () => process.stdout.columns || 80
@@ -70,7 +73,7 @@ function draw() {
 
   const title = filtering(s) ? `matching “${s.query.trim()}”` : SECTIONS[s.sel].name
   const lines = [
-    split([[` Keys · ${title}`, BOLD + fg(P.blue)]], [['alt+h', fg(P.text)], [' close ', fg(P.sub)]], w, BASE),
+    split([[` Keys · ${title}`, BOLD + fg(P.blue)]], [[load()['keys.help'] || 'esc', fg(P.text)], [' close ', fg(P.sub)]], w, BASE),
     render([], w, BASE),
     render(
       [

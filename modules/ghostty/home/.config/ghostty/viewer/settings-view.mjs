@@ -55,7 +55,7 @@ function content(w, values) {
     at.push(lines.length)
     lines.push(
       render([[changed ? '• ' : '  ', fg(P.peach)], [r.label, (on ? BOLD : '') + fg(P.text)]], w - vw, fill) +
-        render(valueSpans(r, v, on, s.flag), vw, fill),
+        render(valueSpans(r, v, on, s.flag, s.capture), vw, fill),
     )
     const sub = changed ? [r.sub, `default ${show(r, r.default)}`].filter(Boolean).join(' · ') : r.sub
     lines.push(render([[`  ${sub}`, fg(P.overlay1)]], w, fill))
@@ -95,7 +95,11 @@ function draw() {
   }
   const r = current(s)
   const keys =
-    r.type === 'flags'
+    r.type === 'key'
+      ? s.capture
+        ? [['esc', 'cancel'], ['backspace', 'unbind']]
+        : [['↵', 'press new key'], ['backspace', 'unbind']]
+      : r.type === 'flags'
       ? [['←→', 'pick'], ['space', 'turn on/off']]
       : r.type === 'bool'
         ? [['space', 'turn on/off']]
