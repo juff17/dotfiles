@@ -92,6 +92,17 @@ setting() {
 
 rail_cols() { setting layout.railCols GHOSTTY_RAIL_COLS 6; }
 
+# popup_opens <mode>: whether the popup key of viewer mode <mode> (todo,
+# diagrams) opens it, which Settings › Workspace can turn off with the mode.
+# It opens when Node can't be found or can't say.
+popup_opens() {
+  local node
+  node=$(command -v node || cat "${XDG_CACHE_HOME:-$HOME/.cache}/ghostty-layout/node" 2>/dev/null)
+  [[ -n $node ]] || return 0
+  "$node" "$GHOSTTY_CONF/viewer/modes.mjs" popup "$1" 2>/dev/null
+  (($? != 1))
+}
+
 # copy_prompt_examples [dir]: each <name>.md.example in prompts/ copied to
 # <name>.md, the file the agents read (hub/prompts.mjs), where it isn't there
 # yet. Git ignores the copies, so edits to them stay on this machine.

@@ -12,7 +12,7 @@ import { existsSync } from 'node:fs'
 import { BOLD, P, bg, enter, fg, leave, paint, render, split, tokens, width } from '../hub/term.mjs'
 import { SECTIONS, settingsFile, load, show } from '../hub/settings.mjs'
 import { fileOf, instructions } from '../hub/prompts.mjs'
-import { BOTTOM, NAV, TOP, VALUE, current, onKey, start, valueSpans } from './settings-nav.mjs'
+import { BOTTOM, NAV, TOP, VALUE, current, modeRows, modeSub, onKey, start, typeText, valueSpans } from './settings-nav.mjs'
 
 const s = start(process.argv[2])
 
@@ -25,13 +25,30 @@ const tilde = p => p.replace(process.env.HOME ?? '\0', '~')
 
 // The right side: each heading, then two lines a setting: its name and value,
 // and what it does. An agent with instructions of yours has two lines too:
-// how many there are, and the file they're in. `at` maps a setting to its
-// first line, for scrolling.
+// how many there are, and the file they're in. A list of modes has two lines
+// a mode and two to add one, then a line on what turning one off does. `at`
+// maps a setting to its first line, for scrolling.
 function content(w, values) {
   const lines = []
   const at = []
   let i = 0
   for (const r of SECTIONS[s.sec].rows) {
+    if (r.type === 'modes') {
+      for (const m of modeRows(r, values)) {
+        const on = i === s.sel
+        const fill = on ? SEL : BASE
+        const add = m.type === 'addMode'
+        const name = add ? m.label : `⠿ ${m.index + 1}  ${m.label}`
+        const value = add ? [['a', fg(P.blue)], [' add', fg(P.sub)]] : valueSpans({ type: 'bool' }, m.mode.on, on)
+        at.push(lines.length)
+        lines.push(render([['  '], [name, (on ? BOLD : '') + fg(add ? P.blue : P.text)]], w - VALUE, fill) + render(value, VALUE, fill))
+        const sub = add ? 'a name, then any command to run in the left pane' : modeSub(m.mode)
+        lines.push(render([[`  ${sub}`, fg(P.overlay1)]], w, fill))
+        i++
+      }
+      lines.push(render([[`  ${r.sub}`, fg(P.overlay1)]], w, BASE))
+      continue
+    }
     if (r.head) {
       if (lines.length) lines.push(render([], w, BASE))
       lines.push(render([[r.head.toUpperCase(), BOLD + fg(P.peach)]], w, BASE))
@@ -99,27 +116,46 @@ function draw() {
       ? s.capture
         ? [['esc', 'cancel'], ['backspace', 'unbind']]
         : [['↵', 'press new key'], ['backspace', 'unbind']]
-      : r.type === 'flags'
+      : r.type === 'mode'
+        ? [['space', 'on/off'], ['J K', 'move'], ['x', 'remove'], ['a', 'add']]
+        : r.type === 'addMode'
+          ? [['↵', 'add a mode']]
+          : r.type === 'flags'
       ? [['←→', 'pick'], ['space', 'turn on/off']]
       : r.type === 'bool'
         ? [['space', 'turn on/off']]
         : [['←→', 'change']]
   const hints = [['↑↓', 'setting'], ['tab', 'section'], ...keys, ['r', 'default']]
   lines.push(
-    split(
-      [
-        [' '],
-        ...hints.flatMap(([k, what]) => [
-          [k, fg(P.text)],
-          [` ${what}  `, fg(P.sub)],
-        ]),
-      ],
-      s.note ? [[`${s.note.text} `, fg(s.note.color)]] : [[`saved to ${tilde(settingsFile())} `, fg(P.overlay1)]],
-      w,
-      BASE,
-    ),
+    s.input
+      ? promptLine(w)
+      : split(
+          [
+            [' '],
+            ...hints.flatMap(([k, what]) => [
+              [k, fg(P.text)],
+              [` ${what}  `, fg(P.sub)],
+            ]),
+          ],
+          s.note ? [[`${s.note.text} `, fg(s.note.color)]] : [[`saved to ${tilde(settingsFile())} `, fg(P.overlay1)]],
+          w,
+          BASE,
+        ),
   )
   paint(lines.slice(0, rows()))
+}
+
+// The footer while a new mode is typed: what it asks, the text so far with
+// a cursor, and the keys.
+function promptLine(w) {
+  const { field, name, text } = s.input
+  const ask = field === 'name' ? ' New mode’s name: ' : ` Command for ${name}: `
+  const keys = [['↵', field === 'name' ? 'next' : 'add'], ['esc', 'cancel']].flatMap(([k, what]) => [
+    [k, fg(P.text)],
+    [` ${what}  `, fg(P.sub)],
+  ])
+  const right = s.note ? [[`${s.note.text} `, fg(s.note.color)], ...keys] : keys
+  return split([[ask, BOLD + fg(P.blue)], [text, fg(P.text)], ['▏', fg(P.blue)]], right, w, BASE)
 }
 
 const quit = () => {
@@ -133,7 +169,10 @@ if (!process.stdin.isTTY) {
 }
 process.stdin.setRawMode(true)
 process.stdin.on('data', data => {
-  for (const t of tokens(data.toString('utf8'))) if (t.key && onKey(s, t.key) === 'quit') quit()
+  for (const t of tokens(data.toString('utf8'))) {
+    if (t.paste !== undefined) typeText(s, t.paste)
+    else if (t.key && onKey(s, t.key) === 'quit') quit()
+  }
   draw()
 })
 process.stdout.on('resize', draw)

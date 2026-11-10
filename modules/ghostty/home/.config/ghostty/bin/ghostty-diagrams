@@ -21,6 +21,10 @@ if [[ $from == %* ]]; then
 else
   pick="DV_TABS=$TABS_SOCKET:$from"
 fi
+popup_opens diagrams || {
+  layout display -t "$session:" "Diagrams are off in Settings › Workspace"
+  exit 0
+}
 # One at a time: a diagrams window left open behind the others goes first.
 layout kill-window -t "=$session:diagrams" 2>/dev/null
 # dv draws the window you were in, dimmed, round its frame.

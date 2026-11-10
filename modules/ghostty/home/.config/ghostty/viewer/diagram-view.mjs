@@ -38,6 +38,7 @@ import {
   tabTitle as titleOf,
   truncate,
 } from './diagram.mjs'
+import { paneModes, tabs as modeTabs } from './modes.mjs'
 import { gridRow } from './kitty.mjs'
 import { clampView, fitChips, home, panBy, placement, zoomAt } from './view.mjs'
 import { load as settings } from '../hub/settings.mjs'
@@ -60,19 +61,11 @@ const FRAME = Boolean(process.env.DV_FRAME)
 // Settings › Viewers, read on each step so a change applies at once.
 const zoomStep = () => 1 + settings()['viewer.zoomStep'] / 100
 const panStep = () => settings()['viewer.panPercent'] / 100
-const TAB_EXIT = Number(process.env.DV_TAB_EXIT) || 0
-const DIFF_EXIT = Number(process.env.DV_DIFF_EXIT) || 0
-const TODO_EXIT = Number(process.env.DV_TODO_EXIT) || 0
-// The mode header names the viewer pane's other modes when it shares the pane
-// with them: Files (DV_TAB_EXIT, which Tab goes to), Diff (DV_DIFF_EXIT) and
-// Todo (DV_TODO_EXIT).
-// Clicking one exits with its code.
-const MODES = [
-  { label: ' Diagrams ', exit: 0 },
-  { label: ' Files ', exit: TAB_EXIT },
-  { label: ' Diff ', exit: DIFF_EXIT },
-  { label: ' Todo ', exit: TODO_EXIT },
-].filter((m, i) => i === 0 || m.exit)
+// In the viewer pane, the mode header has a tab per mode that's on
+// (GV_MODES, viewer/modes.mjs); clicking one exits with its code, Tab goes to
+// the next and q where GV_QUIT says. The diagrams window has none.
+const PANE = paneModes('Diagrams', FRAME ? {} : process.env)
+const MODES = modeTabs(PANE).map(t => ({ label: t.label, exit: PANE.exitOf(t.i) }))
 const HEADER = !FRAME && MODES.length > 1
 // The frame's width on each side.
 const EDGE = FRAME ? 1 : 0
@@ -191,8 +184,8 @@ function select(i) {
 
 
 function header() {
-  const line = MODES.map((m, i) => (i === 0 ? `\x1b[7;1m${m.label}\x1b[0m` : `\x1b[2m${m.label}\x1b[0m`)).join(' ')
-  if (!TAB_EXIT) return line
+  const line = MODES.map((m, i) => (i === PANE.at ? `\x1b[7;1m${m.label}\x1b[0m` : `\x1b[2m${m.label}\x1b[0m`)).join(' ')
+  if (!PANE.next) return line
   return `${line}\x1b[${process.stdout.columns - 'tab switch'.length + 1}G\x1b[34mtab\x1b[0;2m switch\x1b[0m`
 }
 
@@ -436,10 +429,8 @@ function onKey(key) {
   const stepY = r.rows * r.ch * panStep()
   const center = [(r.cols * r.cw) / 2, (r.rows * r.ch) / 2]
   const [action, a, b] = keyAction(key, { frame: FRAME, count: state.diagrams.length }) ?? []
-  if (action === 'quit') quit()
-  // A wrapper that shares the split with another program (the Ghostty
-  // viewer) sets DV_TAB_EXIT to the exit code it switches on.
-  else if (action === 'tab') TAB_EXIT && quit(TAB_EXIT)
+  if (action === 'quit') quit(PANE.quit)
+  else if (action === 'tab') PANE.next && quit(PANE.next)
   else if (action === 'pan') pan(a * stepX, b * stepY)
   else if (action === 'zoom') zoom(a > 0 ? zoomStep() : 1 / zoomStep(), ...center)
   else if (action === 'home') select(index)

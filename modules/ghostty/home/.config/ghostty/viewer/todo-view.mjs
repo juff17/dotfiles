@@ -13,9 +13,8 @@
 //   todo-view.mjs [dir]
 // DV_TABS names the window's tab session as `socket:session`
 // (bin/ghostty-claude-start); without it, dir is the folder.
-// TD_FILES_EXIT, TD_DIFF_EXIT and TD_DIAGRAMS_EXIT are the exit codes that
-// switch the pane to another mode (bin/ghostty-viewer); Tab goes to Diagrams,
-// q to Files. TD_POPUP=1 runs it in Alt+T's popup (bin/ghostty-todo-panel)
+// In the viewer pane, its header has a tab per mode that's on, from GV_MODES
+// (viewer/modes.mjs); Tab goes to the next one, q where GV_QUIT says. TD_POPUP=1 runs it in Alt+T's popup (bin/ghostty-todo-panel)
 // instead: no modes, Alt+T, Esc or q close it, and so does going to a tab.
 
 import { execFile, spawn } from 'node:child_process'
@@ -30,6 +29,7 @@ import { launch } from '../hub/model.mjs'
 import { go as openInHub } from '../hub/tray.mjs'
 import { CATEGORIES, STORE, TYPES, add, age, arrange, change, colorOf, fill, filingState, handoffPlace, handoffSpec, knownRepos, load, remove, repoOf, stamp, typeColorOf } from './todo.mjs'
 import * as ui from './todo-ui.mjs'
+import { paneModes, tabs as modeTabs } from './modes.mjs'
 import { EDIT_FIELDS, FIELD_NAMES, FIELDS, KEYS, fit, tidy, visible, wrap } from './todo-ui.mjs'
 
 const TODO_CLI = join(dirname(fileURLToPath(import.meta.url)), '../bin/ghostty-todo')
@@ -41,16 +41,9 @@ const LAYOUT_SOCKET = process.env.GHOSTTY_LAYOUT_SOCKET || 'ghostty-layout'
 // The tab session touches this file when the active tab changes (tmux.conf).
 const TAB_CHANGED = `${process.env.XDG_RUNTIME_DIR || '/tmp'}/ghostty-layout/tab-changed`
 const CLAUDE_FILE = join(process.env.XDG_CACHE_HOME || join(homedir(), '.cache'), 'ghostty-layout/claude')
-const FILES_EXIT = Number(process.env.TD_FILES_EXIT) || 0
-const DIFF_EXIT = Number(process.env.TD_DIFF_EXIT) || 0
-const DIAGRAMS_EXIT = Number(process.env.TD_DIAGRAMS_EXIT) || 0
 const POPUP = process.env.TD_POPUP === '1'
-const MODES = [
-  { label: ' Diagrams ', exit: DIAGRAMS_EXIT },
-  { label: ' Files ', exit: FILES_EXIT },
-  { label: ' Diff ', exit: DIFF_EXIT },
-  { label: ' Todo ', exit: 0 },
-]
+const PANE = paneModes('Todo', POPUP ? {} : process.env)
+const MODES = modeTabs(PANE).map(t => ({ label: t.label, exit: PANE.exitOf(t.i) }))
 const REFRESH_MS = 2000
 // How long a note under the list shows: Settings' todo.noteSecs.
 const sayMs = () => settings()['todo.noteSecs'] * 1000
@@ -209,7 +202,8 @@ const clock = ms => new Date(ms).toTimeString().slice(0, 5)
 
 function header() {
   if (POPUP) return `${C.text}${C.bold} Todo${C.reset}\x1b[${width() - 'alt+t close'.length}G${hint([['alt+t', 'close']])}`
-  const line = MODES.map((m, i) => (i === 3 ? `${C.tabBg}${C.crust}${C.bold}${m.label}${C.reset}` : `${C.sub}${C.bold}${m.label}${C.reset}`)).join(' ')
+  const line = MODES.map((m, i) => (i === PANE.at ? `${C.tabBg}${C.crust}${C.bold}${m.label}${C.reset}` : `${C.sub}${C.bold}${m.label}${C.reset}`)).join(' ')
+  if (!PANE.next) return line
   return `${line}\x1b[${width() - 'tab switch'.length + 1}G${hint([['tab', 'switch']])}`
 }
 
@@ -859,9 +853,9 @@ function onKey(key) {
   if (prompt && ui.promptTakes(key, POPUP)) return onPromptKey(key)
   const page = Math.max(1, Math.floor(bodyHeight() / 2))
   const actions = {
-    quit: () => quit(POPUP ? 0 : FILES_EXIT),
+    quit: () => quit(PANE.quit),
     close: () => POPUP && quit(),
-    'next-mode': () => DIAGRAMS_EXIT && quit(DIAGRAMS_EXIT),
+    'next-mode': () => PANE.next && quit(PANE.next),
     down: () => moveCursor(1),
     up: () => moveCursor(-1),
     'page-down': () => moveCursor(page),

@@ -25,9 +25,24 @@ const flags = (key, label, choices, def, sub = '') => ({ key, label, sub, type: 
 // binds, or a ctrl+shift key Ghostty sends for `run` (config.ghostty).
 // hub/keybinds.mjs applies them; '' is unbound.
 const keybind = (key, label, kind, def, run, sub = '') => ({ key, label, sub, type: 'key', kind, default: def, run })
+const modes = (key, label, def, sub = '') => ({ key, label, sub, type: 'modes', default: def })
 // Where an agent's instructions are (hub/prompts.mjs): not a setting, but a
 // line the panel shows beside the agent's settings.
 const prompt = id => ({ prompt: id })
+
+// The viewer pane's modes (bin/ghostty-viewer): these four, in the order
+// the list puts them, and any you add, which run a command of yours in the
+// pane. A mode is { id, on }, plus name and cmd for one you added, whose id
+// starts with x-.
+export const BUILTIN_MODES = [
+  { id: 'files', name: 'Files', sub: 'yazi, in Claude’s folder' },
+  { id: 'diff', name: 'Diff', sub: 'the active tab’s uncommitted changes' },
+  { id: 'todo', name: 'Todo', sub: 'every repo’s todos' },
+  { id: 'diagrams', name: 'Diagrams', sub: 'the diagrams Claude draws' },
+]
+const BUILTIN = new Map(BUILTIN_MODES.map(m => [m.id, m]))
+export const isAdded = id => /^x-[a-z0-9-]{1,40}$/.test(id)
+export const modeName = m => BUILTIN.get(m.id)?.name ?? m.name
 
 const MODEL = ['default', 'opus', 'sonnet', 'haiku']
 const MODE = ['default', 'auto', 'acceptEdits', 'plan']
@@ -160,6 +175,31 @@ export const SECTIONS = [
     ],
   },
   {
+    id: 'workspace',
+    name: 'Workspace',
+    where: 'the viewer pane on the left: its modes, their order and how it opens',
+    rows: [
+      head('Viewer modes · their order is the tab cycle'),
+      modes(
+        'workspace.modes',
+        'Viewer modes',
+        BUILTIN_MODES.map(m => ({ id: m.id, on: true })),
+        'off hides a mode from the header and the tab cycle; its data stays',
+      ),
+      head('Startup'),
+      choice('workspace.viewerShown', 'Viewer pane in new windows', [['hidden', 'hidden'], ['shown', 'shown']], 'hidden', 'hidden: Alt+V or the rail’s view button opens it'),
+      choice(
+        'workspace.startMode',
+        'Viewer opens in',
+        [['first', 'first mode on'], ...BUILTIN_MODES.map(m => [m.id, m.name])],
+        'first',
+        'a mode that is off falls back to the first one on',
+      ),
+      head('When a mode is off'),
+      choice('workspace.popupsWhenOff', 'Its popup key', [['works', 'still works'], ['off', 'off too']], 'works', 'Alt+T for Todo, Alt+D for Diagrams'),
+    ],
+  },
+  {
     id: 'layout',
     name: 'Layout',
     where: 'the parts of every Ghostty window',
@@ -224,7 +264,36 @@ export function valid(r, v) {
   if (r.type === 'number') return Number.isFinite(v) && v >= r.min && v <= r.max
   if (r.type === 'flags') return Array.isArray(v) && v.every(x => r.choices.some(c => c.value === x))
   if (r.type === 'key') return v === '' || (typeof v === 'string' && KEY_PATTERN[r.kind].test(v))
+  if (r.type === 'modes') return validModes(v)
   return false
+}
+
+const text = (v, most) => typeof v === 'string' && v.trim() !== '' && v.length <= most && !/[\t\n\r]/.test(v)
+
+// A list of modes: each one once, the four built in by id only, one you
+// added with a name and a command, and at least one on.
+function validModes(v) {
+  if (!Array.isArray(v) || !v.some(m => m?.on === true)) return false
+  const ids = new Set()
+  for (const m of v) {
+    if (!m || typeof m !== 'object' || typeof m.on !== 'boolean' || ids.has(m.id)) return false
+    ids.add(m.id)
+    if (BUILTIN.has(m.id)) continue
+    if (!isAdded(m.id) || !text(m.name, 24) || !text(m.cmd, 500)) return false
+  }
+  return true
+}
+
+// A built-in mode the list doesn't have, one a later version adds, goes on
+// at its end.
+const withBuiltins = list => [...list, ...BUILTIN_MODES.filter(b => !list.some(m => m.id === b.id)).map(b => ({ id: b.id, on: true }))]
+
+// The id for a mode added as `name`, unlike the ids in `list`.
+export function addedId(name, list) {
+  const base = `x-${name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 30) || 'mode'}`
+  let id = base
+  for (let n = 2; list.some(m => m.id === id); n++) id = `${base}-${n}`
+  return id
 }
 
 function readJson(file) {
@@ -257,6 +326,7 @@ export function load(file = settingsFile()) {
   const saved = raw(file)
   const values = {}
   for (const r of ROWS) values[r.key] = valid(r, saved[r.key]) ? saved[r.key] : r.default
+  values['workspace.modes'] = withBuiltins(values['workspace.modes'])
   cache = { file, mtime, values: Object.freeze(values) }
   return cache.values
 }
@@ -304,4 +374,6 @@ export const toggleFlag = (r, value, flag) => r.choices.map(c => c.value).filter
 export const show = (r, v) =>
   r.type === 'key'
     ? v || 'unbound'
+    : r.type === 'modes'
+      ? v.filter(m => m.on).map(modeName).join(', ')
     : r.type === 'number' ? `${v}${r.unit}` : r.type === 'bool' ? (v ? 'on' : 'off') : r.type === 'choice' ? (r.choices.find(c => c.value === v)?.label ?? String(v)) : v.join(', ')
