@@ -147,7 +147,9 @@ export function nextType(type) {
 export const filingHint = item =>
   filingState(item) === 'failed' ? 'r retries it, Shift+A adds it by hand, x drops it' : 'Claude is still filing this; x drops it'
 
-// Keeps the selected item's whole card in view, its row first.
+// Keeps the selected item's whole card in view, its row first. The first item
+// in a group brings its group's header along when the card still fits, or
+// scrolling back up would leave the header just off the top.
 export function scrollTo(rows, current, scroll, height) {
   // With nothing selected, rows without an item (headers, and past the end)
   // would all match it.
@@ -157,6 +159,8 @@ export function scrollTo(rows, current, scroll, height) {
   if (first >= 0) {
     if (last >= scroll + height) scroll = last - height + 1
     if (first < scroll) scroll = first
+    const top = rows[first - 1]?.header ? first - 1 : first
+    if (top < scroll && last - top < height) scroll = top
   }
   return Math.max(0, Math.min(scroll, Math.max(0, rows.length - height)))
 }

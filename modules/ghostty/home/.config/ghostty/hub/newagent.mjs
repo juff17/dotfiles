@@ -29,7 +29,7 @@ const BRANCH = [
   { id: 'worktree', label: 'Worktree', sub: 'its own worktree and branch' },
 ]
 const CHOICES = {
-  model: ['default', 'opus', 'sonnet', 'haiku'],
+  model: ['default', 'fable', 'opus', 'sonnet', 'haiku'],
   mode: ['default', 'auto', 'acceptEdits', 'plan'],
   effort: ['default', 'low', 'medium', 'high', 'xhigh'],
 }
@@ -40,8 +40,8 @@ const BOX = bg(P.base)
 const MARGIN_X = 3
 const MARGIN_Y = 1
 const HINTS = '↑/↓ field   ←/→ choose   tab complete folder   ctrl+s start   esc cancel'
-// The tallest form is a task's: kind and its note, a gap, folder, recent, a
-// gap, the prompt, a gap, run as, branch and their note, a gap, model, mode,
+// The tallest form is a task's: the prompt, a gap, kind and its note, a gap,
+// folder, recent, a gap, run as, branch and their note, a gap, model, mode,
 // effort, a gap, Start. Below it a gap, then the keys.
 const BODY_ROWS = 17
 const LABEL_COLS = 10
@@ -68,7 +68,7 @@ let menu = null
 
 export function fields() {
   const k = KINDS[d.kind].id
-  return ['kind', 'folder', 'recent', k === 'task' ? 'prompt' : 'target', ...(k === 'task' ? ['runAs', 'branch'] : []), 'model', 'mode', 'effort', 'start']
+  return [k === 'task' ? 'prompt' : 'target', 'kind', 'folder', 'recent', ...(k === 'task' ? ['runAs', 'branch'] : []), 'model', 'mode', 'effort', 'start']
 }
 
 // `ghost` is the rest of a suggestion, drawn dim after the text with the
@@ -182,6 +182,12 @@ function draw() {
   const label = (name, f) => [[name.padEnd(LABEL_COLS), fg(d.field === f ? P.blue : P.sub)]]
   const row = (f, spans) => body.push({ f, line: spans })
   const note = text => row(null, [[`${' '.repeat(LABEL_COLS)}${text}`, fg(P.overlay1)]])
+  // What to do comes first, where the cursor starts; the choices follow.
+  if (kind === 'task') row('prompt', [...label('Task', 'prompt'), { input: 'prompt' }])
+  else row('target', [...label(kind === 'pr' ? 'PR link' : 'Watch', 'target'), { input: 'target' }])
+  if (kind === 'pr') note('starts /pr-babysit in the background; it lands in Monitors')
+  if (kind === 'logs') note('a command or service, e.g. docker compose logs api; runs /logger')
+  row(null, [])
   row('kind', [
     ...label('Kind', 'kind'),
     ...KINDS.flatMap((x, i) => [
@@ -200,11 +206,6 @@ function draw() {
       ...recents.flatMap((p, i) => [[` ${p.split('/').pop()} `, i === d.recent && d.field === 'recent' ? fg(P.crust) + bg(P.blue) : fg(P.text) + bg(P.surface0)], [' ', '']]),
     ],
   )
-  row(null, [])
-  if (kind === 'task') row('prompt', [...label('Task', 'prompt'), { input: 'prompt' }])
-  else row('target', [...label(kind === 'pr' ? 'PR link' : 'Watch', 'target'), { input: 'target' }])
-  if (kind === 'pr') note('starts /pr-babysit in the background; it lands in Monitors')
-  if (kind === 'logs') note('a command or service, e.g. docker compose logs api; runs /logger')
   if (kind === 'task') {
     row(null, [])
     const radio = (f, name, opts) =>

@@ -51,7 +51,7 @@ const BUILTIN = new Map(BUILTIN_MODES.map(m => [m.id, m]))
 export const isAdded = id => /^x-[a-z0-9-]{1,40}$/.test(id)
 export const modeName = m => BUILTIN.get(m.id)?.name ?? m.name
 
-const MODEL = ['default', 'opus', 'sonnet', 'haiku']
+const MODEL = ['default', 'fable', 'opus', 'sonnet', 'haiku']
 const MODE = ['default', 'auto', 'acceptEdits', 'plan']
 const EFFORT = ['default', 'low', 'medium', 'high', 'xhigh']
 const ASK = [['ask', 'ask'], ['auto', 'auto']]
@@ -152,7 +152,7 @@ export const SECTIONS = [
     where: 'the Todo list: w hands todos to agents, a files one with Claude',
     rows: [
       head('Hand-off'),
-      choice('todo.handoff.model', 'Model', ['opus', 'sonnet', 'haiku'], 'opus', 'm in the hand-off picker'),
+      choice('todo.handoff.model', 'Model', ['fable', 'opus', 'sonnet', 'haiku'], 'opus', 'm in the hand-off picker'),
       choice('todo.handoff.mode', 'Permission mode', MODE, 'auto'),
       choice('todo.handoff.effort', 'Effort', EFFORT, 'medium'),
       choice('todo.handoff.runAs', 'Run in', [['tab', 'new tab'], ['bg', 'background']], 'tab', 't in the picker; the alt+t popup outside a window always runs in the background'),
@@ -160,7 +160,7 @@ export const SECTIONS = [
       choice('todo.handoff.merge', 'Before merging into main', [['ask', 'ask'], ['never', 'never merge']], 'ask', 'own-worktree agents only'),
       prompt('todo-handoff'),
       head('Filing'),
-      choice('todo.filing.model', 'Model', [['haiku', 'haiku 5.5'], ['sonnet', 'sonnet 5.5']], 'haiku', 'writes the title, category and note'),
+      choice('todo.filing.model', 'Model', [['haiku', 'haiku 5.5'], ['sonnet', 'sonnet 5.5'], ['fable', 'fable 5.2']], 'haiku', 'writes the title, category and note'),
       choice('todo.filing.effort', 'Effort', ['low', 'medium', 'high'], 'medium'),
       number('todo.filing.limit', 'Give up after', 3, { min: 1, max: 10, unit: 'm' }, 'then the item shows the error'),
       head('List'),

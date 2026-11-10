@@ -36,7 +36,7 @@ test('a new form is a task, in its own worktree, on the prompt, with opus, auto 
   assert.equal(d.folder.text, '~/projects/alpha')
   assert.equal(d.folder.at, d.folder.text.length)
   assert.equal(d.recent, 1)
-  assert.deepEqual(fields(), ['kind', 'folder', 'recent', 'prompt', 'runAs', 'branch', 'model', 'mode', 'effort', 'start'])
+  assert.deepEqual(fields(), ['prompt', 'kind', 'folder', 'recent', 'runAs', 'branch', 'model', 'mode', 'effort', 'start'])
   type('go')
   const { done } = key(CTRL_S)
   assert.deepEqual(done, {
@@ -116,20 +116,21 @@ test('Enter moves to the next field, and starts on Start', () => {
   const d = form({ folder: P })
   type('go')
   key('\r')
-  assert.equal(d.field, 'runAs')
+  assert.equal(d.field, 'kind')
   at(d, 'start')
   assert.equal(key('\r').done.prompt, 'go')
 })
 
 test('up, down, tab and shift+tab move between fields, held at the ends', () => {
   const d = form({ folder: P })
-  keys(UP, UP, UP)
-  assert.equal(d.field, 'kind')
+  // The prompt is the top field.
   keys(UP)
-  assert.equal(d.field, 'kind')
-  keys(DOWN, DOWN, '\t')
   assert.equal(d.field, 'prompt')
+  keys(DOWN, '\t', DOWN)
+  assert.equal(d.field, 'recent')
   keys(SHIFT_TAB, SHIFT_TAB)
+  assert.equal(d.field, 'kind')
+  keys(DOWN)
   assert.equal(d.field, 'folder')
   // On Folder, tab completes rather than moving on.
   d.folder = { text: '~/projects/zz', at: 13 }
@@ -143,7 +144,7 @@ test('up, down, tab and shift+tab move between fields, held at the ends', () => 
 test('PR and log monitors ask for a target instead of a prompt, and no run-as or branch', () => {
   const d = at(form({ folder: P }), 'kind')
   keys(RIGHT)
-  assert.deepEqual(fields(), ['kind', 'folder', 'recent', 'target', 'model', 'mode', 'effort', 'start'])
+  assert.deepEqual(fields(), ['target', 'kind', 'folder', 'recent', 'model', 'mode', 'effort', 'start'])
   assert.equal(key(CTRL_S), undefined)
   assert.equal(d.field, 'target')
   assert.equal(d.error, 'Paste the PR or MR link')
@@ -160,19 +161,19 @@ test('PR and log monitors ask for a target instead of a prompt, and no run-as or
 test('changing kind resets model, mode and effort to what it starts with', () => {
   const d = at(form({ folder: P }), 'model')
   keys(RIGHT)
-  assert.equal(d.model, 2)
+  assert.equal(d.model, 3)
   at(d, 'kind')
   keys(RIGHT)
   // A monitor mostly waits, so sonnet.
-  assert.deepEqual([d.model, d.mode, d.effort], [2, 1, 2])
+  assert.deepEqual([d.model, d.mode, d.effort], [3, 1, 2])
   keys(LEFT)
-  assert.deepEqual([d.model, d.mode, d.effort], [1, 1, 2])
+  assert.deepEqual([d.model, d.mode, d.effort], [2, 1, 2])
   assert.equal(d.field, 'kind')
 })
 
 test('choices step with → and space, back with ←, and wrap both ways', () => {
   const d = at(form({ folder: P }), 'model')
-  const model = () => ['default', 'opus', 'sonnet', 'haiku'][d.model]
+  const model = () => ['default', 'fable', 'opus', 'sonnet', 'haiku'][d.model]
   assert.equal(model(), 'opus')
   keys(RIGHT, ' ', ' ')
   assert.equal(model(), 'default')
@@ -275,7 +276,7 @@ test('a paste joins its lines and drops control characters; outside a text field
   at(d, 'model')
   key('', 'ignored')
   assert.equal(d.prompt.text, 'first line second line ')
-  assert.equal(d.model, 1)
+  assert.equal(d.model, 2)
 })
 
 test('folder matches: those that start with it, then any case; dirs and their links only', () => {

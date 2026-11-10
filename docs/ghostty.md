@@ -96,11 +96,11 @@ Diagrams come from the claude module's diagram-pane mod (`modules/claude/mods/ge
 | `j` / `k`, scroll in Todo | Move between todos (`g` / `G`: first / last) |
 | `enter` in Todo | Open the agent it was handed to in the hub, else go to the tab that added it; a second `enter` reopens a closed one |
 | `space` in Todo | Mark done, or reopen a done one |
-| `a` in Todo | Add with Claude: describe it and Claude Haiku files it. On an empty line, `shift+a` switches to adding by hand |
+| `a` in Todo | Add with Claude: describe it and Claude files it, with the filing model from Settings (haiku, sonnet or fable). On an empty line, `shift+a` switches to adding by hand |
 | `shift+a` in Todo | Add by hand: title, category (`1`–`6`), then a note (`enter` on an empty note skips it). On a filing that failed, starts from its message |
 | `r` in Todo | Retry a filing that failed |
 | `m` / `shift+m` in Todo | Mark a todo for hand-off (the cursor moves on) / clear the marks |
-| `w` in Todo | Hand the marked todos, or the selected one, to agents, one each: `t` tab or background, `b` worktree or the branch it was added on, `m` opus, sonnet or haiku, `enter` starts them, `esc` cancels |
+| `w` in Todo | Hand the marked todos, or the selected one, to agents, one each: `t` tab or background, `b` worktree or the branch it was added on, `m` fable, opus, sonnet or haiku, `enter` starts them, `esc` cancels |
 | `e` in Todo | Edit: the card shows the title, category, type, directory and note as a form. `tab` / `shift+tab` move between them, `1`–`6` or `←` / `→` pick the category, `1`–`5` (`0` for none) or `←` / `→` the type, `←` / `→` the directory (the repos `ghostty-todo repos` lists, then none) or type to filter them, `enter` saves, `esc` cancels. A new directory moves the item to that repo's main checkout, dropping its branch, worktree and Claude session |
 | `c` / `t` / `x` in Todo | Next category, next type (research, decide, action, review, chore, none), delete (`x` twice; on a filing, drops it and stops Claude) |
 | `f` / `d` in Todo | This repo only or every repo / show what's done today |
@@ -209,6 +209,35 @@ Drawing, and anything that needs a live tmux server, has no tests. The tests use
 ```
 
 That runs every `*.test.mjs` under `viewer/` and `hub/`, so a new test file is picked up on its own. CI runs these and the `claude` module's tests on every push to main and every PR (`.github/workflows/tests.yml`).
+
+### Trying a worktree's changes in the open Ghostty
+
+The links in `~/.config/ghostty/` point at the main checkout. The scripts in `bin/` source `ghostty-lib.sh`, which sets `GHOSTTY_CONF` from its own real path, so whatever a script runs (`viewer/`, `hub/`) comes from the checkout that script lives in. Repointing a link under `viewer/` does nothing; repoint the `bin/` script the key runs. The tmux keys run `#{@conf}/bin/<script>`, and `@conf` is `~/.config/ghostty`.
+
+1. Find the script behind the key in `layout.conf` (Alt+T runs `bin/ghostty-todo-panel`).
+2. Check the change in a throwaway tmux server first, before and after, so you know you're about to test the fix and not a guess. For the Todo list:
+
+   ```bash
+   wt=<worktree>/modules/ghostty/home/.config/ghostty
+   tmux -L try -f /dev/null new-session -d -x 150 -y 30 "TD_POPUP=1 node $wt/viewer/todo-view.mjs $PWD"
+   tmux -L try send-keys j        # whatever reproduces it
+   tmux -L try capture-pane -p | head
+   tmux -L try kill-server
+   ```
+
+   Run it again with the main checkout's path to see the bug still there.
+3. Point the live link at the worktree's copy:
+
+   ```bash
+   ln -sfn <worktree>/modules/ghostty/home/.config/ghostty/bin/ghostty-todo-panel ~/.config/ghostty/bin/ghostty-todo-panel
+   ```
+
+   A popup starts a new process each time it opens, so the next Alt+T runs the worktree's code. Something long-running needs a restart: the hub, say (see its `forever` loop in `bin/ghostty-hub`).
+4. When you're done, merged or not, point it back before the worktree is removed, or the key breaks:
+
+   ```bash
+   ln -sfn ~/projects/personal/dotfiles/modules/ghostty/home/.config/ghostty/bin/ghostty-todo-panel ~/.config/ghostty/bin/ghostty-todo-panel
+   ```
 
 ## Limits
 

@@ -89,7 +89,7 @@ export const SECTIONS = [
       ['↵', 'Open its agent in the hub, or go to the tab that added it'],
       ['↵ ↵', 'Reopen its tab with claude --resume when it’s closed', true],
       ['space', 'Mark done, or reopen'],
-      ['a', 'Add with Claude: describe it and Haiku files it'],
+      ['a', 'Add with Claude: describe it and Claude files it'],
       ['shift+a', 'Add by hand: title, category 1–6, then a note'],
       ['r', 'Retry a filing Claude couldn’t finish', true],
       ['e', 'Edit: title, category, type, directory and note in one form; tab moves, ↵ saves'],

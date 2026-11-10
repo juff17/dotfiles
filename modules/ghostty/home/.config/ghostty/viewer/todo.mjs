@@ -266,7 +266,7 @@ export function knownRepos(items, { exists = existsSync, list = dir => readdirSy
 // worktree or folder the item was added in. Undefined when none of those is
 // on disk any more. Outside git there is no worktree to make, so the spec
 // says worktree: false.
-export const HANDOFF_MODELS = ['opus', 'sonnet', 'haiku']
+export const HANDOFF_MODELS = ['fable', 'opus', 'sonnet', 'haiku']
 
 // Whether the item's repo is a git repo still, which a worktree needs.
 export const inGit = (item, exists = existsSync) => item.repo !== 'none' && !!item.root && exists(join(item.root, '.git'))
