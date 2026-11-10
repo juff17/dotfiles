@@ -150,6 +150,7 @@ export const SECTIONS = [
       ['d', 'Every change in the push, in less', true],
       ['J / K  pgdn / pgup', 'Scroll a proposal too tall for the popup; a waits until all of it was on screen', true],
       ['g', 'Go to the babysit session'],
+      ['o', 'Open its comment, job, run or PR on GitHub or GitLab'],
       ['esc or alt+a', 'Close'],
     ],
   },
