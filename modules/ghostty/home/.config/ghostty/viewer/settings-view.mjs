@@ -125,6 +125,8 @@ function draw() {
         ? [['space', 'on/off'], ['J K', 'move'], ['x', 'remove'], ['a', 'add']]
         : r.type === 'addMode'
           ? [['↵', 'add a mode']]
+          : r.type === 'file'
+            ? [['↵', 'type a path'], ['backspace', 'clear']]
           : r.type === 'flags'
       ? [['←→', 'pick'], ['space', 'turn on/off']]
       : r.type === 'bool'
@@ -150,12 +152,13 @@ function draw() {
   paint(lines.slice(0, rows()))
 }
 
-// The footer while a new mode is typed: what it asks, the text so far with
-// a cursor, and the keys.
+// The footer while a new mode or a path is typed: what it asks, the text
+// so far with a cursor, and the keys.
 function promptLine(w) {
-  const { field, name, text } = s.input
-  const ask = field === 'name' ? ' New mode’s name: ' : ` Command for ${name}: `
-  const keys = [['↵', field === 'name' ? 'next' : 'add'], ['esc', 'cancel']].flatMap(([k, what]) => [
+  const { field, name, label, text } = s.input
+  const ask = field === 'file' ? ` ${label}: ` : field === 'name' ? ' New mode’s name: ' : ` Command for ${name}: `
+  const done = field === 'file' ? 'save' : field === 'name' ? 'next' : 'add'
+  const keys = [['↵', done], ['esc', 'cancel']].flatMap(([k, what]) => [
     [k, fg(P.text)],
     [` ${what}  `, fg(P.sub)],
   ])

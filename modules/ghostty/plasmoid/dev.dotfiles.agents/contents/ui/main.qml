@@ -107,8 +107,10 @@ PlasmoidItem {
                      + " " + quote((it.section === "broke" ? "✗ " : "▲ ") + it.title) + " " + quote(it.meta || ""))
         const loud = news.some(it => it.section === "broke" ? setting("soundBroke", false) : setting("soundYou", false))
         if (loud && !(setting("quiet", true) && ghosttyActive())) {
+            const file = String(setting("soundFile", ""))
             const name = String(setting("sound", "message-new-instant")).replace(/[^a-z-]/g, "")
-            fire("canberra-gtk-play -i " + name + " 2>/dev/null || paplay /usr/share/sounds/freedesktop/stereo/" + name + ".oga")
+            if (file) fire("canberra-gtk-play -f " + quote(file) + " 2>/dev/null || paplay " + quote(file))
+            else fire("canberra-gtk-play -i " + name + " 2>/dev/null || paplay /usr/share/sounds/freedesktop/stereo/" + name + ".oga")
         }
     }
     property bool started: false

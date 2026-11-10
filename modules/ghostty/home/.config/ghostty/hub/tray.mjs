@@ -31,7 +31,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { RUN, alivePid, follow, markReviewed, readState } from './client.mjs'
 import { brokeTags, lanes, monitorsOf } from './model.mjs'
-import { load as settings } from './settings.mjs'
+import { expandHome, row as settingRow, load as settings } from './settings.mjs'
 import { ago } from './term.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
@@ -248,7 +248,10 @@ export function widgetSettings() {
     desktop: s['tray.desktop'],
     soundYou: s['tray.soundYou'],
     soundBroke: s['tray.soundBroke'],
-    sound: s['tray.sound'],
+    // A custom sound with no file set plays the default one.
+    ...(s['tray.sound'] === 'custom'
+      ? { sound: settingRow('tray.sound').default, soundFile: s['tray.soundFile'] && expandHome(s['tray.soundFile']) }
+      : { sound: s['tray.sound'], soundFile: '' }),
     quiet: s['tray.quiet'],
     flashMs: s['tray.flash'] * 1000,
     foldDone: s['tray.foldDone'],

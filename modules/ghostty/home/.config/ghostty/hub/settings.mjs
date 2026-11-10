@@ -26,6 +26,8 @@ const flags = (key, label, choices, def, sub = '') => ({ key, label, sub, type: 
 // hub/keybinds.mjs applies them; '' is unbound.
 const keybind = (key, label, kind, def, run, sub = '') => ({ key, label, sub, type: 'key', kind, default: def, run })
 const modes = (key, label, def, sub = '') => ({ key, label, sub, type: 'modes', default: def })
+// A path to a file, typed in the panel's footer; '' is none.
+const file = (key, label, sub = '') => ({ key, label, sub, type: 'file', default: '' })
 // Where an agent's instructions are (hub/prompts.mjs): not a setting, but a
 // line the panel shows beside the agent's settings.
 const prompt = id => ({ prompt: id })
@@ -54,7 +56,7 @@ const MODE = ['default', 'auto', 'acceptEdits', 'plan']
 const EFFORT = ['default', 'low', 'medium', 'high', 'xhigh']
 const ASK = [['ask', 'ask'], ['auto', 'auto']]
 const TRAY_SECTIONS = [['you', '▲ you'], ['broke', '✗ broke'], ['work', '✻ work'], ['watch', '◉ watch'], ['done', '✓ done']]
-const SOUNDS = ['message-new-instant', 'bell', 'complete', 'dialog-warning', 'message']
+const SOUNDS = ['message-new-instant', 'bell', 'complete', 'dialog-warning', 'message', ['custom', 'custom file']]
 const agent = (prefix, model, sub = '') => [
   choice(`${prefix}.model`, 'Model', MODEL, model, sub),
   choice(`${prefix}.mode`, 'Permission mode', MODE, 'auto'),
@@ -213,7 +215,8 @@ export const SECTIONS = [
       head('Sounds'),
       bool('tray.soundYou', 'Sound when something needs you', false, 'a new ▲ in the tray'),
       bool('tray.soundBroke', 'Sound when something breaks', false, 'a new ✗ in the tray'),
-      choice('tray.sound', 'Sound', SOUNDS, 'message-new-instant', 'from the freedesktop sound theme'),
+      choice('tray.sound', 'Sound', SOUNDS, 'message-new-instant', 'from the freedesktop sound theme, or the file below'),
+      file('tray.soundFile', 'Sound file', 'for Sound › custom file: an .oga, .ogg or .wav; ↵ to type its path'),
       bool('tray.quiet', 'Quiet while Ghostty is focused', true, 'only play when you are in another window'),
       bool('tray.tabBell', 'Tab bell', true, 'ghostty-claude-ping turns a tab red when Claude stops or asks'),
     ],
@@ -335,6 +338,7 @@ export function valid(r, v) {
   if (r.type === 'flags') return Array.isArray(v) && v.every(x => r.choices.some(c => c.value === x))
   if (r.type === 'key') return v === '' || (typeof v === 'string' && KEY_PATTERN[r.kind].test(v))
   if (r.type === 'modes') return validModes(v)
+  if (r.type === 'file') return v === '' || (text(v, 500) && /^(\/|~\/)/.test(v))
   return false
 }
 
@@ -441,9 +445,14 @@ export function step(r, value, dir) {
 // A flag turned on or off, kept in the order the choices list them.
 export const toggleFlag = (r, value, flag) => r.choices.map(c => c.value).filter(v => (v === flag ? !value.includes(v) : value.includes(v)))
 
+// A path as the shell would take it: ~/ is your home folder.
+export const expandHome = p => (p.startsWith('~/') ? join(homedir(), p.slice(2)) : p)
+
 export const show = (r, v) =>
   r.type === 'key'
     ? v || 'unbound'
+    : r.type === 'file'
+      ? v || 'none'
     : r.type === 'modes'
       ? v.filter(m => m.on).map(modeName).join(', ')
     : r.type === 'number' ? `${v}${r.unit}` : r.type === 'bool' ? (v ? 'on' : 'off') : r.type === 'choice' ? (r.choices.find(c => c.value === v)?.label ?? String(v)) : v.join(', ')

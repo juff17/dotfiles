@@ -1,7 +1,7 @@
 // node --test modules/ghostty/home/.config/ghostty/hub/tray.test.mjs
 import assert from 'node:assert/strict'
 import { mkdtempSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { readApprovals, runApproval, trayItems, widgetSettings } from './tray.mjs'
@@ -164,6 +164,7 @@ test('the widget gets its chip, sounds, flash and inbox from Settings', () => {
     soundYou: false,
     soundBroke: false,
     sound: 'message-new-instant',
+    soundFile: '',
     quiet: true,
     flashMs: 2000,
     foldDone: true,
@@ -172,6 +173,22 @@ test('the widget gets its chip, sounds, flash and inbox from Settings', () => {
     inboxWidth: 600,
     inboxHeight: 720,
   })
+})
+
+test('a custom sound gives the widget its file, from ~ out; with no file, the default sound', () => {
+  const file = join(mkdtempSync(join(tmpdir(), 'tray-sound-')), 'settings.json')
+  const was = process.env.AGENT_HUB_SETTINGS
+  process.env.AGENT_HUB_SETTINGS = file
+  try {
+    writeFileSync(file, JSON.stringify({ 'tray.sound': 'custom', 'tray.soundFile': '~/ding.oga' }))
+    const w = widgetSettings()
+    assert.equal(w.soundFile, join(homedir(), 'ding.oga'))
+    assert.equal(w.sound, 'message-new-instant')
+    writeFileSync(file, JSON.stringify({ 'tray.sound': 'custom' }))
+    assert.deepEqual([widgetSettings().sound, widgetSettings().soundFile], ['message-new-instant', ''])
+  } finally {
+    process.env.AGENT_HUB_SETTINGS = was
+  }
 })
 
 const proposal = (kind, extra = {}) => ({

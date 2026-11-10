@@ -3,13 +3,16 @@
 // { sec, sel, flag, scroll, note, capture, input }: the section, the setting
 // in it, which flag ←/→ is on in a row of flags, the body's scroll, the
 // footer's note (set when a save fails or a key can't do what it would),
-// whether a Keybinds row waits for its new key, and the name and command
-// being typed for a new viewer mode. Changes are saved to hub/settings.mjs's
-// file as they're made. It's keys only: clicks do nothing. On a Keybinds row
-// ↵ waits for the new key (s.capture) and backspace unbinds it.
+// whether a Keybinds row waits for its new key, and what the footer is
+// typing: the name and command for a new viewer mode, or a file's path.
+// Changes are saved to hub/settings.mjs's file as they're made. It's keys
+// only: clicks do nothing. On a Keybinds row ↵ waits for the new key
+// (s.capture) and backspace unbinds it.
+
+import { statSync } from 'node:fs'
 
 import { BOLD, P, fg } from '../hub/term.mjs'
-import { BUILTIN_MODES, SECTIONS, addedId, isAdded, load, modeName, reset, set, show, step, toggleFlag } from '../hub/settings.mjs'
+import { BUILTIN_MODES, SECTIONS, addedId, expandHome, isAdded, load, modeName, reset, set, show, step, toggleFlag } from '../hub/settings.mjs'
 import { apply, captured, clash } from '../hub/keybinds.mjs'
 
 // What a saved keybind does next; tests put a stand-in here.
@@ -47,6 +50,11 @@ export function valueSpans(r, v, on, flag, capture) {
     return [[show(r, v), v ? (on ? BOLD : '') + fg(P.text) : fg(P.overlay1)]]
   }
   if (r.type === 'bool') return [[v ? '● on' : '○ off', fg(v ? P.green : P.sub)]]
+  // A long path keeps its end, which names the file.
+  if (r.type === 'file') {
+    const text = v.length > VALUE - 1 ? `…${v.slice(-(VALUE - 2))}` : show(r, v)
+    return [[text, v ? (on ? BOLD : '') + fg(P.text) : fg(P.overlay1)]]
+  }
   if (r.type === 'flags')
     return r.choices.flatMap((c, i) => {
       const has = v.includes(c.value)
@@ -163,6 +171,7 @@ function inputKey(s, key) {
   }
   if (key === '\r') {
     const text = input.text.trim()
+    if (input.field === 'file') return saveFile(s, input.key, text)
     if (!text) return say(s, input.field === 'name' ? 'Give it a name first' : 'Give it a command to run')
     if (input.field === 'name') {
       s.input = { field: 'cmd', name: text.slice(0, 24), text: '' }
@@ -175,6 +184,26 @@ function inputKey(s, key) {
     return
   }
   if (key.length === 1 && key >= ' ') typeText(s, key)
+}
+
+// ↵ on a typed path: saved if a file is there, or cleared when it's empty.
+// A path that's wrong keeps the footer open to fix it.
+function saveFile(s, key, path) {
+  if (path && !/^(\/|~\/)/.test(path)) return say(s, 'Give the whole path, from / or ~/')
+  let isFile = !path
+  try {
+    isFile ||= statSync(expandHome(path)).isFile()
+  } catch {}
+  if (!isFile) return say(s, `No file at ${path}`)
+  s.input = null
+  save(s, () => set(key, path))
+}
+
+// ↵ on a file row: the footer takes its path, starting from the one it has.
+function startFile(s) {
+  const r = current(s)
+  s.input = { field: 'file', key: r.key, label: r.label, text: load()[r.key] }
+  s.note = null
 }
 
 // Typed or pasted text, tabs and line breaks left out.
@@ -199,7 +228,7 @@ export function pickRow(s, i) {
 // ←/→: the next value, or in a row of flags the next flag.
 export function change(s, dir) {
   const r = current(s)
-  if (r.type === 'key') return
+  if (r.type === 'key' || r.type === 'file') return
   if (r.type === 'mode') flipMode(s)
   else if (r.type === 'addMode') return
   else if (r.type === 'flags') s.flag = (s.flag + dir + r.choices.length) % r.choices.length
@@ -216,6 +245,7 @@ export function toggle(s) {
   }
   if (r.type === 'mode') return flipMode(s)
   if (r.type === 'addMode') return startAdd(s)
+  if (r.type === 'file') return startFile(s)
   const v = load()[r.key]
   if (r.type === 'flags') save(s, () => set(r.key, toggleFlag(r, v, r.choices[s.flag].value)))
   else save(s, () => set(r.key, step(r, v, 1)))
@@ -261,7 +291,7 @@ export function onKey(s, key) {
     ' ': () => toggle(s),
     '\r': () => toggle(s),
     r: () => (current(s).type === 'key' ? bindKey(s, current(s).default) : resetRow(s)),
-    '\x7f': () => current(s).type === 'key' && bindKey(s, ''),
+    '\x7f': () => (current(s).type === 'key' ? bindKey(s, '') : current(s).type === 'file' && save(s, () => set(current(s).key, ''))),
     ...(modes && { a: () => startAdd(s), x: () => current(s).type === 'mode' && removeMode(s) }),
   }
   return Object.hasOwn(actions, key) && actions[key]() === 'quit' ? 'quit' : undefined
