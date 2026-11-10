@@ -89,15 +89,55 @@ const GLYPH = { reply: '↩', push: '↑', manual: '▶', deploy: '▶', retry: 
 // The longest reply the inbox's three-line preview shows whole.
 export const PREVIEW_MOST = 200
 
+// Where ↗ opens a row on GitHub or GitLab, and what its button says. Only
+// http(s) addresses, since the widget hands them to the browser.
+const web = u => (typeof u === 'string' && /^https?:\/\/[^\s"'<>]+$/.test(u) ? u : '')
+const prLabel = url => (/\/merge_requests\//.test(url) ? 'MR' : 'PR')
+
+// A proposal's: the thread a reply answers, the failed or manual job, the
+// run a GitHub deployment waits in (its Review deployments button is
+// there), else the PR. A push's commits aren't on the host until it runs,
+// so it opens the PR.
+export function proposalLink(p) {
+  const pr = web(p.pr?.url)
+  const thread = web(p.thread?.url)
+  if (p.kind === 'reply' && thread) return { url: thread, label: 'Comment' }
+  const job = p.job ?? {}
+  const id = String(job.id ?? '')
+  const base = pr && p.pr?.project ? `${new URL(pr).origin}/${p.pr.project}` : ''
+  if (base && ['retry', 'manual', 'deploy'].includes(p.kind)) {
+    if (p.pr.forge === 'gitlab') {
+      if (/^\d+$/.test(id)) return { url: `${base}/-/jobs/${id}`, label: 'Job' }
+    } else {
+      const run = String(job.run_id ?? (id.startsWith('run:') ? id.slice(4) : ''))
+      if (p.kind !== 'deploy' && /^\d+$/.test(id) && /^\d+$/.test(run)) return { url: `${base}/actions/runs/${run}/job/${id}`, label: 'Job' }
+      if (/^\d+$/.test(run)) return { url: `${base}/actions/runs/${run}`, label: 'Run' }
+    }
+  }
+  return pr ? { url: pr, label: prLabel(pr) } : null
+}
+
+// A monitor's: the address its latest event names (watch_pr.py's failed,
+// manual and stuck lines carry the job's), else the PR its command watches.
+export function monitorLink(m) {
+  const named = web(m.event?.line?.match(/https?:\/\/[^\s"'<>]+/)?.[0])
+  if (named) return { url: named, label: /\/jobs?\/\d+/.test(named) ? 'Job' : /\/runs\/\d+/.test(named) ? 'Run' : prLabel(named) }
+  const watched = web(String(m.command ?? '').match(/https?:\/\/[^\s"'<>]+\/(?:pull|-\/merge_requests)\/\d+/)?.[0])
+  return watched ? { url: watched, label: prLabel(watched) } : null
+}
+
 const sessionOf = (p, agents) =>
   agents.find(x => p.claude_session && x.id === p.claude_session) ?? agents.find(x => p.pane && x.pane?.pane === p.pane)
 
 // One proposal as an inbox row. With Settings' buttons off, a row only
 // opens the popup or the session.
-export function approvalRow(p, agents, buttons = true) {
+// `unpushed` is the commits pending pushes would send: a reply citing one
+// waits for that push, since it would point reviewers at a commit they
+// can't see.
+export function approvalRow(p, agents, buttons = true, unpushed = new Set()) {
   const a = sessionOf(p, agents)
   const where = `${p.pr?.repo ?? ''} ${p.pr?.ref ?? ''}`.trim()
-  const base = { kind: p.kind, approval: p.id }
+  const base = { kind: p.kind, approval: p.id, link: proposalLink(p) }
   if (p.status === 'failed')
     return {
       ...row('broke', '✗', `af:${p.id}`, a, `${p.title} failed`, `${where} · ${p.result?.message ?? ''}`, p.result?.at ?? p.at, [
@@ -120,14 +160,16 @@ export function approvalRow(p, agents, buttons = true) {
   }[p.kind] ?? []
   const title = p.kind === 'retry' ? `${job.name} failed, looks flaky` : p.title
   if (p.removes?.length) detail.push(`replaces ${p.removes.length} on the remote`)
+  const held = p.kind === 'reply' && Boolean(p.commit?.sha) && unpushed.has(p.commit.sha)
+  if (held) detail.push(`posts once ${String(p.commit.sha).slice(0, 7)} is pushed`)
   // The tray approves only what it shows whole: a reply short enough for its
   // preview, and a push that takes nothing off the branch. Anything else
   // opens in Alt+A first.
   const whole = p.kind !== 'reply' || (String(p.body ?? '').length <= PREVIEW_MOST && !/\n/.test(p.body ?? ''))
   const actions = !buttons
     ? ['review', ...(a ? ['go'] : [])]
-    : p.kind === 'reply' && !whole
-      ? ['review', 'skip']
+    : p.kind === 'reply' && (held || !whole)
+      ? [held ? 'edit' : 'review', 'skip']
       : p.kind === 'push' && p.removes?.length
         ? ['review', 'go']
         : ({
@@ -146,13 +188,22 @@ export function trayItems(agents, seen = new Set(), dismissed = new Set(), notes
   const l = lanes(agents)
   const brokeSet = brokeTags()
   const buttons = settings()['approvals.trayButtons']
-  const items = approvals.map(p => approvalRow(p, agents, buttons))
+  const unpushed = new Set(approvals.filter(p => p.kind === 'push' && p.status === 'pending').flatMap(p => (p.commits ?? []).map(c => c.sha)))
+  const items = approvals.map(p => approvalRow(p, agents, buttons, unpushed))
+  // A job a proposal is about shows once, as the proposal: the watcher's
+  // own line about it (`id=<job>`) would only repeat it without buttons.
+  const proposed = new Set(approvals.map(p => String(p.job?.id ?? '')).filter(Boolean))
+  const repeats = m => proposed.has(m.event?.line?.match(/\bid=(\S+)/)?.[1] ?? '')
   for (const a of l.needs) {
     const raised = a.need === 'monitor' ? a.monitors.find(m => m.state === 'action') : null
+    if (raised && repeats(raised)) continue
     if (raised) {
       const broke = brokeSet.has(raised.event?.tag)
       items.push(
-        row(broke ? 'broke' : 'you', broke ? '✗' : '▲', `m:${raised.key}:${raised.event?.at ?? 0}`, a, a.cmd, `${place(a)} · ${raised.description}`, a.since, ['go']),
+        {
+          ...row(broke ? 'broke' : 'you', broke ? '✗' : '▲', `m:${raised.key}:${raised.event?.at ?? 0}`, a, a.cmd, `${place(a)} · ${raised.description}`, a.since, ['go']),
+          link: monitorLink(raised),
+        },
       )
     } else if (a.need === 'permission')
       items.push(row('you', '▲', `p:${a.id}:${a.since}`, a, a.cmd, asker(a), a.since, ['allow', 'deny', 'go']))
@@ -171,7 +222,7 @@ export function trayItems(agents, seen = new Set(), dismissed = new Set(), notes
     const glyph = m.state === 'stale' ? '◌' : '◉'
     const title = m.event?.line ?? m.description
     const meta = `${place(m.agent)} · ${m.description}${m.state === 'stale' ? ' · gone quiet' : ''}`
-    items.push(row('watch', glyph, `m:${m.key}:${m.event?.at ?? 0}`, m.agent, title, meta, m.event?.at ?? m.startedAt, ['go']))
+    items.push({ ...row('watch', glyph, `m:${m.key}:${m.event?.at ?? 0}`, m.agent, title, meta, m.event?.at ?? m.startedAt, ['go']), link: monitorLink(m) })
   }
   for (const a of l.done) items.push(row('done', '✓', `d:${a.id}:${a.since}`, a, a.title, `${place(a)} · ${a.cmd}`, a.since, ['go']))
   const shown = items.filter(it => !dismissed.has(it.id))

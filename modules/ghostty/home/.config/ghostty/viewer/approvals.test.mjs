@@ -179,3 +179,10 @@ test('a waits until all of a proposal has been on screen; J and K scroll', () =>
   s.hidden = false
   assert.equal(onKey(s, 'a').do, 'approve')
 })
+
+test('o opens the proposal on the host; a proposal with no link takes no o', () => {
+  const pr = { url: 'https://github.com/o/r/pull/2', project: 'o/r', forge: 'github' }
+  const thread = { url: 'https://github.com/o/r/pull/2#discussion_r9' }
+  assert.deepEqual(onKey(start([reply({ pr, thread })]), 'o'), { do: 'open', p: reply({ pr, thread }), url: thread.url })
+  assert.equal(onKey(start([reply({ pr: {} })]), 'o'), undefined)
+})

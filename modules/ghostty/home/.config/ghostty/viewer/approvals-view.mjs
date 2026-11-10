@@ -8,7 +8,7 @@
 // keys.
 //   approvals-view.mjs [id]   open on that proposal
 
-import { execFileSync, spawnSync } from 'node:child_process'
+import { execFileSync, spawn, spawnSync } from 'node:child_process'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -17,7 +17,7 @@ import { readState } from '../hub/client.mjs'
 import { insertAt } from '../hub/line.mjs'
 import { load as loadSettings, set as setSetting } from '../hub/settings.mjs'
 import { BOLD, P, ago, bg, clean, enter, fg, leave, paint, render, split, tokens } from '../hub/term.mjs'
-import { go, readApprovals, runApproval } from '../hub/tray.mjs'
+import { go, proposalLink, readApprovals, runApproval } from '../hub/tray.mjs'
 import * as A from './approvals.mjs'
 import { caretShown, withCaret, wrap } from './todo-ui.mjs'
 
@@ -198,10 +198,11 @@ function buttons(p, w) {
     ...(p.kind === 'push' ? [['Open diff', 'd']] : []),
     p.status === 'failed' ? ['Dismiss', 'x'] : [p.kind === 'push' || p.kind === 'move' ? 'Not yet' : 'Reject', 'r'],
     ['Go to session', 'g'],
+    ...(proposalLink(p) ? [[`${proposalLink(p).label} ↗`, 'o']] : []),
   ]
   const spans = [[' ']]
   for (const [text, key, main] of list) {
-    spans.push([` ${text} `, main ? BOLD + fg(P.crust) + bg(P.peach) : fg(key === 'e' || key === 'd' ? P.blue : P.sub) + bg(P.surface0)])
+    spans.push([` ${text} `, main ? BOLD + fg(P.crust) + bg(P.peach) : fg('edo'.includes(key) ? P.blue : P.sub) + bg(P.surface0)])
     spans.push([`${key} `, main ? fg(P.surface0) + bg(P.peach) : fg(P.overlay1) + bg(P.surface0)])
     spans.push(['  '])
   }
@@ -347,6 +348,15 @@ async function run(e) {
     if (r.status !== 0) s.note = { text: `$EDITOR exited with ${r.status}; reply unchanged`, tone: 'red' }
     const next = r.status === 0 ? A.edited(s, p, text) : undefined
     if (next) return run(next)
+  } else if (e.do === 'open') {
+    // In the browser, without waiting for it; the popup stays open.
+    const child = spawn('xdg-open', [e.url], { detached: true, stdio: 'ignore' })
+    child.on('error', () => {
+      s.note = { text: `Couldn't open ${e.url}: no xdg-open`, tone: 'red' }
+      draw()
+    })
+    child.unref()
+    s.note = { text: `Opened ${e.url}`, tone: 'green' }
   } else if (e.do === 'diff') {
     outside('sh', ['-c', 'git -C "$1" -c color.ui=always log -p --reverse "$2..$3" | less -R', 'sh', p.worktree, p.lease, p.head])
   }

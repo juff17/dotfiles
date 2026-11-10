@@ -4,7 +4,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import { readApprovals, runApproval, trayItems, widgetSettings } from './tray.mjs'
+import { monitorLink, proposalLink, readApprovals, runApproval, trayItems, widgetSettings } from './tray.mjs'
 
 // No settings file, so every setting reads as its default.
 process.env.AGENT_HUB_SETTINGS = '/nonexistent/agent-hub/settings.json'
@@ -292,4 +292,49 @@ test('the tray only approves what it shows whole: a long reply or a push that dr
     ],
   )
   assert.match(rows[3].meta, /replaces 1 on the remote/)
+})
+
+const GH = { url: 'https://github.com/o/r/pull/2', project: 'o/r', forge: 'github', repo: 'r', ref: '#2' }
+const GL = { url: 'https://gitlab.example.com/g/r/-/merge_requests/7', project: 'g/r', forge: 'gitlab', repo: 'r', ref: '!7' }
+
+test('↗ opens the comment, job, run or PR a proposal is about, on GitHub and GitLab', () => {
+  const link = (kind, pr, extra = {}) => proposalLink(proposal(kind, { pr, ...extra }))
+  assert.deepEqual(link('reply', GH, { thread: { url: 'https://github.com/o/r/pull/2#discussion_r9' } }), {
+    url: 'https://github.com/o/r/pull/2#discussion_r9',
+    label: 'Comment',
+  })
+  assert.deepEqual(link('retry', GH, { job: { id: '55', run_id: 44 } }), { url: 'https://github.com/o/r/actions/runs/44/job/55', label: 'Job' })
+  assert.deepEqual(link('deploy', GH, { job: { id: '56', run_id: 44 } }), { url: 'https://github.com/o/r/actions/runs/44', label: 'Run' })
+  assert.deepEqual(link('deploy', GH, { job: { id: 'run:44' } }), { url: 'https://github.com/o/r/actions/runs/44', label: 'Run' })
+  assert.deepEqual(link('manual', GL, { job: { id: '812' } }), { url: 'https://gitlab.example.com/g/r/-/jobs/812', label: 'Job' })
+  assert.deepEqual(link('push', GH), { url: GH.url, label: 'PR' })
+  assert.deepEqual(link('push', GL), { url: GL.url, label: 'MR' })
+  assert.equal(link('push', { ...GH, url: 'javascript:alert(1)' }), null, 'only http(s) goes to the browser')
+})
+
+test('↗ on a monitor opens what its latest event names, else the PR it watches', () => {
+  const m = (line, command = 'python3 watch_pr.py https://github.com/o/r/pull/2 --session s') => monitorLink({ event: line && { line }, command })
+  assert.deepEqual(m('[failed] flaky id=55 https://github.com/o/r/actions/runs/44/job/55'), { url: 'https://github.com/o/r/actions/runs/44/job/55', label: 'Job' })
+  assert.deepEqual(m('[pipeline] passed'), { url: 'https://github.com/o/r/pull/2', label: 'PR' })
+  assert.equal(m(null, 'tail -f app.log'), null)
+})
+
+test('a job a proposal covers shows once: the watcher’s own line about it is left out', () => {
+  const line = '[failed] flaky id=55 https://github.com/o/r/actions/runs/44/job/55'
+  const watcher = agent('s1', 'needs', { need: 'monitor', cmd: line, monitor: true, monitors: [{ ...monitor('s1:t1', 'action', 'failed'), event: { tag: 'failed', line, at: 2000 } }] })
+  const retry = proposal('retry', { pr: GH, job: { id: '55', run_id: 44, name: 'flaky' } })
+  assert.deepEqual(
+    trayItems([watcher], new Set(), new Set(), [], [retry]).items.map(i => i.title),
+    ['flaky failed, looks flaky'],
+  )
+  assert.equal(trayItems([watcher]).items[0].link.label, 'Job', 'without the proposal it stays, opening the job')
+})
+
+test('a reply citing a commit a push still waits on can be edited or skipped, not posted', () => {
+  const push = proposal('push', { id: '1-push-ab', local: 'babysit/2', branch: 'b', commits: [{ sha: 'abc1234def', added: 1, removed: 1 }] })
+  const reply = proposal('reply', { id: '2-reply-ab', body: 'Fixed in abc1234.', commit: { sha: 'abc1234def' } })
+  const row = ps => trayItems([], new Set(), new Set(), [], ps).items.find(i => i.kind === 'reply')
+  assert.deepEqual(row([push, reply]).actions, ['edit', 'skip'])
+  assert.match(row([push, reply]).meta, /posts once abc1234 is pushed/)
+  assert.deepEqual(row([reply]).actions, ['post', 'edit', 'skip'], 'once pushed it can be posted')
 })

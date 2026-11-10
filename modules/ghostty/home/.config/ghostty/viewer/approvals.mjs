@@ -18,10 +18,13 @@
 // onKey returns what the view has to do: nothing, 'quit', or an effect
 // { do, p, ... }: approve (with the edited body, the dropped commits, and
 // `always` for A), reject, dismiss, go, editor (edit the reply in $EDITOR),
-// diff (all of a push's changes), or settings (A's "always" for this kind).
+// diff (all of a push's changes), open (its comment, job, run or PR on the
+// host, from hub/tray.mjs's proposalLink), or settings (A's "always" for
+// this kind).
 
 import { editField } from '../hub/line.mjs'
 import { load as settings } from '../hub/settings.mjs'
+import { proposalLink } from '../hub/tray.mjs'
 
 export const start = (list, focus = '') => ({
   list,
@@ -193,6 +196,10 @@ export function onKey(s, key, env = process.env) {
     x: () => (pending ? undefined : { do: 'dismiss', p }),
     g: () => ({ do: 'go', p }),
     d: () => (p.kind === 'push' ? { do: 'diff', p } : undefined),
+    o: () => {
+      const link = proposalLink(p)
+      return link ? { do: 'open', p, url: link.url } : undefined
+    },
   }
   if (key !== 'a' && key !== 'A') s.changed = false
   const effect = Object.hasOwn(keys, key) ? keys[key]() : undefined

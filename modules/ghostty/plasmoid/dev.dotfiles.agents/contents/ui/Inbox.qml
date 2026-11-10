@@ -1,8 +1,9 @@
 // The inbox: every item from the tray command in sections, needs-you first,
 // each with how long it has been so and its buttons. A button that answers
 // or approves is filled in its section's colour, one that opens something is
-// blue, one that turns it down is grey; ↵ presses the first, 1 2 3 the first
-// three, x dismisses, j and k move. A babysitter's reply shows the text it
+// blue, one that turns it down is grey, and a row about something on GitHub
+// or GitLab ends with a ↗ link to it; ↵ presses the first, 1 2 3 the first
+// three, o the link, x dismisses, j and k move. A babysitter's reply shows the text it
 // would post. Done items fold into one line until shown.
 import QtQuick
 import QtQuick.Layouts
@@ -20,6 +21,7 @@ Rectangle {
     property int boxWidth: 600
 
     signal act(string action, string id)
+    signal openLink(string url)
     signal openHub()
     signal close()
 
@@ -59,14 +61,16 @@ Rectangle {
         else if ((k === Qt.Key_1 || k === Qt.Key_2 || k === Qt.Key_3) && current) {
             const a = current.actions[k - Qt.Key_1]
             if (a) act(a, current.id)
-        } else if (k === Qt.Key_X && current) act("dismiss", current.id)
+        } else if (k === Qt.Key_O && current && current.link) openLink(current.link.url)
+        else if (k === Qt.Key_X && current) act("dismiss", current.id)
         else if (k === Qt.Key_Escape) close()
         else return
         event.accepted = true
     }
 
     // One action button with the key that presses it: filled in `fill` for
-    // an answer, a blue outline to open something, a grey one otherwise.
+    // an answer, a blue outline to open something, blue text alone for a
+    // link to the host, a grey outline otherwise.
     component ActButton: Rectangle {
         id: b
         property string label
@@ -75,12 +79,12 @@ Rectangle {
         property string keyHint: ""
         signal clicked()
 
-        readonly property color ink: look === "fill" ? M.crust : look === "blue" ? M.blue : M.subtext1
+        readonly property color ink: look === "fill" ? M.crust : look === "blue" || look === "link" ? M.blue : M.subtext1
         implicitWidth: br.implicitWidth + 16
         implicitHeight: 24
         radius: 6
         color: look === "fill" ? (ma.containsMouse ? Qt.lighter(fill, 1.1) : fill) : ma.containsMouse ? M.surface0 : "transparent"
-        border.width: look === "fill" ? 0 : 1
+        border.width: look === "fill" || look === "link" ? 0 : 1
         border.color: look === "blue" ? M.blue : M.surface1
 
         Row {
@@ -122,7 +126,7 @@ Rectangle {
         return fills.indexOf(action) >= 0 ? "fill" : blues.indexOf(action) >= 0 ? "blue" : "plain"
     }
 
-    // A row's buttons, in order, with their keys.
+    // A row's buttons, in order, with their keys, then its link.
     component Buttons: Row {
         id: bs
         required property var item
@@ -138,6 +142,13 @@ Rectangle {
                 keyHint: index < 3 ? String(index + 1) : ""
                 onClicked: inbox.act(modelData, bs.item.id)
             }
+        }
+        ActButton {
+            visible: !!bs.item.link
+            label: bs.item.link ? bs.item.link.label + " ↗" : ""
+            look: "link"
+            keyHint: "o"
+            onClicked: inbox.openLink(bs.item.link.url)
         }
     }
 
@@ -402,7 +413,7 @@ Rectangle {
                     visible: inbox.message === ""
                 }
                 Text {
-                    text: "j k move · ↵ first button · 1 2 3 buttons · x dismiss"
+                    text: "j k move · ↵ first · 1 2 3 buttons · o open · x dismiss"
                     color: M.overlay1
                     font.family: M.mono
                     font.pixelSize: 11

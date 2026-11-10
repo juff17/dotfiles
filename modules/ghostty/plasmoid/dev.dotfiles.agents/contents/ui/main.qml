@@ -232,6 +232,11 @@ PlasmoidItem {
         messageOk: root.messageOk
         onAct: (action, id) => root.tray("act", "act " + action + " " + root.quote(id))
         onOpenHub: root.tray("act", "hub")
+        // In the browser: only a web address, which tray.mjs already checked.
+        onOpenLink: url => {
+            if (/^https?:\/\//.test(url)) Qt.openUrlExternally(url)
+            root.expanded = false
+        }
         onClose: root.expanded = false
         Connections {
             target: root
