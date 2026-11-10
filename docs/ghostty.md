@@ -20,7 +20,7 @@ My [Ghostty](https://ghostty.org) configuration, in [`modules/ghostty/home/.conf
 - **Diff:** a mode of the left pane, beside Files. It shows the uncommitted changes of the repository your active tmux tab is in, against the last commit (staged, unstaged and new files): a summary of what changed, a row per file with its added and removed lines, and one file open in place under its row with its diff. It checks git every second, so it empties once you commit.
 - **Ping:** when Claude finishes or asks for permission in a tab you're not on, that tab turns red. Claude sends no desktop notification; the Agents widget below shows it.
 - **Alt+H:** the keys, in a popup over the workspace or the hub. Each feature (Anywhere, Tabs, Viewer pane, Diff, Diagrams, Todo, Hub, New agent) is a section down the left, with its keys on the right; it opens on Hub in the hub, Diagrams over the Alt+D window and Anywhere elsewhere. `/` filters every section at once. Keys that are easy to forget are peach. The keys come from one table, `viewer/help.mjs`, so change it along with the table below.
-- **Rail:** a strip down the far left. **work** and **hub** switch the window between this workspace and the agent hub, the counts under them are the agents that need you (▲), are working (✻), are done (✓) and are idle (○), **+ new** starts an agent, **view** shows or hides the viewer (Alt+V), **? help** shows the keys (Alt+H), and **⚙ set** opens Settings (Alt+S). The hub button gets an orange dot while anything needs you. A tab running Claude carries the same glyph in the tab bar.
+- **Rail:** a strip down the far left. **work** and **hub** switch the window between this workspace and the agent hub, the counts under them are the agents that need you (▲), are working (✻), are done (✓) and are idle (○), **+ new** starts an agent, **view** shows or hides the viewer (Alt+V; only in the workspace), **? help** shows the keys (Alt+H), and **⚙ set** opens Settings (Alt+S). The hub button gets an orange dot while anything needs you. A tab running Claude carries the same glyph in the tab bar.
 
 ## Agent hub
 
@@ -72,7 +72,7 @@ Diagrams come from the claude module's diagram-pane mod (`modules/claude/mods/ge
 | `j` / `k` in Diff | Move between changed files |
 | `enter` or click in Diff | Open that file's diff in place, or close it |
 | `J` / `K`, `PgDn` / `PgUp`, scroll in Diff | Scroll (`g` / `G`: top / bottom) |
-| `alt+v` anywhere in the window, or **view** on the rail | Show or hide the viewer pane; a new window opens without it. In the hub it shows the workspace with the viewer open |
+| `alt+v` in the workspace, or **view** on its rail | Show or hide the viewer pane; a new window opens without it. In the hub and the Alt+D window it does nothing |
 | `alt+d` in the workspace or the hub | Show the diagrams of the active tab, the open session, or the selected card, in a window of their own; `alt+d` or `esc` closes it |
 | `[` / `]`, `1`–`9`, or click a diagram's chip in dv | Previous / next diagram, or jump to one |
 | `x` in dv, or click `×` on a diagram's chip | Close that diagram |

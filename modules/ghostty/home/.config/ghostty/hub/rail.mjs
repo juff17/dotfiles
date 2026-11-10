@@ -3,7 +3,7 @@
 // design draws it. work and hub switch the window between the workspace and
 // the agent hub; under them, counts of the agents that need you, are
 // working, are done and are idle; view shows or hides the workspace's viewer
-// pane, as Alt+V does (from the hub it shows the workspace with it open);
+// pane, as Alt+V does; in the hub it does nothing, as Alt+V doesn't there;
 // + new opens the hub's New agent dialog,
 // ? help the keys overlay (Alt+H), and ⚙ set the settings panel.
 // The hub button carries an orange dot while anything needs you.
@@ -51,9 +51,8 @@ function popup(cmd, ...args) {
 }
 const help = () => popup('ghostty-help', VIEW)
 
-async function viewer() {
-  if (VIEW === 'hub') await show('work')
-  execFile(join(BIN, 'ghostty-viewer-toggle'), [String(WIN), VIEW === 'hub' ? 'show' : 'toggle'], () => {})
+function viewer() {
+  if (VIEW === 'work') execFile(join(BIN, 'ghostty-viewer-toggle'), [String(WIN)], () => {})
 }
 const openSettings = () => popup('ghostty-settings')
 
