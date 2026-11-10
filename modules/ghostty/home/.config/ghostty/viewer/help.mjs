@@ -109,7 +109,7 @@ export const SECTIONS = [
       ['h / l  j / k', 'Move between lanes and agents'],
       ['tab', 'The monitors strip', true],
       ['↵', 'Open the agent’s live session beside the list'],
-      ['alt+w', 'Swap focus between the list and the session', true],
+      ['alt+←', 'Swap focus between the list and the session', true],
       ['ctrl+]', 'Close the session, back to the board', true],
       ['a / d', 'Allow / deny the permission prompt'],
       ['e / E', 'Mark the done agent seen / all of them', true],

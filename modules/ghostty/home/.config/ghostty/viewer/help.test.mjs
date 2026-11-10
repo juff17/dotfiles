@@ -27,7 +27,7 @@ test('filter matches keys, what they do and section names, every word', () => {
     filter('todo delete').flatMap(s => s.keys.map(k => k.key)),
     ['x x'],
   )
-  assert.deepEqual(filter('alt+w').flatMap(s => s.keys.map(k => k.key)), ['alt+w'])
+  assert.deepEqual(filter('alt+←').flatMap(s => s.keys.map(k => k.key)), ['alt+←'])
   assert.deepEqual(filter('nothing like this'), [])
 })
 
