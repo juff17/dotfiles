@@ -213,6 +213,17 @@ class ErrorAfter(Cache):
         self.assertFalse([l for l in lines if l.startswith("[error]")])
 
 
+class Auth(unittest.TestCase):
+    def test_no_token_is_an_auth_error_like_a_refused_one(self):
+        for err in ("HTTP 401: Bad credentials",
+                    "To get started with GitHub CLI, please run:  gh auth login\n"
+                    "Alternatively, populate the GH_TOKEN environment variable with a GitHub API authentication token."):
+            with self.assertRaises(w.AuthError, msg=err):
+                w.run(["sh", "-c", 'printf "%s\n" "$1" >&2; exit 4', "sh", err])
+        with self.assertRaises(w.ApiError):
+            w.run(["sh", "-c", "echo 'HTTP 422: Unprocessable' >&2; exit 1"])
+
+
 class Settings(unittest.TestCase):
     """--interval and --stuck-after default to the hub's Settings file."""
 

@@ -141,7 +141,10 @@ def run(cmd, cwd=None):
     if p.returncode != 0:
         err = (p.stderr or p.stdout).strip()
         last = err.splitlines()[-1] if err else f"exit {p.returncode}"
-        if re.search(r"\b401\b|Bad credentials|Unauthorized", err, re.IGNORECASE):
+        # A token that was refused, or none at all: gh and glab then ask you
+        # to log in.
+        if re.search(r"\b401\b|Bad credentials|Unauthorized|(gh|glab) auth login|(GH|GITHUB|GITLAB)_TOKEN environment variable",
+                     err, re.IGNORECASE):
             raise AuthError(last)
         raise ApiError(last)
     return p.stdout
