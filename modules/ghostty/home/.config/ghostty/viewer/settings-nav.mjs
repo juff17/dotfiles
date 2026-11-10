@@ -12,7 +12,7 @@
 import { statSync } from 'node:fs'
 
 import { BOLD, P, fg } from '../hub/term.mjs'
-import { BUILTIN_MODES, SECTIONS, addedId, expandHome, isAdded, load, modeName, reset, set, show, step, toggleFlag } from '../hub/settings.mjs'
+import { BUILTIN_MODES, SECTIONS, addedId, expandHome, isAdded, load, modeName, reset, row, set, show, step, toggleFlag } from '../hub/settings.mjs'
 import { apply, captured, clash } from '../hub/keybinds.mjs'
 
 // What a saved keybind does next; tests put a stand-in here.
@@ -186,15 +186,17 @@ function inputKey(s, key) {
   if (key.length === 1 && key >= ' ') typeText(s, key)
 }
 
-// ↵ on a typed path: saved if a file is there, or cleared when it's empty.
-// A path that's wrong keeps the footer open to fix it.
+// ↵ on a typed path: saved if a file (or for a dir row, a folder) is there,
+// or cleared when it's empty. A path that's wrong keeps the footer open to fix it.
 function saveFile(s, key, path) {
   if (path && !/^(\/|~\/)/.test(path)) return say(s, 'Give the whole path, from / or ~/')
-  let isFile = !path
+  const { dir } = row(key)
+  let there = !path
   try {
-    isFile ||= statSync(expandHome(path)).isFile()
+    const st = statSync(expandHome(path))
+    there ||= dir ? st.isDirectory() : st.isFile()
   } catch {}
-  if (!isFile) return say(s, `No file at ${path}`)
+  if (!there) return say(s, `No ${dir ? 'folder' : 'file'} at ${path}`)
   s.input = null
   save(s, () => set(key, path))
 }

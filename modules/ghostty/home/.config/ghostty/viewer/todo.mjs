@@ -9,7 +9,7 @@ import { homedir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 
 import { slug } from '../hub/model.mjs'
-import { load as settings } from '../hub/settings.mjs'
+import { expandHome, load as settings } from '../hub/settings.mjs'
 
 export const STORE =
   process.env.TODO_FILE || join(process.env.XDG_STATE_HOME || join(homedir(), '.local/state'), 'ghostty-layout/todos.json')
@@ -277,6 +277,15 @@ export const inGit = (item, exists = existsSync) => item.repo !== 'none' && !!it
 export function handoffPlace(item, here, exists = existsSync) {
   if (inGit(item, exists) || !here?.folder) return item
   return { ...item, root: here.root, worktree: here.worktree, cwd: here.folder, repo: here.repo, branch: '' }
+}
+
+// Where a hand-off sends todos without a repo: the Default repo setting
+// (todo.handoff.defaultRepo, a folder) when it is on disk, else `here`, the
+// folder the viewer has open. Same shape as `here`: repoOf's fields plus folder.
+export async function handoffHere(here, defaultRepo, isDir = d => statSync(d, { throwIfNoEntry: false })?.isDirectory()) {
+  const folder = defaultRepo && expandHome(defaultRepo)
+  if (!folder || !isDir(folder)) return here
+  return { folder, ...(await repoOf(folder)) }
 }
 
 export function handoffSpec(item, { runAs = 'tab', worktree = true, model = 'opus', mode = 'auto', effort = 'medium' } = {}, exists = existsSync) {

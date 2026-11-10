@@ -27,7 +27,7 @@ import { readState } from '../hub/client.mjs'
 import { row, load as settings } from '../hub/settings.mjs'
 import { launch } from '../hub/model.mjs'
 import { go as openInHub } from '../hub/tray.mjs'
-import { CATEGORIES, STORE, TYPES, add, age, arrange, change, colorOf, fill, filingState, handoffPlace, handoffSpec, knownRepos, load, remove, repoOf, stamp, typeColorOf } from './todo.mjs'
+import { CATEGORIES, STORE, TYPES, add, age, arrange, change, colorOf, fill, filingState, handoffHere, handoffPlace, handoffSpec, knownRepos, load, remove, repoOf, stamp, typeColorOf } from './todo.mjs'
 import * as ui from './todo-ui.mjs'
 import { paneModes, tabs as modeTabs } from './modes.mjs'
 import { EDIT_FIELDS, FIELD_NAMES, FIELDS, KEYS, fit, tidy, visible, wrap } from './todo-ui.mjs'
@@ -628,7 +628,7 @@ function toggleMark() {
 }
 
 // The marked items, in the list's order, or else the selected one.
-function startHandoff() {
+async function startHandoff() {
   let ids = ui.markedIds(selectable(), marked)
   if (!ids.length) {
     const item = realItem()
@@ -636,7 +636,8 @@ function startHandoff() {
     if (item.done) return say('It’s done; space reopens it')
     ids = [item.id]
   }
-  prompt = ui.handoffPrompt(ids, items, here, WIN)
+  const at = await handoffHere(here, settings()['todo.handoff.defaultRepo'])
+  prompt = ui.handoffPrompt(ids, items, at, WIN)
   draw()
 }
 
@@ -667,7 +668,7 @@ function claudePath() {
 
 // Starts one agent per item, one after another so the tabs open in order,
 // and records on each item who has it. An item without a repo goes to the
-// folder the viewer had open (at) when the row opened.
+// Default repo, or else the folder the viewer had open (at), when the row opened.
 async function handOff(ids, at, how) {
   say(`Starting ${ids.length === 1 ? 'an agent' : `${ids.length} agents`}…`, P.peach)
   const started = []

@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict'
 import { mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import { test } from 'node:test'
 
 import { set as setSetting } from '../hub/settings.mjs'
 import { launch } from '../hub/model.mjs'
-import { FILING_TIMEOUT_MS, INSTALLED_CLI, KEEP_DONE_MS, add, age, arrange, category, change, fill, filerMessage, filingState, find, handoffPlace, handoffSpec, inGit, knownRepos, load, newId, prune, remove, repoOf, taskType } from './todo.mjs'
+import { FILING_TIMEOUT_MS, INSTALLED_CLI, KEEP_DONE_MS, add, age, arrange, category, change, fill, filerMessage, filingState, find, handoffHere, handoffPlace, handoffSpec, inGit, knownRepos, load, newId, prune, remove, repoOf, taskType } from './todo.mjs'
 
 // No settings file, so every setting reads as its default.
 process.env.AGENT_HUB_SETTINGS = '/nonexistent/agent-hub/settings.json'
@@ -201,6 +201,17 @@ test('an item outside git is handed off in the folder the viewer has open', () =
   const own = { ...loose, repo: 'gad', root: '/r/gad', cwd: '/r/gad' }
   assert.equal(handoffPlace(own, dot, all), own, 'an item in git keeps its repo')
   assert.equal(handoffPlace(loose, { folder: '' }, all), loose, 'nothing open: its own folder')
+})
+
+test('a hand-off sends todos without a repo to the Default repo, else the open folder', async () => {
+  const here = { folder: '/open', root: '/open', repo: 'none', worktree: '', branch: '' }
+  assert.equal(await handoffHere(here, ''), here, 'none set: the open folder')
+  assert.equal(await handoffHere(here, '/no/such/folder', () => false), here, 'gone from disk: the open folder')
+  const dot = import.meta.dirname
+  const at = await handoffHere(here, dot)
+  assert.equal(at.folder, dot)
+  assert.equal(at.repo, basename(at.root), 'with its repo, as repoOf has it')
+  assert.notEqual(at.repo, 'none')
 })
 
 test('the filer is sent the todo skill with the filing id, where it was typed and the message', () => {

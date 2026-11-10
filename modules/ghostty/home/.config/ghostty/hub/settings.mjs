@@ -26,8 +26,8 @@ const flags = (key, label, choices, def, sub = '') => ({ key, label, sub, type: 
 // hub/keybinds.mjs applies them; '' is unbound.
 const keybind = (key, label, kind, def, run, sub = '') => ({ key, label, sub, type: 'key', kind, default: def, run })
 const modes = (key, label, def, sub = '') => ({ key, label, sub, type: 'modes', default: def })
-// A path to a file, typed in the panel's footer; '' is none.
-const file = (key, label, sub = '') => ({ key, label, sub, type: 'file', default: '' })
+// A path to a file, or with dir to a folder, typed in the panel's footer; '' is none.
+const file = (key, label, sub = '', { dir = false } = {}) => ({ key, label, sub, type: 'file', dir, default: '' })
 // Where an agent's instructions are (hub/prompts.mjs): not a setting, but a
 // line the panel shows beside the agent's settings.
 const prompt = id => ({ prompt: id })
@@ -158,6 +158,7 @@ export const SECTIONS = [
       choice('todo.handoff.runAs', 'Run in', [['tab', 'new tab'], ['bg', 'background']], 'tab', 't in the picker; the alt+t popup outside a window always runs in the background'),
       choice('todo.handoff.branch', 'Branch', [['worktree', 'own worktree'], ['branch', 'branch it was added on']], 'worktree', 'b in the picker; only for todos added in git'),
       choice('todo.handoff.merge', 'Before merging into main', [['ask', 'ask'], ['never', 'never merge']], 'ask', 'own-worktree agents only'),
+      file('todo.handoff.defaultRepo', 'Default repo', 'for todos without a repo; none: the folder the Todo pane has open', { dir: true }),
       prompt('todo-handoff'),
       head('Filing'),
       choice('todo.filing.model', 'Model', [['haiku', 'haiku 5.5'], ['sonnet', 'sonnet 5.5'], ['fable', 'fable 5.2']], 'haiku', 'writes the title, category and note'),
