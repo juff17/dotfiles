@@ -14,6 +14,7 @@ export const SECTIONS = [
       ['alt+t', 'Todo list in a popup'],
       ['alt+s', 'Settings'],
       ['alt+d', 'Diagrams of the active tab, open session or selected card'],
+      ['alt+v', 'Show or hide the viewer pane (Files, Diagrams, Diff, Todo)'],
       ['alt+n', 'New agent'],
       ['alt+e', "Open the current tab's repo or worktree in your editor (Settings › Editor)"],
       ['ctrl+shift+a', 'Switch between the workspace and the hub'],
@@ -44,6 +45,7 @@ export const SECTIONS = [
     color: '#94e2d5',
     where: 'the left pane: Diagrams, Files, Diff, Todo',
     keys: [
+      ['alt+v', 'Show or hide it (or view on the rail); new windows open without it'],
       ['tab', 'Next mode (click the viewer first to focus it)'],
       ['click a mode', 'Switch to that mode'],
       ['q in Files', 'Go to Diagrams', true],

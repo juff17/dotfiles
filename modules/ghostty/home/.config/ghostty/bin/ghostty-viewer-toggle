@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# Shows or hides window <win>'s viewer pane (Files, Diagrams, Diff, Todo),
+# for Alt+V (layout.conf) and the rail's view button. A window opens without
+# it.
+#   ghostty-viewer-toggle <win> [toggle|show]
+# Hiding moves the pane to a window of its own, viewer, which is never shown,
+# so yazi and dv keep running where they were; showing moves it back left of
+# the tab session and focuses it. The first show opens one (open_viewer), in
+# the active tab's folder, and so does a show after q in dv closed it.
+
+source "$(dirname "$(readlink -f "$0")")/ghostty-lib.sh"
+
+win=$1 want=${2:-toggle} session="layout-$1"
+tabs=$(layout show -t "$session" -v @tabs 2>/dev/null) || exit 0
+
+# -s: every window of the session, the hidden one included.
+read -r viewer where < <(layout list-panes -s -t "$session" \
+  -F '#{pane_id} #{window_name} #{pane_start_command}' 2>/dev/null |
+  awk '/ghostty-viewer/ { print $1, $2; exit }')
+
+if [[ -z $viewer ]]; then
+  dir=$(tmux -L "$TABS_SOCKET" display -p -t "ghostty-$win" '#{pane_current_path}' 2>/dev/null)
+  open_viewer "$win" "${dir:-$HOME}" keep
+elif [[ $where == viewer ]]; then
+  layout join-pane -h -b -l "$(viewer_percent)%" -s "$viewer" -t "$tabs"
+  # yazi turns passthrough on for its images; hiding turned it off. - is the
+  # pane having had no value of its own.
+  passthrough=$(layout show -p -t "$viewer" -v @passthrough 2>/dev/null)
+  if [[ $passthrough == - ]]; then
+    layout set -pu -t "$viewer" allow-passthrough
+  elif [[ -n $passthrough ]]; then
+    layout set -p -t "$viewer" allow-passthrough "$passthrough"
+  fi
+  layout select-pane -t "$viewer"
+elif [[ $want == toggle ]]; then
+  # Passthrough off while hidden, so an image yazi or dv draws then can't
+  # land on whatever window is showing.
+  passthrough=$(layout show -p -t "$viewer" -v allow-passthrough 2>/dev/null)
+  layout set -p -t "$viewer" @passthrough "${passthrough:--}"
+  layout set -p -t "$viewer" allow-passthrough off
+  layout break-pane -d -s "$viewer" -n viewer
+  layout select-pane -t "$tabs"
+fi
