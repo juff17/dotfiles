@@ -120,8 +120,11 @@ const EMPTY = {
   monitors: 'Nothing being monitored',
 }
 
+// Key and label pairs; no-break spaces inside a pair, so a wrapped footer
+// breaks only between pairs.
 function hint(pairs) {
-  return pairs.flatMap(([k, v], i) => [[`${i ? '  ' : ''}${k}`, fg(P.text)], [` ${v}`, fg(P.sub)]])
+  const nb = s => s.replaceAll(' ', '\u00a0')
+  return pairs.flatMap(([k, v], i) => [[`${i ? '  ' : ''}${nb(k)}`, fg(P.text)], [nb(` ${v}`), fg(P.sub)]])
 }
 
 const tint = color => mix(color, P.mantle, 0.2)
@@ -331,8 +334,8 @@ function monitorRows(w, h, y0) {
   return out.slice(0, h)
 }
 
-// The footer's rows: one, or up to FOOTER_ROWS when a question or a note
-// needs more to be read whole, as it does in the list beside a session.
+// The footer's rows: one, or up to FOOTER_ROWS when its question, note or
+// keys need more to be read whole, as they do in the list beside a session.
 const FOOTER_ROWS = 4
 const wrapped = (spans, w) => wrap(spans, w - 1, FOOTER_ROWS).map(l => render([[' '], ...l], w))
 
@@ -355,7 +358,7 @@ function footer(w) {
   const keys = listMode()
     ? [['j/k', 'move'], ['↵', 'open'], ...(peek ? [['alt+w', 'session'], ['ctrl+shift+b', 'board']] : [['esc', 'workspace']]), ['a/d', 'allow/deny'], ['ctrl+x', focusedMonitor() ? 'stop monitor' : 'close'], ['alt+d', 'diagrams'], ['n', 'new']]
     : [['h/l', 'lane'], ['j/k', 'agent'], ['tab', 'monitors'], ['↵', 'open'], ['a/d', 'allow/deny'], ['e', 'reviewed'], ['o', 'go to tab'], ['x', focus === 4 ? 'stop monitor' : 'close'], ['alt+d', 'diagrams'], ['n', 'new'], ['/', 'filter']]
-  return [render([[' '], ...hint(keys)], w)]
+  return wrapped(hint(keys), w)
 }
 
 function drawBoard() {
