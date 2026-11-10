@@ -36,7 +36,7 @@ const CLAUDE_FILE = join(process.env.XDG_CACHE_HOME || join(homedir(), '.cache')
 const CLI = process.argv[1]
 const settings = (await import(join(here, '../hub/settings.mjs'))).load()
 const FILER = {
-  model: { haiku: 'claude-haiku-5-5', sonnet: 'claude-sonnet-5-5' }[settings['todo.filing.model']],
+  model: { haiku: 'claude-haiku-5-5', sonnet: 'claude-sonnet-5-5', fable: 'claude-fable-5-2' }[settings['todo.filing.model']],
   effort: settings['todo.filing.effort'],
   limitMs: settings['todo.filing.limit'] * 60 * 1000,
 }

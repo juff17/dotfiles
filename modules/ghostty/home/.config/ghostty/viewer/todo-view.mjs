@@ -6,7 +6,7 @@
 // hub, beside the hub's list, or else goes to the tab that added it, or
 // offers to start Claude there again when that tab is gone. Items come from
 // bin/ghostty-todo (the /todo skill) and from here: a hands a message to
-// Claude Haiku (ghostty-todo file), which writes the item; Shift+A adds one
+// Claude, with the filing model from Settings (ghostty-todo file), which writes the item; Shift+A adds one
 // by hand, a title, a category and a note. m marks items and w hands the
 // marked ones, or the selected one, to agents: one Claude each, started as
 // the hub's New agent starts a task, in a tab or the background.
@@ -24,7 +24,7 @@ import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { readState } from '../hub/client.mjs'
-import { load as settings } from '../hub/settings.mjs'
+import { row, load as settings } from '../hub/settings.mjs'
 import { launch } from '../hub/model.mjs'
 import { go as openInHub } from '../hub/tray.mjs'
 import { CATEGORIES, STORE, TYPES, add, age, arrange, change, colorOf, fill, filingState, handoffPlace, handoffSpec, knownRepos, load, remove, repoOf, stamp, typeColorOf } from './todo.mjs'
@@ -338,7 +338,7 @@ function filingRow(item, selected) {
 function filingCard(item) {
   const w = cardWidth()
   if (filingState(item) === 'filing')
-    return [cardLine(`${C.sub}Claude Haiku is filing this, since ${clock(item.filing.started)}${C.reset}`), cardLine(hint([['x', 'drop']]))]
+    return [cardLine(`${C.sub}Claude ${filingModel(settings()).replace(/ .*/, '').replace(/^./, c => c.toUpperCase())} is filing this, since ${clock(item.filing.started)}${C.reset}`), cardLine(hint([['x', 'drop']]))]
   const why = item.filing.error || 'it took too long'
   return [
     ...wrap(`Claude couldn't file this: ${why}`, w).map(line => cardLine(`${C.red}${line}${C.reset}`)),
@@ -426,10 +426,13 @@ function inputRow(label, pillBg, text, placeholder = '', right = null, at = unde
   return side ? `${pill}${body}\x1b[${width() - side.width + 1}G${side.text}` : `${pill}${body}`
 }
 
+// The filing model as Settings labels it, e.g. "haiku 5.5".
+const filingModel = s => row('todo.filing.model').choices.find(c => c.value === s['todo.filing.model'])?.label ?? s['todo.filing.model']
+
 function statusRow(list, current) {
   if (prompt?.kind === 'claude') {
     const s = settings()
-    const model = `${s['todo.filing.model']} 5.5 · ${s['todo.filing.effort']}`
+    const model = `${filingModel(s)} · ${s['todo.filing.effort']}`
     return inputRow('CLAUDE', C.claudeBg, prompt.text, PLACEHOLDER.claude, { text: `${C.hint}${model}${C.reset}`, width: model.length }, prompt.at)
   }
   if (prompt?.kind === 'edit') {

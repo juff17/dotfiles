@@ -159,7 +159,7 @@ export const SECTIONS = [
       choice('todo.handoff.merge', 'Before merging into main', [['ask', 'ask'], ['never', 'never merge']], 'ask', 'own-worktree agents only'),
       prompt('todo-handoff'),
       head('Filing'),
-      choice('todo.filing.model', 'Model', [['haiku', 'haiku 5.5'], ['sonnet', 'sonnet 5.5']], 'haiku', 'writes the title, category and note'),
+      choice('todo.filing.model', 'Model', [['haiku', 'haiku 5.5'], ['sonnet', 'sonnet 5.5'], ['fable', 'fable 5.2']], 'haiku', 'writes the title, category and note'),
       choice('todo.filing.effort', 'Effort', ['low', 'medium', 'high'], 'medium'),
       number('todo.filing.limit', 'Give up after', 3, { min: 1, max: 10, unit: 'm' }, 'then the item shows the error'),
       head('List'),

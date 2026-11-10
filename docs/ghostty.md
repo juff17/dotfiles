@@ -96,7 +96,7 @@ Diagrams come from the claude module's diagram-pane mod (`modules/claude/mods/ge
 | `j` / `k`, scroll in Todo | Move between todos (`g` / `G`: first / last) |
 | `enter` in Todo | Open the agent it was handed to in the hub, else go to the tab that added it; a second `enter` reopens a closed one |
 | `space` in Todo | Mark done, or reopen a done one |
-| `a` in Todo | Add with Claude: describe it and Claude Haiku files it. On an empty line, `shift+a` switches to adding by hand |
+| `a` in Todo | Add with Claude: describe it and Claude files it, with the filing model from Settings (haiku, sonnet or fable). On an empty line, `shift+a` switches to adding by hand |
 | `shift+a` in Todo | Add by hand: title, category (`1`–`6`), then a note (`enter` on an empty note skips it). On a filing that failed, starts from its message |
 | `r` in Todo | Retry a filing that failed |
 | `m` / `shift+m` in Todo | Mark a todo for hand-off (the cursor moves on) / clear the marks |
