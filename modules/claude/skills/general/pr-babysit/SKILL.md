@@ -220,12 +220,6 @@ Everything that goes out under the user's name is proposed, never run:
 - A push takes its commits, lease, branch and remote from the saved facts and
   the worktree; it needs a clean worktree. Pass a `--check` for each check you
   ran and its result. `--for` labels a commit with the comment it addresses.
-- A reply with `--commit` waits until that commit is on the PR's branch, so
-  it never points reviewers at a commit they can't see: the tray offers only
-  Edit and Skip until the push goes out, and approving it before then is
-  refused. Propose the push too. If Settings post replies on their own, it
-  answers `[proposed] ... posts once that push goes out` and posts when the
-  push is approved.
 - It answers `[proposed] <id> ...` when it waits for the user, `[auto] <id>
   ...` when Settings let it run at once (it has run; the briefing marks it
   auto), `[refused] ...` when Settings rule it out, or `[failed] <id> ...`.

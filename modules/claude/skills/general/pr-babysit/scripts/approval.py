@@ -380,9 +380,6 @@ def propose(args):
     save(p)
     if mode == "auto":
         result = approve(p["id"], auto=True)
-        if result.get("held"):
-            emit("proposed", f"{p['id']} {p['title']}: {result['message']}; it posts once that push goes out")
-            return 0
         tag = "auto" if result["ok"] else "failed"
         emit(tag, f"{p['id']} {result['message']}")
         return 0 if result["ok"] else 1
@@ -391,37 +388,6 @@ def propose(args):
 
 
 # ------------------------------------------------------------ approving
-
-def unpushed(p):
-    """The commit a reply cites, while the PR's branch doesn't have it yet.
-    Posting first would point reviewers at a commit they can't see. None when
-    it's there, the reply cites none, or the branch can't be reached."""
-    sha = (p.get("commit") or {}).get("sha")
-    if not sha:
-        return None
-    notes = saved(p["pr"]["url"], p["session"])
-    wt, remote, branch = notes.get("worktree"), notes.get("remote"), notes.get("branch")
-    if not (wt and remote and branch):
-        return None
-    try:
-        git(wt, "fetch", "-q", remote, f"refs/heads/{branch}")
-        r = subprocess.run(["git", "-C", wt, "merge-base", "--is-ancestor", sha, "FETCH_HEAD"], capture_output=True, timeout=60)
-    except (RuntimeError, subprocess.TimeoutExpired, OSError):
-        return None
-    return sha if r.returncode == 1 else None
-
-
-def post_held(push):
-    """Replies Settings posts on their own that waited for this push's
-    commits: posted now that the branch has them."""
-    if policy("reply") != "auto":
-        return
-    shas = {c["sha"] for c in push.get("commits", [])}
-    for q in every():
-        if q.get("kind") == "reply" and q.get("status") == "pending" and q.get("session") == push.get("session") \
-                and q.get("pr", {}).get("key") == push["pr"]["key"] and (q.get("commit") or {}).get("sha") in shas:
-            approve(q["id"], auto=True)
-
 
 def finish(p, status, ok, message, auto=False, **extra):
     p["status"] = status
@@ -519,11 +485,6 @@ def approve(pid, body=None, drop=(), auto=False):
             return {"ok": False, "message": f"Already {p['status']}"}
         if body is not None and p["kind"] == "reply" and body != p["body"]:
             p["body"], p["edited"] = body, True
-        waits = unpushed(p) if p["kind"] == "reply" else None
-        if waits:
-            if p.get("edited"):
-                save(p)
-            return {"ok": False, "held": True, "message": f"Push {waits[:7]} first: the reply cites it", "id": p["id"], "status": p["status"]}
         if p["kind"] == "move":
             return finish(p, "handed", True, f"Approved: the session moves its commits onto {p['onto'][:7]}")
         if drop and p["kind"] == "push":
@@ -547,10 +508,7 @@ def approve(pid, body=None, drop=(), auto=False):
         # Whatever else goes wrong must still reach the tray and the session.
         except Exception as e:
             return finish(p, "failed", False, f"{type(e).__name__}: {e}", auto)
-        result = finish(p, "done", True, message, auto, **extra)
-    if p["kind"] == "push":
-        post_held(p)
-    return result
+        return finish(p, "done", True, message, auto, **extra)
 
 
 def token_hint(p):

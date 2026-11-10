@@ -331,12 +331,3 @@ test('a job a proposal covers shows once: the watcher’s own line about it is l
   )
   assert.equal(trayItems([watcher]).items[0].link.label, 'Job', 'without the proposal it stays, opening the job')
 })
-
-test('a reply citing a commit a push still waits on can be edited or skipped, not posted', () => {
-  const push = proposal('push', { id: '1-push-ab', local: 'babysit/2', branch: 'b', commits: [{ sha: 'abc1234def', added: 1, removed: 1 }] })
-  const reply = proposal('reply', { id: '2-reply-ab', body: 'Fixed in abc1234.', commit: { sha: 'abc1234def' } })
-  const row = ps => trayItems([], new Set(), new Set(), [], ps).items.find(i => i.kind === 'reply')
-  assert.deepEqual(row([push, reply]).actions, ['edit', 'skip'])
-  assert.match(row([push, reply]).meta, /posts once abc1234 is pushed/)
-  assert.deepEqual(row([reply]).actions, ['post', 'edit', 'skip'], 'once pushed it can be posted')
-})

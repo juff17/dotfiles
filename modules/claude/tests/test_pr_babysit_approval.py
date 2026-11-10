@@ -206,35 +206,6 @@ class Approvals(unittest.TestCase):
         self.assertIsNone(ap.load(first))
         self.assertEqual(ap.load(second)["body"], "two")
 
-    def test_a_reply_citing_an_unpushed_commit_waits_for_the_push(self):
-        remote, clone, lease = self.repo()
-        head = git(clone, "rev-parse", "HEAD")
-        _, _, reply = self.propose("reply", "--comment", "rc:55", "--body", f"Fixed in {head[:7]}.", "--commit", head)
-        _, _, push = self.propose("push")
-        code, out = self.run_cli("approve", reply)
-        self.assertNotEqual(code, 0)
-        self.assertIn(f"Push {head[:7]} first", out)
-        self.assertEqual(ap.load(reply)["status"], "pending")
-        self.assertFalse(self.posts(), "nothing posted before the push")
-
-        self.assertEqual(self.run_cli("approve", push)[0], 0)
-        self.assertFalse(self.posts(), "a reply that asks still waits for you")
-        self.assertEqual(self.run_cli("approve", reply)[0], 0)
-        self.assertEqual(len(self.posts()), 1)
-
-    def test_a_reply_settings_posts_on_its_own_goes_out_with_the_push(self):
-        remote, clone, lease = self.repo()
-        self.set(**{"approvals.reply": "post"})
-        head = git(clone, "rev-parse", "HEAD")
-        code, out, reply = self.propose("reply", "--comment", "rc:55", "--body", f"Fixed in {head[:7]}.", "--commit", head)
-        self.assertEqual(code, 0, out)
-        self.assertIn("posts once that push goes out", out)
-        self.assertFalse(self.posts())
-        _, _, push = self.propose("push")
-        self.assertEqual(self.run_cli("approve", push)[0], 0)
-        self.assertEqual(len(self.posts()), 1)
-        self.assertEqual(ap.load(reply)["status"], "done")
-
     # -------------------------------------------------------- pushes
 
     def test_a_push_lists_its_commits_and_pushes_with_the_lease(self):

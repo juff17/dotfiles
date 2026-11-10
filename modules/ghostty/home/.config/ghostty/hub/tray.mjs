@@ -136,10 +136,7 @@ const sessionOf = (p, agents) =>
 
 // One proposal as an inbox row. With Settings' buttons off, a row only
 // opens the popup or the session.
-// `unpushed` is the commits pending pushes would send: a reply citing one
-// waits for that push, since it would point reviewers at a commit they
-// can't see.
-export function approvalRow(p, agents, buttons = true, unpushed = new Set()) {
+export function approvalRow(p, agents, buttons = true) {
   const a = sessionOf(p, agents)
   const where = `${p.pr?.repo ?? ''} ${p.pr?.ref ?? ''}`.trim()
   const base = { kind: p.kind, approval: p.id, link: proposalLink(p) }
@@ -165,16 +162,14 @@ export function approvalRow(p, agents, buttons = true, unpushed = new Set()) {
   }[p.kind] ?? []
   const title = p.kind === 'retry' ? `${job.name} failed, looks flaky` : p.title
   if (p.removes?.length) detail.push(`replaces ${p.removes.length} on the remote`)
-  const held = p.kind === 'reply' && Boolean(p.commit?.sha) && unpushed.has(p.commit.sha)
-  if (held) detail.push(`posts once ${String(p.commit.sha).slice(0, 7)} is pushed`)
   // The tray approves only what it shows whole: a reply short enough for its
   // preview, and a push that takes nothing off the branch. Anything else
   // opens in Alt+A first.
   const whole = p.kind !== 'reply' || (String(p.body ?? '').length <= PREVIEW_MOST && !/\n/.test(p.body ?? ''))
   const actions = !buttons
     ? ['review', ...(a ? ['go'] : [])]
-    : p.kind === 'reply' && (held || !whole)
-      ? [held ? 'edit' : 'review', 'skip']
+    : p.kind === 'reply' && !whole
+      ? ['review', 'skip']
       : p.kind === 'push' && p.removes?.length
         ? ['review', 'go']
         : ({
@@ -193,8 +188,7 @@ export function trayItems(agents, seen = new Set(), dismissed = new Set(), notes
   const l = lanes(agents)
   const brokeSet = brokeTags()
   const buttons = settings()['approvals.trayButtons']
-  const unpushed = new Set(approvals.filter(p => p.kind === 'push' && p.status === 'pending').flatMap(p => (p.commits ?? []).map(c => c.sha)))
-  const items = approvals.map(p => approvalRow(p, agents, buttons, unpushed))
+  const items = approvals.map(p => approvalRow(p, agents, buttons))
   // A job a proposal is about shows once, as the proposal: the watcher's
   // own line about it (`id=<job>`) would only repeat it without buttons.
   const proposed = new Set(approvals.map(p => String(p.job?.id ?? '')).filter(Boolean))
