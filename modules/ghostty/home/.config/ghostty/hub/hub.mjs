@@ -30,7 +30,7 @@ import { attentionTags, brokeTags, cardHeights, counts, lanes, launch, monitorPr
 import { load as settings, set as setSetting } from './settings.mjs'
 import { POPUP } from './newagent.mjs'
 import { recents as recentsOf, remember as rememberIn, storePaths } from './prefs.mjs'
-import { BOLD, CAP_L, CAP_R, ITALIC, MONITOR, P, STATE, ago, bar, bg, clean, enter, fg, leave, mix, paint, pill, render, split, tokens, width } from './term.mjs'
+import { BOLD, CAP_L, CAP_R, ITALIC, MONITOR, P, STATE, ago, bar, bg, clean, enter, fg, leave, mix, paint, pill, render, split, tokens, width, wrap } from './term.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const CONF = process.env.GHOSTTY_CONF || dirname(HERE)
@@ -120,8 +120,11 @@ const EMPTY = {
   monitors: 'Nothing being monitored',
 }
 
+// Key and label pairs; no-break spaces inside a pair, so a wrapped footer
+// breaks only between pairs.
 function hint(pairs) {
-  return pairs.flatMap(([k, v], i) => [[`${i ? '  ' : ''}${k}`, fg(P.text)], [` ${v}`, fg(P.sub)]])
+  const nb = s => s.replaceAll(' ', '\u00a0')
+  return pairs.flatMap(([k, v], i) => [[`${i ? '  ' : ''}${nb(k)}`, fg(P.text)], [nb(` ${v}`), fg(P.sub)]])
 }
 
 const tint = color => mix(color, P.mantle, 0.2)
@@ -331,25 +334,31 @@ function monitorRows(w, h, y0) {
   return out.slice(0, h)
 }
 
+// The footer's rows: one, or up to FOOTER_ROWS when its question, note or
+// keys need more to be read whole, as they do in the list beside a session.
+const FOOTER_ROWS = 4
+const wrapped = (spans, w) => wrap(spans, w - 1, FOOTER_ROWS).map(l => render([[' '], ...l], w))
+
 function footer(w) {
   // A question waiting for y or n comes first: it's what the next key answers.
+  // Each answer is a key and its word, kept together on a line.
   if (confirm)
-    return render(
+    return wrapped(
       [
-        [` ${confirm.text} `, BOLD + fg(P.peach)],
+        [`${confirm.text}  `, BOLD + fg(P.peach)],
         ['y', fg(P.text)],
-        [' yes  ', fg(P.sub)],
+        ['\u00a0yes  ', fg(P.sub)],
         ['n', fg(P.text)],
-        [' no', fg(P.sub)],
-        ...(confirm.skip ? [['  a', fg(P.text)], [" yes, don't ask again", fg(P.sub)]] : []),
+        ['\u00a0no', fg(P.sub)],
+        ...(confirm.skip ? [['  a', fg(P.text)], ["\u00a0yes,\u00a0don't\u00a0ask\u00a0again", fg(P.sub)]] : []),
       ],
       w,
     )
-  if (note && note.until > Date.now()) return render([[` ${note.text}`, fg(note.color)]], w)
+  if (note && note.until > Date.now()) return wrapped([[note.text, fg(note.color)]], w)
   const keys = listMode()
-    ? [['j/k', 'move'], ['↵', 'open'], ...(peek ? [['alt+w', 'session'], ['ctrl+shift+b', 'board']] : [['esc', 'workspace']]), ['a/d', 'allow/deny'], ['alt+d', 'diagrams'], ['n', 'new']]
+    ? [['j/k', 'move'], ['↵', 'open'], ...(peek ? [['alt+w', 'session'], ['ctrl+shift+b', 'board']] : [['esc', 'workspace']]), ['a/d', 'allow/deny'], ['ctrl+x', focusedMonitor() ? 'stop monitor' : 'close'], ['alt+d', 'diagrams'], ['n', 'new']]
     : [['h/l', 'lane'], ['j/k', 'agent'], ['tab', 'monitors'], ['↵', 'open'], ['a/d', 'allow/deny'], ['e', 'reviewed'], ['o', 'go to tab'], ['x', focus === 4 ? 'stop monitor' : 'close'], ['alt+d', 'diagrams'], ['n', 'new'], ['/', 'filter']]
-  return render([[' '], ...hint(keys)], w)
+  return wrapped(hint(keys), w)
 }
 
 function drawBoard() {
@@ -364,8 +373,8 @@ function drawBoard() {
   for (let r = 0; r < laneH; r++) lines.push(cols_.map(c => c[r]).join(' '.repeat(LANE_GAP)))
   lines.push(render([], W))
   lines.push(...monitorRows(W, stripH, lines.length + 1))
-  lines.push(footer(W))
-  return lines.slice(0, H)
+  const foot = footer(W)
+  return [...lines.slice(0, H - foot.length), ...foot]
 }
 
 // ------------------------------------------------------------ list
@@ -411,7 +420,8 @@ function drawList() {
       render([['   '], [clean(a.repo), fg(P.sub)], [clean(place), fg(P.overlay1)], [` · ${clean(a.cmd)}`, fg(P.overlay1)]], W, fill),
     ]
   })
-  const room = H - 3
+  const foot = footer(W)
+  const room = H - 2 - foot.length
   const sel = items.findIndex(x => x.id === listSel)
   scroll.list = listScroll(drawn.map(r => r.length), sel, scroll.list, room)
   let row = 0
@@ -425,9 +435,8 @@ function drawList() {
       row++
     }
   })
-  while (lines.length < H - 1) lines.push(render([], W))
-  lines.push(footer(W))
-  return lines.slice(0, H)
+  while (lines.length < H - foot.length) lines.push(render([], W))
+  return [...lines, ...foot].slice(0, H)
 }
 
 // ------------------------------------------------------------ new agent
