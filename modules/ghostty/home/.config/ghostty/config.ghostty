@@ -22,6 +22,26 @@ keybind = ctrl+shift+arrow_right=csi:9003~
 keybind = ctrl+shift+arrow_left=csi:9004~
 keybind = ctrl+shift+page_up=csi:9005~
 keybind = ctrl+shift+page_down=csi:9006~
+# Alt+1 … Alt+9 go to a tmux tab (layout.conf), so Ghostty's own tab keys
+# are unbound and the keys reach tmux. Ghostty names each digit both ways.
+keybind = alt+digit_1=unbind
+keybind = alt+1=unbind
+keybind = alt+digit_2=unbind
+keybind = alt+2=unbind
+keybind = alt+digit_3=unbind
+keybind = alt+3=unbind
+keybind = alt+digit_4=unbind
+keybind = alt+4=unbind
+keybind = alt+digit_5=unbind
+keybind = alt+5=unbind
+keybind = alt+digit_6=unbind
+keybind = alt+6=unbind
+keybind = alt+digit_7=unbind
+keybind = alt+7=unbind
+keybind = alt+digit_8=unbind
+keybind = alt+8=unbind
+keybind = alt+digit_9=unbind
+keybind = alt+9=unbind
 # Ctrl+Shift+A switches between the workspace and the agent hub, in place of
 # Ghostty's select-all, which in the layout would select every pane at once.
 keybind = ctrl+shift+a=csi:9007~

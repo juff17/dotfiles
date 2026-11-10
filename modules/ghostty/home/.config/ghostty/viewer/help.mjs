@@ -36,7 +36,12 @@ export const SECTIONS = [
       ['ctrl+shift+→ / ←', 'Next / previous tab'],
       ['ctrl+shift+pgup', 'Move this tab left', true],
       ['ctrl+shift+pgdn', 'Move this tab right', true],
+      ['alt+g', 'Tab picker: every tab, type to filter, ↵ to go'],
+      ['alt+1 … alt+8', 'Go to that tab'],
+      ['alt+9', 'Go to the last tab', true],
       ['click ×', 'Close that tab'],
+      ['click n/m', 'The count on the right (tab n of m) opens the tab picker', true],
+      ['◀ / ▶', 'More tabs that way than fit on the bar', true],
     ],
   },
   {

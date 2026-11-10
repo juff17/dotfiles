@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+# Getting round many tabs. The tab picker lists every tab of a tab session in
+# a popup over the whole window, from Alt+G (layout.conf) or a click on the
+# tab bar's tab/tabs count (tmux.conf): type to filter by name or folder, ↵
+# goes to the tab, Esc closes. Alt+1 … Alt+8 go straight to that tab and
+# Alt+9 to the last one.
+#   ghostty-tabs <client> <tabs>         open the picker on that outer tmux
+#                                        client, for tab session <tabs>
+#   ghostty-tabs --from-tabs <session>   the same, from a click in tab
+#                                        session <session>, whose outer
+#                                        client it finds
+#   ghostty-tabs --go <tabs> <n|last>    go to tab n of <tabs>, or its last
+#   ghostty-tabs --panel <tabs>          what runs inside the popup
+
+source "$(dirname "$(readlink -f "$0")")/ghostty-lib.sh"
+
+tabs() { tmux -L "$TABS_SOCKET" "$@"; }
+
+# A truecolor escape for a #rrggbb color, or nothing for anything else.
+fg() {
+  [[ $1 =~ ^#([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2})$ ]] || return 0
+  printf '\e[38;2;%d;%d;%dm' "0x${BASH_REMATCH[1]}" "0x${BASH_REMATCH[2]}" "0x${BASH_REMATCH[3]}"
+}
+
+# One line per tab: its number, a tab, then what the picker shows. The
+# number comes first, unshown, so the picked line says which tab it is.
+# tmux's fields are split on \x1f, since read runs adjacent tabs together and
+# an empty field, like a tab without Claude's glyph, would shift the rest.
+rows() {
+  local idx active name agent agent_fg bell path dim=$'\e[38;2;127;132;156m' off=$'\e[0m'
+  local home=$HOME
+  while IFS=$'\x1f' read -r idx active name agent agent_fg bell path; do
+    local mark='  ' glyph='' alert=''
+    ((active)) && mark=$'\e[1;38;2;137;180;250m▸\e[0m '
+    [[ -n $agent ]] && glyph=" $(fg "$agent_fg")$agent$off"
+    ((bell)) && alert=$' \e[1;38;2;243;139;168m!\e[0m'
+    printf '%s\t%s%s%2d%s  %s%s%s  %s%s%s\n' "$idx" "$mark" "$dim" "$idx" "$off" "$name" "$glyph" "$alert" "$dim" "${path/#$home/\~}" "$off"
+  done < <(tabs list-windows -t "$1" -F $'#{window_index}\x1f#{window_active}\x1f#{window_name}\x1f#{@agent}\x1f#{@agent_fg}\x1f#{window_bell_flag}\x1f#{pane_current_path}')
+}
+
+case $1 in
+--panel)
+  target=$2
+  list=$(rows "$target")
+  # The cursor starts on the active tab.
+  active=$(tabs display -p -t "$target" '#{window_index}' 2>/dev/null)
+  pos=$(awk -F'\t' -v a="$active" '$1 == a { print NR }' <<<"$list")
+  pick=$(fzf --ansi --delimiter=$'\t' --with-nth=2 --no-sort --layout=reverse --info=inline-right --gutter=' ' \
+    --prompt='tab › ' --pointer='›' --header='↵ go to it · esc close · type to filter by name or folder' \
+    --color='bg:#1e1e2e,bg+:#45475a,fg:#cdd6f4,fg+:#cdd6f4,hl:#f9e2af,hl+:#f9e2af,prompt:#89b4fa,pointer:#89b4fa,header:#7f849c,info:#7f849c,border:#89b4fa' \
+    --bind "load:pos(${pos:-1})" --bind change:first <<<"$list") || exit 0
+  tabs select-window -t "$target:${pick%%$'\t'*}" 2>/dev/null
+  exit 0
+  ;;
+--go)
+  target=$2 n=$3
+  [[ $n == last ]] && n='{end}'
+  # A tab that isn't there is no error: the key just does nothing.
+  tabs select-window -t "$target:$n" 2>/dev/null
+  exit 0
+  ;;
+--from-tabs)
+  session=$2
+  # A workspace tab session ghostty-<win> shows in layout-<win>; a session
+  # the hub opened, peek-<pane>, in the outer pane %<pane>.
+  case $session in
+  ghostty-*) outer=layout-${session#ghostty-} ;;
+  peek-*) outer=$(layout display -p -t "%${session#peek-}" '#{session_name}' 2>/dev/null) ;;
+  esac
+  [[ -n $outer ]] || exit 0
+  client=$(layout list-clients -t "$outer" -F '#{client_name}' 2>/dev/null | head -1)
+  [[ -n $client ]] || exit 0
+  exec "$0" "$client" "$session"
+  ;;
+esac
+
+client=$1 target=$2
+count=$(tabs display -p -t "$target" '#{session_windows}' 2>/dev/null) || exit 0
+# Tall enough for every tab, the prompt and the header, up to most of the window.
+height=$((count + 5))
+max=$(($(layout display -p -c "$client" '#{client_height}') * 85 / 100))
+((height > max)) && height=$max
+layout display-popup -c "$client" -E -w 70% -h "$height" -b rounded -S "fg=#89b4fa" -s "bg=#1e1e2e" -T " Tabs " \
+  "$(printf '%q ' "$GHOSTTY_CONF/bin/ghostty-tabs" --panel "$target")"

@@ -21,6 +21,7 @@ export const RESERVED = {
   'alt+b': 'the shell (word back)',
   'alt+f': 'the shell (word forward)',
   'alt+p': 'Claude Code (model picker)',
+  ...Object.fromEntries([1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => [`alt+${n}`, 'the tab bar (go to a tab)'])),
   'ctrl+shift+c': 'Ghostty (copy)',
   'ctrl+shift+v': 'Ghostty (paste)',
   'ctrl+shift+q': 'Ghostty (quit)',

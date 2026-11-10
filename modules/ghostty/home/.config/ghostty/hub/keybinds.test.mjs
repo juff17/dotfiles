@@ -62,6 +62,8 @@ test('a key another row or something else has clashes', () => {
   assert.match(clash(row('keys.help'), 'alt+a', v), /Approvals popup/)
   assert.match(clash(row('keys.help'), 'alt+p', v), /Claude Code/)
   assert.match(clash(row('keys.newTab'), 'ctrl+shift+c', v), /copy/)
+  assert.match(clash(row('keys.help'), 'alt+1', v), /go to a tab/)
+  assert.match(clash(row('keys.help'), 'alt+9', v), /go to a tab/)
   assert.equal(clash(row('keys.help'), 'alt+h', v), null)
   assert.equal(clash(row('keys.help'), 'alt+x', v), null)
   assert.equal(clash(row('keys.help'), '', v), null)

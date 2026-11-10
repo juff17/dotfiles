@@ -308,6 +308,7 @@ export const SECTIONS = [
       keybind('keys.viewer', 'Show or hide the viewer', 'alt', 'alt+v'),
       keybind('keys.newAgent', 'New agent', 'alt', 'alt+n'),
       keybind('keys.editor', 'Open in your editor', 'alt', 'alt+e'),
+      keybind('keys.tabs', 'Tab picker', 'alt', 'alt+g', undefined, 'every tab, to filter and go to'),
       head('Ghostty · config.ghostty'),
       keybind('keys.hub', 'Workspace ↔ hub', 'ghostty', 'ctrl+shift+a', 'csi:9007~'),
       keybind('keys.board', 'Back to the board', 'ghostty', 'ctrl+shift+b', 'csi:9008~'),
