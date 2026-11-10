@@ -30,9 +30,13 @@ test('a moved key binds the same command at the new key, and an unbound one bind
   const keys = bound(text)
   assert.ok(keys.includes('M-x') && !keys.includes('M-h') && !keys.includes('M-t'))
   assert.match(text, /^bind -n M-x run-shell -b '"#\{@conf\}\/bin\/ghostty-help"/m)
-  // Every alt letter is freed first but the hub's own alt+w.
   assert.match(text, /^unbind -q -n M-h$/m)
-  assert.doesNotMatch(text, /^unbind -q -n M-w$/m)
+})
+
+test('an alt key layout.conf binds for something else is never unbound', () => {
+  const text = tmuxConf(defaults(), `${CONF}\nbind -n M-q run other\n`)
+  assert.doesNotMatch(text, /^unbind -q -n M-q$/m)
+  assert.match(text, /^unbind -q -n M-z$/m)
 })
 
 test('Ghostty gets lines only for keys moved off their default', () => {

@@ -21,7 +21,6 @@ export const RESERVED = {
   'alt+b': 'the shell (word back)',
   'alt+f': 'the shell (word forward)',
   'alt+p': 'Claude Code (model picker)',
-  'alt+w': 'the hub (list ↔ session)',
   'ctrl+shift+c': 'Ghostty (copy)',
   'ctrl+shift+v': 'Ghostty (paste)',
   'ctrl+shift+q': 'Ghostty (quit)',
