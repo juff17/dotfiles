@@ -210,6 +210,35 @@ Drawing, and anything that needs a live tmux server, has no tests. The tests use
 
 That runs every `*.test.mjs` under `viewer/` and `hub/`, so a new test file is picked up on its own. CI runs these and the `claude` module's tests on every push to main and every PR (`.github/workflows/tests.yml`).
 
+### Trying a worktree's changes in the open Ghostty
+
+The links in `~/.config/ghostty/` point at the main checkout. The scripts in `bin/` source `ghostty-lib.sh`, which sets `GHOSTTY_CONF` from its own real path, so whatever a script runs (`viewer/`, `hub/`) comes from the checkout that script lives in. Repointing a link under `viewer/` does nothing; repoint the `bin/` script the key runs. The tmux keys run `#{@conf}/bin/<script>`, and `@conf` is `~/.config/ghostty`.
+
+1. Find the script behind the key in `layout.conf` (Alt+T runs `bin/ghostty-todo-panel`).
+2. Check the change in a throwaway tmux server first, before and after, so you know you're about to test the fix and not a guess. For the Todo list:
+
+   ```bash
+   wt=<worktree>/modules/ghostty/home/.config/ghostty
+   tmux -L try -f /dev/null new-session -d -x 150 -y 30 "TD_POPUP=1 node $wt/viewer/todo-view.mjs $PWD"
+   tmux -L try send-keys j        # whatever reproduces it
+   tmux -L try capture-pane -p | head
+   tmux -L try kill-server
+   ```
+
+   Run it again with the main checkout's path to see the bug still there.
+3. Point the live link at the worktree's copy:
+
+   ```bash
+   ln -sfn <worktree>/modules/ghostty/home/.config/ghostty/bin/ghostty-todo-panel ~/.config/ghostty/bin/ghostty-todo-panel
+   ```
+
+   A popup starts a new process each time it opens, so the next Alt+T runs the worktree's code. Something long-running needs a restart: the hub, say (see its `forever` loop in `bin/ghostty-hub`).
+4. When you're done, merged or not, point it back before the worktree is removed, or the key breaks:
+
+   ```bash
+   ln -sfn ~/projects/personal/dotfiles/modules/ghostty/home/.config/ghostty/bin/ghostty-todo-panel ~/.config/ghostty/bin/ghostty-todo-panel
+   ```
+
 ## Limits
 
 - **btop's pane** only displays. It ignores the mouse and never takes focus, so keys always go to the viewer or the tabs. If btop exits anyway, it starts again a second later.
