@@ -36,29 +36,43 @@ viewer_dir_file() {
   echo "${XDG_RUNTIME_DIR:-/tmp}/ghostty-layout/viewer-$(viewer_id "$1").dir"
 }
 
-# Opens window <win>'s viewer left of the tab session, in Files at <dir>.
+# open_viewer <win> <dir> [keep]: opens window <win>'s viewer left of the tab
+# session, in Files at <dir>. With keep, the viewer keeps focus afterwards.
 # yazi asks Ghostty about the terminal through tmux, and tmux hands Ghostty's
 # answers to whichever pane has focus; in a Claude pane one reads as Alt+P
 # (the model picker). So the viewer holds focus while yazi starts. yazi sets
 # allow-passthrough on its pane between its first round of questions, which
 # tmux answers, and its second, which Ghostty answers a moment later.
 open_viewer() {
-  local win=$1 dir=$2 tabs viewer i
+  local win=$1 dir=$2 keep=${3:-} tabs viewer share left i
   tabs=$(layout show -t "layout-$win" -v @tabs 2>/dev/null) || return
+  share=$(viewer_percent)
   # DV_TABS tells Diagrams and Diff whose active tab to follow.
-  viewer=$(layout split-window -d -h -b -l "$(setting layout.viewerPercent GHOSTTY_VIEWER_SHARE 40)%" \
+  viewer=$(layout split-window -d -h -b -l "$share%" \
     -t "$tabs" -P -F '#{pane_id}' -c "$dir" \
     -e "DV_TABS=$TABS_SOCKET:ghostty-$win" -e "VIEWER_ID=$(viewer_id "$win")" \
     "$GHOSTTY_CONF/bin/ghostty-viewer" "$dir" 2>/dev/null) || return
-  command -v yazi >/dev/null || return 0
+  # Ghostty opens a window small and the window manager grows it after, and
+  # tmux shares that growth out between the panes, so the viewer would end
+  # up far from its share of the row. This puts it back after every resize,
+  # which also undoes a drag of its divider. The hook's [0] is add_hub's.
+  left=$(layout display -p -t "$viewer" '#{pane_left}')
+  layout set-hook -t "layout-$win" 'window-resized[1]' \
+    "run -C 'resize-pane -t $viewer -x #{e|/:#{e|*:#{e|-:#{window_width},$left},$share},100}'"
+  if ! command -v yazi >/dev/null; then
+    [[ -n $keep ]] && layout select-pane -t "$viewer"
+    return 0
+  fi
   layout select-pane -t "$viewer"
   for ((i = 0; i < 40; i++)); do
     [[ $(layout show -p -t "$viewer" -v allow-passthrough) == all ]] && break
     sleep 0.05
   done
   sleep 1
-  layout select-pane -t "$tabs"
+  [[ -n $keep ]] || layout select-pane -t "$tabs"
 }
+
+viewer_percent() { setting layout.viewerPercent GHOSTTY_VIEWER_SHARE 30; }
 
 # setting <key> <env var> <fallback>: a value from Settings (hub/settings.mjs).
 # The environment variable wins when it's set (pass '' for none); the
