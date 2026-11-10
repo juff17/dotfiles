@@ -351,7 +351,7 @@ function filingCard(item) {
 function bodyRows(view, current) {
   const rows = []
   if (view.filing.length) {
-    rows.push({ text: `${C.sub}▾${C.reset} ${C.peach}${C.bold}filing${C.reset} ${C.sub}${view.filing.length}${C.reset}` })
+    rows.push({ text: `${C.sub}▾${C.reset} ${C.peach}${C.bold}filing${C.reset} ${C.sub}${view.filing.length}${C.reset}`, header: true })
     for (const item of view.filing) {
       const selected = item === current
       rows.push({ text: filingRow(item, selected), item })
@@ -360,7 +360,7 @@ function bodyRows(view, current) {
     rows.push({ text: '' })
   }
   for (const g of view.groups) {
-    rows.push({ text: `${C.sub}▾${C.reset} ${fg(g.color)}${C.bold}${g.name}${C.reset} ${C.sub}${g.items.length}${C.reset}` })
+    rows.push({ text: `${C.sub}▾${C.reset} ${fg(g.color)}${C.bold}${g.name}${C.reset} ${C.sub}${g.items.length}${C.reset}`, header: true })
     for (const item of g.items) {
       const selected = item === current
       rows.push({ text: itemRow(item, selected), item })
@@ -369,7 +369,7 @@ function bodyRows(view, current) {
     rows.push({ text: '' })
   }
   if (view.doneToday.length) {
-    rows.push({ text: `${C.sub}${showDone ? '▾' : '▸'} done today ${view.doneToday.length}${C.reset}`, done: true })
+    rows.push({ text: `${C.sub}${showDone ? '▾' : '▸'} done today ${view.doneToday.length}${C.reset}`, done: true, header: true })
     if (showDone)
       for (const item of view.doneToday) {
         const selected = item === current

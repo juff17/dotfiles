@@ -521,12 +521,16 @@ test('a closed tab reopens in its worktree, folder or repo, whichever is on disk
 test('scrolling keeps the selected item’s card in view, its row first', () => {
   const a = { id: 'a' }
   const b = { id: 'b' }
-  const rows = [{ text: 'h' }, { item: a }, { item: a }, { text: '' }, { text: 'h' }, { item: b }, { item: b }, { item: b }, { text: '' }]
+  const c = { id: 'c' }
+  const rows = [{ text: 'h', header: true }, { item: a }, { item: a }, { text: '' }, { text: 'h', header: true }, { item: b }, { item: b }, { item: b }, { text: '' }]
   assert.equal(ui.scrollTo(rows, a, 0, 4), 0)
   assert.equal(ui.scrollTo(rows, b, 0, 4), 4, 'down far enough to show its whole card')
-  assert.equal(ui.scrollTo(rows, a, 4, 4), 1, 'up to its row')
+  assert.equal(ui.scrollTo(rows, a, 4, 4), 0, 'up to its group’s header')
+  assert.equal(ui.scrollTo(rows, a, 4, 2), 1, 'up to its row when the header and card don’t both fit')
+  assert.equal(ui.scrollTo(rows, b, 7, 4), 4, 'up to the second group’s header')
+  const group = [{ text: 'h', header: true }, { item: a }, { item: c }, { item: c }, { text: '' }, { text: '' }, { text: '' }]
+  assert.equal(ui.scrollTo(group, c, 3, 4), 2, 'not the first in its group: only up to its row')
   assert.equal(ui.scrollTo(rows, b, 0, 2), 5, 'a card taller than the pane shows its row first')
-  assert.equal(ui.scrollTo(rows, b, 6, 4), 5, 'never past where the end fills the pane')
   assert.equal(ui.scrollTo(rows, a, 3, 20), 0, 'everything fits')
   assert.equal(ui.scrollTo(rows, { id: 'gone' }, 7, 4), 5, 'an item not drawn: only clamped')
   assert.equal(ui.scrollTo([], { id: 'gone' }, 3, 4), 0)
