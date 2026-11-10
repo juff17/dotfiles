@@ -118,6 +118,48 @@ export const pill = (text, color, outer, style = '') => [
   [CAP_R, fg(color) + bg(outer)],
 ]
 
+// Spans word-wrapped to lines of at most `cols` cells, breaking only at
+// plain spaces (a no-break space holds two words together), at most `max`
+// lines; what's past the last line joins it, for render() to cut with ….
+// A line's trailing spaces go, and so do a wrapped line's leading ones.
+export function wrap(spans, cols, max = Number.POSITIVE_INFINITY) {
+  const words = [] // { gap: spaces before it, parts: spans }
+  let word = null
+  let gap = ''
+  for (const [text, style = ''] of spans)
+    for (const piece of text.split(/( +)/)) {
+      if (!piece) continue
+      if (piece[0] === ' ') {
+        word = null
+        gap += piece
+        continue
+      }
+      if (!word) {
+        word = { gap, parts: [] }
+        words.push(word)
+        gap = ''
+      }
+      word.parts.push([piece, style])
+    }
+  const lines = []
+  let line = []
+  let used = 0
+  for (const w of words) {
+    const ww = w.parts.reduce((n, [t]) => n + width(t), 0)
+    if (used > 0 && used + width(w.gap) + ww > cols && lines.length < max - 1) {
+      lines.push(line)
+      line = []
+      used = 0
+    }
+    const lead = lines.length === 0 || used > 0 ? w.gap : ''
+    if (lead) line.push([lead])
+    line.push(...w.parts)
+    used += width(lead) + ww
+  }
+  if (line.length || !lines.length) lines.push(line)
+  return lines
+}
+
 // Left and right parts on one line, the left cut first when they don't fit.
 export function split(left, right, cols, fill = '') {
   const rw = right.reduce((n, [t]) => n + width(t), 0)
