@@ -12,6 +12,8 @@
 import { statSync } from 'node:fs'
 
 import { BOLD, P, fg } from '../hub/term.mjs'
+import { editField, insertAt, length } from '../hub/line.mjs'
+import { complete, suggestion } from '../hub/paths.mjs'
 import { BUILTIN_MODES, SECTIONS, addedId, expandHome, isAdded, load, modeName, reset, row, set, show, step, toggleFlag } from '../hub/settings.mjs'
 import { apply, captured, clash } from '../hub/keybinds.mjs'
 
@@ -165,6 +167,7 @@ function inputKey(s, key) {
     s.input = null
     return
   }
+  if (input.field === 'file' && key !== '\r') return pathKey(s, key)
   if (key === '\x7f' || key === '\b') {
     input.text = [...input.text].slice(0, -1).join('')
     return
@@ -198,21 +201,70 @@ function saveFile(s, key, path) {
   } catch {}
   if (!there) return say(s, `No ${dir ? 'folder' : 'file'} at ${path}`)
   s.input = null
-  save(s, () => set(key, path))
+  // A completed folder ends in a slash; the setting is the folder itself.
+  save(s, () => set(key, dir ? path.replace(/(.)\/+$/, '$1') : path))
 }
 
 // ↵ on a file row: the footer takes its path, starting from the one it has.
+// `files` is whether completion offers files, or only folders.
 function startFile(s) {
   const r = current(s)
-  s.input = { field: 'file', key: r.key, label: r.label, text: load()[r.key] }
+  s.input = { field: 'file', key: r.key, label: r.label, text: load()[r.key], files: !r.dir, menu: null }
   s.note = null
 }
+
+// A key while a path is typed, as in a shell: Tab completes it and steps
+// through the matches (Shift+Tab back), → or End at the end takes the dim
+// suggestion, and the rest edit the line (hub/line.mjs: arrows, Ctrl+W,
+// Ctrl+U and the like).
+function pathKey(s, key) {
+  const input = s.input
+  const opts = { files: input.files }
+  if (key === '\t' || (key === '\x1b[Z' && input.menu)) {
+    const r = complete(input.text, input.menu, key === '\x1b[Z', opts)
+    input.text = r.text
+    input.menu = r.menu
+    delete input.at
+    return
+  }
+  input.menu = null
+  const rest = pathGhost(input)
+  if (rest && ['\x1b[C', '\x1b[F', '\x1b[4~', '\x05'].includes(key)) {
+    input.text += rest
+    return
+  }
+  // Ctrl+W takes back one part of the path, as zsh does, not the whole word.
+  if (key === '\x17') {
+    const chars = [...input.text]
+    const at = input.at ?? chars.length
+    const before = chars.slice(0, at).join('')
+    const kept = before.replace(/[^/]*\/?$/, '')
+    input.text = kept + chars.slice(at).join('')
+    if (input.at !== undefined) input.at = length(kept)
+    return
+  }
+  editField(input, 'text', key)
+}
+
+// The dim rest of the first match, while the caret is at the end and no
+// menu is open.
+export const pathGhost = input =>
+  input.field === 'file' && !input.menu && (input.at ?? length(input.text)) === length(input.text) ? suggestion(input.text, { files: input.files }) : ''
 
 // Typed or pasted text, tabs and line breaks left out.
 export function typeText(s, text) {
   if (!s.input) return
   const most = s.input.field === 'name' ? 24 : 500
-  s.input.text = (s.input.text + text.replace(/[\t\r\n]/g, ' ')).slice(0, most)
+  const clean = text.replace(/[\t\r\n]/g, ' ')
+  if (s.input.field === 'file') {
+    s.input.menu = null
+    const r = insertAt(s.input.text, s.input.at, clean)
+    s.input.text = r.text.slice(0, most)
+    if (r.at < length(s.input.text)) s.input.at = r.at
+    else delete s.input.at
+    return
+  }
+  s.input.text = (s.input.text + clean).slice(0, most)
 }
 
 export function pickSection(s, i) {

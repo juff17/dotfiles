@@ -12,7 +12,9 @@ import { existsSync } from 'node:fs'
 import { BOLD, P, bg, enter, fg, leave, paint, render, split, tokens, width } from '../hub/term.mjs'
 import { SECTIONS, settingsFile, load, show } from '../hub/settings.mjs'
 import { fileOf, instructions } from '../hub/prompts.mjs'
-import { BOTTOM, NAV, TOP, VALUE, current, modeRows, modeSub, onKey, start, typeText, valueSpans } from './settings-nav.mjs'
+import { BOTTOM, NAV, TOP, VALUE, current, modeRows, modeSub, onKey, pathGhost, start, typeText, valueSpans } from './settings-nav.mjs'
+import { splitAt } from '../hub/line.mjs'
+import { matchesOf } from '../hub/paths.mjs'
 
 const s = start(process.argv[2])
 
@@ -115,6 +117,9 @@ function draw() {
     const line = more ? render([['▾ more', fg(P.overlay1)]], right, BASE) : (body[s.scroll + y] ?? render([], right, BASE))
     lines.push(`${nav}${render([['│', fg(P.surface0)]], 1, BASE)}${BASE} ${line}`)
   }
+  // While a path is typed, the matches take the body's last line.
+  const matches = s.input?.field === 'file' && matchesLine(w)
+  if (matches) lines[lines.length - 1] = matches
   const r = current(s)
   const keys =
     r.type === 'key'
@@ -158,12 +163,39 @@ function promptLine(w) {
   const { field, name, label, text } = s.input
   const ask = field === 'file' ? ` ${label}: ` : field === 'name' ? ' New mode’s name: ' : ` Command for ${name}: `
   const done = field === 'file' ? 'save' : field === 'name' ? 'next' : 'add'
-  const keys = [['↵', done], ['esc', 'cancel']].flatMap(([k, what]) => [
+  const keys = [...(field === 'file' ? [['tab', 'complete']] : []), ['↵', done], ['esc', 'cancel']].flatMap(([k, what]) => [
     [k, fg(P.text)],
     [` ${what}  `, fg(P.sub)],
   ])
   const right = s.note ? [[`${s.note.text} `, fg(s.note.color)], ...keys] : keys
-  return split([[ask, BOLD + fg(P.blue)], [text, fg(P.text)], ['▏', fg(P.blue)]], right, w, BASE)
+  const [before, after] = splitAt(text, s.input.at)
+  return split([[ask, BOLD + fg(P.blue)], [before, fg(P.text)], ['▏', fg(P.blue)], [after, fg(P.text)], [pathGhost(s.input), fg(P.overlay1)]], right, w, BASE)
+}
+
+// Above a typed path: what it could complete to, the one Tab is on
+// highlighted, as many as fit.
+function matchesLine(w) {
+  const { text, menu, files } = s.input
+  const m = menu ?? matchesOf(text, { files })
+  if (!menu && !m.part && !text.endsWith('/')) return null
+  const head = [[' Matches  ', fg(P.blue)]]
+  if (!m.names.length) return render([...head, ['nothing matches', fg(P.overlay1)]], w, BASE)
+  const shown = m.names.map(n => `${n}${m.folders.has(n) ? '/' : ''}`)
+  const room = w - width(' Matches  ') - 8
+  // Starts late enough that the highlighted one fits, with … for what's before.
+  let from = 0
+  const cost = (a, b) => shown.slice(a, b + 1).reduce((n, x) => n + width(x) + 3, a > 0 ? 2 : 0)
+  while (menu && from < menu.i && cost(from, menu.i) > room) from++
+  const spans = [...head, ...(from > 0 ? [['… ', fg(P.overlay1)]] : [])]
+  let used = from > 0 ? 2 : 0
+  let i = from
+  for (; i < shown.length; i++) {
+    if (used + width(shown[i]) + 3 > room) break
+    spans.push([` ${shown[i]} `, menu && i === menu.i ? fg(P.crust) + bg(P.blue) : fg(P.text) + bg(P.surface0)], [' ', BASE])
+    used += width(shown[i]) + 3
+  }
+  if (i < m.names.length) spans.push([`+${m.names.length - i} more`, fg(P.overlay1)])
+  return render(spans, w, BASE)
 }
 
 const quit = () => {

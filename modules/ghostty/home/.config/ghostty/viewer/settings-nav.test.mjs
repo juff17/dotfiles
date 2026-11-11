@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { beforeEach, test } from 'node:test'
@@ -276,4 +276,27 @@ test('a path that is not whole, or has a line break, is not a sound file', () =>
   assert.throws(() => set('tray.soundFile', 'a.oga'))
   assert.throws(() => set('tray.soundFile', '/a\nb.oga'))
   assert.equal(r.default, '')
+})
+
+test('a typed path completes as in a shell: tab fills in, steps through matches, → takes the suggestion', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'repos-'))
+  for (const d of ['alpha', 'alphabet', 'beta']) mkdirSync(join(dir, d))
+  writeFileSync(join(dir, 'bee.txt'), '')
+  const s = on('todo.handoff.defaultRepo')
+  press(s, '\r', ...`${dir}/b`, '\t')
+  assert.equal(s.input.text, `${dir}/beta/`, 'a folder row offers only folders')
+  press(s, '\x15', ...`${dir}/al`, '\t')
+  assert.equal(s.input.text, `${dir}/alpha`, 'what several share')
+  press(s, '\t', '\t')
+  assert.equal(s.input.text, `${dir}/alphabet/`, 'then each in turn')
+  press(s, '\x1b[Z')
+  assert.equal(s.input.text, `${dir}/alpha/`)
+  press(s, '\x17', ...'al')
+  assert.equal(s.input.text, `${dir}/al`, 'ctrl+w takes a word back')
+  assert.equal(nav.pathGhost(s.input), 'pha/')
+  press(s, RIGHT, '\r')
+  assert.equal(get('todo.handoff.defaultRepo'), `${dir}/alpha`, 'saved without the slash')
+  const f = on('tray.soundFile')
+  press(f, '\r', ...`${dir}/be`, '\t')
+  assert.equal(f.input.menu.names.join(' '), 'bee.txt beta', 'a file row offers files too')
 })

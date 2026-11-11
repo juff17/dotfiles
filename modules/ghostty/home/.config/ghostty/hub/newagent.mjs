@@ -5,11 +5,12 @@
 // the hub starts the agent once the popup closes; Esc leaves no file.
 //   newagent.mjs <result file> <{"folder": "...", "recents": [...]}>
 
-import { readdirSync, statSync, writeFileSync } from 'node:fs'
+import { statSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { basename, dirname, join } from 'node:path'
+import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { caretParts, editLine, insertAt, length } from './line.mjs'
+import { complete, expand, matchesOf, suggestion as pathSuggestion, tilde } from './paths.mjs'
 import { load as settings } from './settings.mjs'
 import { BOLD, ITALIC, P, bg, clean, enter, fg, leave, paint, render, tokens, width } from './term.mjs'
 
@@ -53,8 +54,6 @@ export const POPUP = {
   h: BODY_ROWS + 2 + 2 * MARGIN_Y + 2,
 }
 
-const tilde = p => (p.startsWith(HOME) ? `~${p.slice(HOME.length)}` : p)
-const expand = p => (p.startsWith('~') ? HOME + p.slice(1) : p)
 const cols = () => process.stdout.columns || 80
 const rows = () => process.stdout.rows || 24
 
@@ -88,63 +87,23 @@ function input(field, w, on, ghost = '') {
 
 // ------------------------------------------------------------ folders
 
-// The folders the Folder field's last part could be: those that start with
-// it, or, when none does, those that do ignoring case. Hidden ones only when
-// the part starts with a dot, as in a shell.
-export function matchesOf(text) {
-  const full = expand(text)
-  const dir = full.endsWith('/') ? full : dirname(full)
-  const part = full.endsWith('/') ? '' : basename(full)
-  let all = []
-  try {
-    all = readdirSync(dir, { withFileTypes: true })
-      .filter(e => (part.startsWith('.') || !e.name.startsWith('.')) && isDir(dir, e))
-      .map(e => e.name)
-      .sort()
-  } catch {}
-  let names = all.filter(n => n.startsWith(part))
-  if (!names.length) names = all.filter(n => n.toLowerCase().startsWith(part.toLowerCase()))
-  return { dir, part, names }
-}
-
-function isDir(dir, e) {
-  if (e.isDirectory()) return true
-  if (!e.isSymbolicLink()) return false
-  try {
-    return statSync(join(dir, e.name)).isDirectory()
-  } catch {
-    return false
-  }
-}
+export { matchesOf }
 
 // The cursor is in code points, as hub/line.mjs keeps it.
 const setFolder = text => (d.folder = { text, at: length(text) })
-const pathTo = (dir, name) => tilde(join(dir, name))
 
 // What's left of the first match, while the cursor is at the end of a part
 // it extends.
 export function suggestion() {
   if (d.field !== 'folder' || menu || d.folder.at !== length(d.folder.text)) return ''
-  const { part, names } = matchesOf(d.folder.text)
-  return part && names[0]?.startsWith(part) ? `${names[0].slice(part.length)}/` : ''
+  return pathSuggestion(d.folder.text)
 }
 
-// Tab as in zsh: one match is filled in with its slash; several fill in
-// what they share, and once nothing more is shared, Tab steps through them
-// (Shift+Tab back) until another key keeps the one shown.
+// Tab and Shift+Tab as in zsh (complete in hub/paths.mjs).
 function tab(back) {
-  if (menu) {
-    menu.i = (menu.i + (back ? menu.names.length - 1 : 1)) % menu.names.length
-    return setFolder(`${pathTo(menu.dir, menu.names[menu.i])}/`)
-  }
-  const { dir, part, names } = matchesOf(d.folder.text)
-  if (!names.length) return
-  if (names.length === 1) return setFolder(`${pathTo(dir, names[0])}/`)
-  let common = names[0]
-  for (const n of names) while (!n.toLowerCase().startsWith(common.toLowerCase())) common = common.slice(0, -1)
-  if (common.length > part.length) return setFolder(pathTo(dir, common))
-  menu = { dir, names, i: back ? names.length - 1 : 0 }
-  setFolder(`${pathTo(dir, names[menu.i])}/`)
+  const r = complete(d.folder.text, menu, back)
+  menu = r.menu
+  setFolder(r.text)
 }
 
 // Under Folder while you type in it: the folders that match, the one Tab is
